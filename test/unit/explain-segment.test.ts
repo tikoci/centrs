@@ -8,6 +8,7 @@ import { type Defect, hasStructuralDefect } from "../../src/explain/defects.ts";
 import { scanQuotedString as scanQuotedStringShared } from "../../src/explain/quoted-string.ts";
 import * as scopeBrace from "../../src/explain/scope-brace.ts";
 import {
+	countExecutableStatements,
 	documentRange,
 	maskComments,
 	nestedRange,
@@ -831,4 +832,50 @@ test("ranged segmentation keeps an uncached large document out of nested index q
 	} finally {
 		braces.mockRestore();
 	}
+});
+
+describe("countExecutableStatements — dispatch effects at any depth (#549)", () => {
+	test.each([
+		[':put "a"; :put "b"', 2],
+		["/system/note/set note=x", 1],
+		// Nested control scopes run before a later refusal, like top-level ones.
+		[":if (true) do={ /system/note/set note=a; /user/add name=u }", 2],
+		[":if (true) do={ /user/add name=u }", 1],
+		[":foreach i in={1;2} do={ :put $i; :put $i }", 2],
+		[":foreach i in={1;2} do={ :put $i }", 1],
+		[":for i from=1 to=2 do={ :put $i }", 1],
+		[":if (true) do={ :if (true) do={ :put 1; :put 2 } }", 2],
+		// Exclusive branches count the larger side, not the sum.
+		[":if (true) do={ :put 1 } else={ :put 2 }", 1],
+		[":if (true) do={ :put 1; :put 2 } else={ :put 3 }", 2],
+		// Stored bodies never run at dispatch: a refused single stays single.
+		["/system/script/add name=x source={ :put 1; :put 2 }", 1],
+		[":global f do={ :put 1; :put 2 }", 1],
+		[":GLOBAL f do={ :put 1; :put 2 }", 1],
+		[":Local f do={ :put 1; :put 2 }", 1],
+		// Separators inside strings are not statements.
+		[':if (true) do={ :put "a;b" }', 1],
+		// Command substitutions run at dispatch: their statements count, the
+		// enclosing statement does not, so a lone `[find …]` stays single.
+		[':put [:put "p5-first"; /system/identity/set name=x]', 2],
+		["/ip/address/remove [find comment=x]", 1],
+		["/ip/address/remove [find comment=[/system/identity/get name]]", 1],
+		[":local a [:put 1; :put 2]; :put $a", 3],
+		[":put [:put [:put 1; :put 2]; :put 3]", 3],
+		[":if (true) do={ :put [:put 1; :put 2] }", 2],
+		[':put "[a;b]"', 1],
+		// Substitutions inside stored bodies and arrays do not run.
+		["/system/script/add name=x source={ :put [:put 1; :put 2] }", 1],
+		[":global f do={ :put [:put 1; :put 2] }", 1],
+		[":foreach i in={[:put 1; :put 2]} do={ :put $i }", 1],
+		// A `/menu { … }` prefix only navigates, so a lone body write stays
+		// a single statement; nesting adds no statements either.
+		["/ip/address { add address=192.0.2.1/32 interface=ether1 }", 1],
+		["/ip { /address { add address=192.0.2.1/32 interface=ether1 } }", 1],
+		["/ip/address { add address=192.0.2.1/32 interface=ether1; :put 1 }", 2],
+		// An unclosed substitution counts what precedes the break.
+		[":put [:put 1; :put 2", 1],
+	])("counts %s as %i", (input, count) => {
+		expect(countExecutableStatements(input)).toBe(count);
+	});
 });

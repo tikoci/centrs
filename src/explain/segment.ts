@@ -625,6 +625,137 @@ export function segmentScopeBody(
 	);
 }
 
+/** Nesting cap for dispatch-statement counting (#549): the 16× guard (#322). */
+const MAX_DISPATCH_STATEMENT_DEPTH = 16;
+
+/**
+ * Executable statements in `text`, at any nesting depth (#549).
+ *
+ * A dispatched script can carry statements inside executed control scopes
+ * (`:if … do={…}`, `:for`/`:foreach`/`:while`, `:do`, `:retry`, `:onerror`,
+ * `once do={…}`), and those run before a later refusal exactly like
+ * top-level ones do — `:if (true) do={ /system/note/set …; /user/add … }`
+ * applies the note before the refused add on CHR 7.25. Stored bodies
+ * (`source={…}`, `on-event={…}`, any other `name={`) never execute at
+ * dispatch, so only `scopeNameFromMasked` scopes recurse — except a `do={…}`
+ * under a `:global`/`:local`/`:set` head, which stores a function value.
+ * Command substitutions (`[…]`) run at dispatch too — `:put [:put "p5-first";
+ * /system/identity/set …]` prints before the refused set on CHR 7.25 — so
+ * they recurse unless they sit inside a stored or array `{…}`. An `else={…}`
+ * paired with its `do={…}` counts the larger side, not the sum, because the
+ * branches exclude each other.
+ *
+ * A segment with executed blocks or substitutions counts their inner
+ * statements, not itself (a control head is not an effect); a `/menu { … }`
+ * prefix counts nothing (navigation is not an effect); any other segment
+ * counts one. So the commonest write shape, `/… remove [find …]`, stays one
+ * statement — at the cost of a lone substitution that itself writes before a
+ * refused enclosing statement, which also counts one. Past the depth cap the
+ * inner text counts its top-level siblings only. Unbalanced input counts what
+ * precedes the break and never throws.
+ */
+export function countExecutableStatements(text: string): number {
+	return countExecutableStatementsWithin(text, 0);
+}
+
+function countExecutableStatementsWithin(text: string, depth: number): number {
+	const { segments, ascii } = segmentStatements(text);
+	if (depth >= MAX_DISPATCH_STATEMENT_DEPTH) return segments.length;
+	let count = 0;
+	for (const segment of segments) {
+		// A `/menu { … }` prefix only navigates; it is not an effect. The
+		// `ascii` guard is load-bearing: segment offsets are analyzed-byte
+		// offsets, which are string indexes only for pure-ASCII input.
+		if (ascii && segment.menuOnly && /^\s*\{/.test(text.slice(segment.end)))
+			continue;
+		const inner = countExecutedBlockStatements(segment.text, depth);
+		count += inner > 0 ? inner : 1;
+	}
+	return count;
+}
+
+/** Executable statements in the segment's executed `{…}` scopes and `[…]`. */
+function countExecutedBlockStatements(
+	segmentText: string,
+	depth: number,
+): number {
+	const masked = maskComments(segmentText);
+	const storedDoHead = /^:(?:global|local|set)\b/i.test(masked);
+	let total = 0;
+	let i = 0;
+	const stack: string[] = [];
+	// The last executed scope closed at this level, for `do`/`else` pairing.
+	let lastScope: { name: string; count: number; end: number } | null = null;
+	// The outermost open `[` that executes at dispatch, and its stack depth.
+	let substitution: { start: number; depth: number } | null = null;
+	while (i < masked.length) {
+		const c = masked[i];
+		if (c === '"') {
+			i = scanQuotedString(masked, i).end;
+			continue;
+		}
+		if (c === "[" || c === "(") {
+			if (c === "[" && !stack.includes("[") && !stack.includes("{")) {
+				substitution = { start: i, depth: stack.length };
+			}
+			stack.push(c);
+			i++;
+			continue;
+		}
+		if (c === "]" || c === ")") {
+			const want = c === "]" ? "[" : "(";
+			if (stack.at(-1) === want) {
+				stack.pop();
+				if (c === "]" && stack.length === substitution?.depth) {
+					total += countExecutableStatementsWithin(
+						segmentText.slice(substitution.start + 1, i),
+						depth + 1,
+					);
+					substitution = null;
+				}
+			}
+			i++;
+			continue;
+		}
+		if (c === "{") {
+			const scope = stack.length === 0 ? scopeNameFromMasked(masked, i) : null;
+			if (
+				scope !== null &&
+				!(storedDoHead && (scope === "do" || scope === "command"))
+			) {
+				const end = matchingBraceEnd(masked, i);
+				if (end === undefined) return total;
+				const count = countExecutableStatementsWithin(
+					segmentText.slice(i + 1, end),
+					depth + 1,
+				);
+				if (
+					scope === "else" &&
+					lastScope?.name === "do" &&
+					/^\s*else\s*=?\s*$/.test(masked.slice(lastScope.end + 1, i))
+				) {
+					total += Math.max(lastScope.count, count) - lastScope.count;
+				} else {
+					total += count;
+				}
+				lastScope = { name: scope, count, end };
+				i = end + 1;
+				continue;
+			}
+			stack.push("{");
+			i++;
+			continue;
+		}
+		if (c === "}") {
+			if (stack.at(-1) === "{") stack.pop();
+			i++;
+			continue;
+		}
+		i++;
+	}
+	return total;
+}
+
 function segmentStatementsInternal(
 	original: string,
 	range: MaskedRange | undefined,
