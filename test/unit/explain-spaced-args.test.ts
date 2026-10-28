@@ -532,8 +532,15 @@ describe("explain — the abbreviation guess never shields a root slot or a `whe
 		// Both are a device `syntax error` on CHR 7.25 (columns 8 and 13):
 		// the (verb, slot) table decides there, and neither `x` on `:put`
 		// nor `name` on `:local` takes a body through any spelling. The
-		// integration twin pins the rejections; the gate refuses them.
-		for (const input of [":put x={ :beep }", ":local name={ :put 1 }"]) {
+		// spaced rows bind like the glued ones (#350), so the slot — not a
+		// positional fallback — decides there too. The integration twin
+		// pins all four rejections; the gate refuses them.
+		for (const input of [
+			":put x={ :beep }",
+			":local name={ :put 1 }",
+			":put x= { :beep }",
+			":local name= { :put 1 }",
+		]) {
 			const result = explainCommand(input, {});
 			expect({ input, braces: braceErrors(input) }).toMatchObject({
 				input,

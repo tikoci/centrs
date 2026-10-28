@@ -1732,7 +1732,7 @@ reader — a `#` inside is a comment, not `invalid-hash` — while proven slots
 never guesses. A bare word followed by `;`-separated members is array
 members, not commands, so `.proplist={name;comment}` keeps its error alongside
 the other array-content braces (`{1;2}`, `{"x"}`, `{}`), the positional form,
-and `where`. A root directive's slots (`:put x={…}`) and a `where` named
+and `where`. A root directive's slots (`:put x={…}`, glued or spaced) and a `where` named
 comparison (`where gateway={…}`, however wrapped) keep their error too: the
 slot table and the property parser decide there, so the abbreviation guess
 never shields them (#554). The integration twin pins both device directions.

@@ -417,8 +417,14 @@ describeFast("explain spaced arguments against CHR (#350)", () => {
 		const started = await startIntegrationChr();
 		try {
 			// Root slots: the (verb, slot) table decides, and neither slot
-			// takes a body through any spelling.
-			for (const input of [":put x={ :beep }", ":local name={ :put 1 }"]) {
+			// takes a body through any spelling. The spaced rows bind like
+			// the glued ones (#350), so the device rejects them too.
+			for (const input of [
+				":put x={ :beep }",
+				":local name={ :put 1 }",
+				":put x= { :beep }",
+				":local name= { :put 1 }",
+			]) {
 				expect({
 					input,
 					rejected: PARSE_REJECTED.test(await parseOf(started.chr, input)),

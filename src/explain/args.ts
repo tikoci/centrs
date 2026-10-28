@@ -1838,7 +1838,13 @@ export function invalidCommandBraceOffsets(
 			tokenStart === null
 				? undefined
 				: braceValueOwner(structural, tokenStart, i);
-		const slot = owner === null ? `#${positionals}` : owner;
+		// A space after the `=` owns the brace the same way the glued `=`
+		// does (#554), so the slot attributes the spaced owner before
+		// falling back to positional: `:put x= { :beep }` reads slot `x`,
+		// not `#0` (which `put` accepts, swallowing the error).
+		const spacedOwner =
+			typeof owner === "string" ? undefined : spacedBraceOwner(structural, i);
+		const slot = owner === null ? (spacedOwner ?? `#${positionals}`) : owner;
 		// A `where` named comparison reads the brace with the property's own
 		// parser and rejects it (`expected <name> value`), so the #525 body
 		// guess must not shield it below — `gateway={ :beep }` included.
@@ -1860,8 +1866,7 @@ export function invalidCommandBraceOffsets(
 					? scopeNameFromMasked(structural, i)
 					: scopeNameFromMasked(range.masked, range.start + i, range.start)
 				: null;
-		const ambiguousOwner =
-			typeof owner === "string" ? owner : spacedBraceOwner(structural, i);
+		const ambiguousOwner = typeof owner === "string" ? owner : spacedOwner;
 		if (
 			directiveVerb === undefined &&
 			whereAt === null &&
