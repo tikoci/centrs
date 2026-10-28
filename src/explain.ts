@@ -2342,6 +2342,18 @@ const INVALID_COMMAND_BRACE =
 	"brace arrays are not valid in command arguments — use a parenthesized comma list such as `(1,2)`, or a bare comma list where the argument schema accepts one";
 
 /**
+ * A `name={` with a script-like body that is not a proven script slot (#525).
+ *
+ * `warning`, not `error`: `down={ :beep }` lowers to `down-script=` on CHR
+ * 7.24.5 and 7.23.8, while `comment={ :beep }` is a `syntax error` there, and
+ * telling them apart needs the command's argument list, which is schema. The
+ * brace is read as a body; the device decides the slot.
+ */
+function possibleScriptBodyMessage(name: string): string {
+	return `possible script-body abbreviation: \`${name}=\` with a \`{…}\` body may be a script-valued argument or abbreviate one; offline has no per-command argument list to confirm the slot, so the brace is read as a script body — device validation decides`;
+}
+
+/**
  * The group faults as diagnostics (#505, #509, #511, #512).
  *
  * All `error`: each is a `:parse` rejection on CHR 7.24.5 and 7.23.8. An
@@ -2520,18 +2532,28 @@ function invalidCommandBraceDiagnostics(
 				}
 			}
 		}
-		for (const at of invalidCommandBraceOffsets(
+		for (const finding of invalidCommandBraceOffsets(
 			text,
 			split.argsAt,
 			split.path === "/" ? split.verb : undefined,
 			nestedRange(analyzedRange, start, end),
 		)) {
-			if (at === menuBraceAt) continue;
+			if (finding.at === menuBraceAt) continue;
+			if (finding.ambiguous) {
+				out.push({
+					code: "explain/canonicalizer/possible-script-body-abbreviation",
+					severity: "warning",
+					message: possibleScriptBodyMessage(finding.name ?? "name"),
+					span: { start: start + finding.at, end: start + finding.at + 1 },
+					ev: EV.values,
+				});
+				continue;
+			}
 			out.push({
 				code: "explain/canonicalizer/invalid-command-brace",
 				severity: "error",
 				message: INVALID_COMMAND_BRACE,
-				span: { start: start + at, end: start + at + 1 },
+				span: { start: start + finding.at, end: start + finding.at + 1 },
 				ev: EV.values,
 			});
 		}

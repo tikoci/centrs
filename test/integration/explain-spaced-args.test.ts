@@ -13,6 +13,7 @@ const describeFast = isChrIntegrationEnabled() ? describe : describe.skip;
 
 const WARNING = "explain/canonicalizer/possible-spaced-argument";
 const BRACE = "explain/canonicalizer/invalid-command-brace";
+const AMBIGUOUS = "explain/canonicalizer/possible-script-body-abbreviation";
 
 interface Chr {
 	exec(command: string): Promise<unknown>;
@@ -47,6 +48,7 @@ function offline(input: string) {
 			.filter((d) => d.code === WARNING)
 			.map((d) => input.slice(d.span.start, d.span.end)),
 		braces: result.diagnostics.filter((d) => d.code === BRACE).length,
+		ambiguous: result.diagnostics.filter((d) => d.code === AMBIGUOUS).length,
 	};
 }
 
@@ -147,6 +149,7 @@ describeFast("explain spaced arguments against CHR (#350)", () => {
 					read: false,
 					warnings: warns,
 					braces: 0,
+					ambiguous: 0,
 				});
 			}
 
@@ -162,6 +165,7 @@ describeFast("explain spaced arguments against CHR (#350)", () => {
 					read: false,
 					warnings: [],
 					braces: 0,
+					ambiguous: 0,
 				});
 			}
 
@@ -238,17 +242,31 @@ describeFast("explain spaced arguments against CHR (#350)", () => {
 				}).toEqual({ input, rejected: true, braces: 0 });
 			}
 
-			// All three stay the offline error: `zzzscript` lacks the hyphen of
-			// RouterOS's `…-script` names, so it is not a script-body shape.
+			// The spaced rows stay the offline error: `zzzscript` lacks the hyphen
+			// of RouterOS's `…-script` names, so it is not a script-body shape,
+			// and a spaced body after `comment` is not an abbreviation either.
+			// The `=` row warns instead of rejecting (#525): `comment={` with a
+			// script-like body may abbreviate a script slot the device knows,
+			// and offline has no per-command argument list to rule it out —
+			// the device pins above still show this one rejected.
 			for (const input of [
 				"/system/scheduler add name=x comment { :beep }",
-				"/tool/netwatch add host=1.1.1.1 comment={ :beep }",
 				"/system/script add name=x zzzscript { :beep }",
 			])
 				expect({ input, braces: offline(input).braces }).toEqual({
 					input,
 					braces: 1,
 				});
+			{
+				const input = "/tool/netwatch add host=1.1.1.1 comment={ :beep }";
+				expect({ input, ...offline(input) }).toEqual({
+					input,
+					read: false,
+					warnings: [],
+					braces: 0,
+					ambiguous: 1,
+				});
+			}
 		} finally {
 			await started.chr.destroy();
 		}
@@ -329,11 +347,35 @@ describeFast("explain spaced arguments against CHR (#350)", () => {
 				}).toEqual({ input, rejected: true, braces: 1 });
 			}
 
-			// The known limit, pinned: a first-segment abbreviation is accepted on
-			// device, and offline cannot tell it from `comment` without schema.
-			const firstSegment = "/tool/netwatch add host=1.1.1.1 down={ :beep }";
-			await accepted(firstSegment, ["down-script= :beep"]);
-			expect(offline(firstSegment).braces).toBe(1);
+			// The former known limit (#525): a first-segment abbreviation is
+			// accepted on device, and offline cannot tell it from `comment`
+			// without schema — so it warns and lets the device decide instead
+			// of rejecting. The device pins show each shape accepted as
+			// `down-script=`: a directive body, a bare command word, and a
+			// body after a comment line.
+			for (const { input, needle } of [
+				{
+					input: "/tool/netwatch add host=1.1.1.1 down={ :beep }",
+					needle: "down-script= :beep",
+				},
+				{
+					input: "/tool/netwatch add host=1.1.1.1 down={ beep }",
+					needle: "down-script= beep",
+				},
+				{
+					input: "/tool/netwatch add host=1.1.1.1 down={ # c\n :beep }",
+					needle: "down-script= # c",
+				},
+			]) {
+				await accepted(input, [needle]);
+				expect({ input, ...offline(input) }).toEqual({
+					input,
+					read: false,
+					warnings: [],
+					braces: 0,
+					ambiguous: 1,
+				});
+			}
 
 			// A run that names no command still opens a menu block.
 			for (const { input, needles } of [

@@ -78,7 +78,12 @@
 
 import { isScopeBrace, isScopeBraceIn } from "./blocks.ts";
 import { braceSlotAcceptsBrace, braceSlotTakesArray } from "./brace-slots.ts";
-import { braceStartsStatements } from "./scope-brace.ts";
+import {
+	braceBodyIsScriptLike,
+	braceStartsStatements,
+	isScriptBodyName,
+	scopeNameFromMasked,
+} from "./scope-brace.ts";
 import {
 	type MaskedRange,
 	maskComments,
@@ -1715,6 +1720,22 @@ export function comparesNamedValue(
 	return /^[A-Za-z.]/.test(name) && /[\s(]/.test(text[j] as string);
 }
 
+/** One top-level `{` in command arguments that is not a proven body. */
+export interface CommandBraceFinding {
+	/** Offset of the `{` in the text passed to the lexer. */
+	at: number;
+	/**
+	 * True when `name={` with a script-like body on a non-root command outside
+	 * `where`, where `name` is not a proven script-body slot (#525). The brace
+	 * may abbreviate one (`down=` for `down-script=`), but telling it from
+	 * `comment=` needs the command's argument list, which is schema — so the
+	 * caller warns instead of rejecting, and the device decides.
+	 */
+	ambiguous: boolean;
+	/** The `name` of `name=`, lower-cased, when `ambiguous` is true. */
+	name?: string;
+}
+
 /**
  * Locate top-level `{...}` values that RouterOS rejects in command arguments.
  *
@@ -1724,15 +1745,20 @@ export function comparesNamedValue(
  * excluded: their brace is a script body, not an array. The caller applies
  * this only to non-root commands; root scripting directives use the
  * `(verb, slot)` table instead.
+ *
+ * A `name={` with a script-like body that is not a proven slot is returned
+ * with `ambiguous: true` rather than as an error (#525). Array-content braces
+ * (`comment={1;2}`), positional braces, `where` comparisons and root slots
+ * keep their rejection.
  */
 export function invalidCommandBraceOffsets(
 	text: string,
 	from: number,
 	directiveVerb?: string,
 	range?: MaskedRange,
-): number[] {
+): CommandBraceFinding[] {
 	const structural = maskOf(range) ?? maskComments(text);
-	const offsets: number[] = [];
+	const offsets: CommandBraceFinding[] = [];
 	const stack: string[] = [];
 	let i = Math.max(0, from);
 	let tokenStart: number | null = null;
@@ -1784,6 +1810,29 @@ export function invalidCommandBraceOffsets(
 				? undefined
 				: braceValueOwner(structural, tokenStart, i);
 		const slot = owner === null ? `#${positionals}` : owner;
+		// The ambiguity check comes first: `braceStartsStatements` reads an
+		// unproven `name={` with a script-like body as a body too (#525), so
+		// reaching that skip would swallow the warning that marks the guess.
+		// Control scopes (`do={` on a monitor, `:retry … command={`) are not
+		// guesses — the scope table already proves them — so they stay out.
+		const scopeName =
+			directiveVerb === undefined && whereAt === null
+				? range === undefined
+					? scopeNameFromMasked(structural, i)
+					: scopeNameFromMasked(range.masked, range.start + i, range.start)
+				: null;
+		if (
+			directiveVerb === undefined &&
+			whereAt === null &&
+			scopeName === null &&
+			typeof owner === "string" &&
+			!isScriptBodyName(owner) &&
+			braceBodyIsScriptLike(structural, i, end ?? structural.length)
+		) {
+			offsets.push({ at: i, ambiguous: true, name: owner });
+			i = end ?? i + 1;
+			continue;
+		}
 		if (
 			// Asked of the DOCUMENT when the caller anchored this statement, so the
 			// statement index behind it is the document's one index rather than a
@@ -1803,7 +1852,7 @@ export function invalidCommandBraceOffsets(
 			i = end ?? structural.length;
 			continue;
 		}
-		offsets.push(i);
+		offsets.push({ at: i, ambiguous: false });
 		i = end ?? i + 1;
 	}
 	return offsets;
