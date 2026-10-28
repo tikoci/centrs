@@ -1472,3 +1472,126 @@ describe("explain/symbols — semantic occurrence surface (#239)", () => {
 		expect(target?.note).toContain("hard error");
 	});
 });
+
+describe("explain/symbols — named spelling declares the value (#533)", () => {
+	test("`:local name=no` declares `no`, not `name`, and `$no` links", () => {
+		const input = ":local name=no value=0x10\n:put $no";
+		const [declaration, reference] = resolveSymbols(input).occurrences;
+		expect(declaration).toMatchObject({
+			name: "no",
+			start: 12,
+			end: 14,
+			role: "declaration",
+			cls: "local",
+			bindingIds: ["b0"],
+		});
+		expect(reference).toMatchObject({
+			name: "no",
+			role: "reference",
+			cls: "local",
+			bindingIds: ["b0"],
+		});
+	});
+
+	test("`:global name=foo` declares `foo`, in any arg order", () => {
+		for (const input of [
+			":global name=foo value=1\n:put $foo",
+			":global value=1 name=foo\n:put $foo",
+		]) {
+			const [declaration, reference] = resolveSymbols(input).occurrences;
+			expect(declaration?.name).toBe("foo");
+			expect(declaration?.cls).toBe("global");
+			expect(reference?.cls).toBe("global");
+			expect(reference?.bindingIds).toEqual(declaration?.bindingIds);
+		}
+	});
+
+	test("a positional word still declares, even when spelled `name`", () => {
+		const [declaration, reference] = resolveSymbols(
+			":local name 1\n:put $name",
+		).occurrences;
+		expect(declaration).toMatchObject({ name: "name", cls: "local" });
+		expect(reference).toMatchObject({ name: "name", cls: "local" });
+	});
+
+	test("a quoted `name=` value declares across the quotes", () => {
+		const input = ':local name="foo" value=1\n:put $foo';
+		const [declaration] = resolveSymbols(input).occurrences;
+		expect(declaration?.name).toBe("foo");
+		expect(input.slice(declaration?.start, declaration?.end)).toBe('"foo"');
+	});
+
+	test("a quoted `value=` is never a declaration", () => {
+		const [declaration] = resolveSymbols(
+			':local value="foo" name="bar"\n:put $bar',
+		).occurrences;
+		expect(declaration?.name).toBe("bar");
+	});
+
+	test("`:for`/`:foreach counter=` declares the value, not `counter`", () => {
+		const single = resolveSymbols(
+			":for counter=i from=1 to=2 do={:put $i}",
+		).occurrences;
+		expect(single.map((o) => [o.name, o.cls])).toEqual([
+			["i", "auto"],
+			["i", "auto"],
+		]);
+		const pair = resolveSymbols(
+			":foreach counter=a,b in={1;2} do={:put $a}",
+		).occurrences;
+		expect(pair.map((o) => [o.name, o.cls])).toEqual([
+			["a", "auto"],
+			["b", "auto"],
+			["a", "auto"],
+		]);
+	});
+
+	test("a positional loop var still declares, even when spelled `counter`", () => {
+		const [binding, reference] = resolveSymbols(
+			":foreach counter in={1} do={:put $counter}",
+		).occurrences;
+		expect(binding).toMatchObject({ name: "counter", cls: "auto" });
+		expect(reference).toMatchObject({ name: "counter", cls: "auto" });
+	});
+
+	test("`counter=` binds in any head order, past `from=`/`in=` and arrays", () => {
+		// CHR 7.25 renders every order identically: `:for from=1 counter=i
+		// to=2` and `:for from=1 to=2 counter=i` both lower to
+		// `(evl /forcounter=$i;…)`, and both `:foreach` orders to
+		// `(evl /foreachcounter=$i;…)`. The named form is order-independent,
+		// unlike positional vars. The `in={…}` array resets the statement it
+		// interrupts, but the head stays open past it; only `do` (the body)
+		// closes the head.
+		for (const [input, name] of [
+			[":for from=1 counter=i to=2 do={:put $i}", "i"],
+			[":for from=1 to=2 counter=i do={:put $i}", "i"],
+			[":foreach in={1;2} counter=i do={:put $i}", "i"],
+			[":foreach k in={1;2} counter=i do={:put $i}", "i"],
+		] as const) {
+			const occurrences = resolveSymbols(input).occurrences;
+			const binding = occurrences.find(
+				(o) => o.name === name && o.role === "binding",
+			);
+			const reference = occurrences.find(
+				(o) => o.name === name && o.role === "reference",
+			);
+			expect({ input, binding }).toMatchObject({
+				input,
+				binding: { name, cls: "auto" },
+			});
+			expect(reference?.bindingIds).toEqual(binding?.bindingIds);
+		}
+	});
+
+	test("a `counter=` past the body does not declare", () => {
+		// `do` closes the head: `counter=` after the body starts is not a
+		// loop var. (`:for i in={1} do={:put $i} counter=j` is not valid
+		// RouterOS; offline must not invent a binding for it.)
+		const occurrences = resolveSymbols(
+			":for i in={1} do={:put $i} counter=j",
+		).occurrences;
+		expect(
+			occurrences.some((o) => o.name === "j" && o.role === "binding"),
+		).toBe(false);
+	});
+});
