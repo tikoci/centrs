@@ -22,9 +22,11 @@ re-proves it (CMR15 in `commands/execute/examples.md`):
 | `read,test,api,rest-api` | `not enough permissions (9)` | `run-script` wrote to the controller's own row; `/cmr/device/reboot` rebooted a client |
 
 MikroTik [says](https://forum.mikrotik.com/t/7-26beta-development-is-released/273582/139) this is fixed for 7.26beta2: a `read` group will not
-be allowed to do it. That has not been checked on a beta2 build yet. centrs
-still warns on any version, because the warning reads the login's policy, not
-the RouterOS version. On a build that refuses the write, the members fail
+be allowed to do it. #527 now carries direct 7.26beta3 evidence that a
+restricted caller is refused, with the first refusing release still
+unbracketed. centrs still warns on any version, because the warning reads
+the login's policy, not the RouterOS version. On a build that refuses the
+write, the members fail
 instead and the warning only says what the login lacks.
 
 `context` names the login (`username`, `group`), the policies it lacks

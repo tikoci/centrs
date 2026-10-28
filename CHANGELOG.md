@@ -249,15 +249,15 @@ part of this section.
 - `execute` warns when a multi-statement write is refused for permission after
   earlier statements may have run (#549). Such a refusal carries
   `transport/write-outcome-unknown` alongside `routeros/permission-denied`,
-  counting statements inside executed `:if`/`:for`/`:foreach` scopes as well
+  counting statements inside executed `:if`/`:for`/`:foreach`/`:while`/`:do`/`:retry`/`:onerror` scopes as well
   as top-level ones; single refused statements stay silent. The refusal itself
   now surfaces as the error instead of `ok:true`: `/execute` answers HTTP 200
   with `not enough permissions (9) (…; line N)` as the last `ret` line after
   earlier statements' output (CHR 7.25, both transports).
 - The offline gate no longer hard-rejects first-segment script-body
   abbreviations it cannot prove (#525). `down={ :beep }`, accepted on device
-  as `down-script=`, warns `possible-script-body-abbreviation` and reaches
-  device validation instead of failing with `invalid-command-brace`. Bodies
+  as `down-script=`, warns `explain/canonicalizer/possible-script-body-abbreviation` and
+  reaches device validation instead of failing with `invalid-command-brace`. Bodies
   opening with one bare command word or after a comment line warn too, and
   the brace reads as a body for every reader. A bare word followed by
   `;`-separated members keeps its error, as do the other array-content
