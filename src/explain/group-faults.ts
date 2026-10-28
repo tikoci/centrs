@@ -687,20 +687,27 @@ export function findGroupFaults(
 				(frame.kind === "statement" && frame.char === "[")
 					? whereEnd
 					: null;
+			// A `where` named comparison never takes a script body through an
+			// unproven name — `[find where comment={ :beep }]` is `expected
+			// comment value` on CHR 7.25 — so the brace reads as a VALUE for
+			// the role below and the fault stands (#554). Proven slots still
+			// read as bodies; the gate is only the unproven disjunct.
+			const inWhereComparison =
+				c === "{" && floor !== null && comparesNamedValue(masked, i, floor);
 			const role =
 				c === "{" && frame.kind === "statement"
-					? braceStartsStatements(masked, i)
+					? braceStartsStatements(
+							masked,
+							i,
+							0,
+							inWhereComparison ? "value" : "body",
+						)
 						? "program"
 						: directiveSlotRole(masked, i, frame)
 					: null;
 			// A body (`do={`) is never a comparison, though `where` is still open:
 			// corpus `eworm/hotspot-to-wpa.template.rsc` interleaves two `:if`s.
-			if (
-				c === "{" &&
-				role !== "program" &&
-				floor !== null &&
-				comparesNamedValue(masked, i, floor)
-			) {
+			if (c === "{" && role !== "program" && inWhereComparison) {
 				// The device stops at this brace, so neither its contents nor the
 				// rest of the enclosing group are read.
 				faults.push({ code: "named-value-brace", start: i, end: i + 1 });

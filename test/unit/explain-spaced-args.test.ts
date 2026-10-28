@@ -517,3 +517,105 @@ describe("explain — a brace after a command is its operand, not a menu block (
 		]);
 	});
 });
+
+describe("explain — the abbreviation guess never shields a root slot or a `where` comparison (#554)", () => {
+	const braceErrors = (input: string) =>
+		explainCommand(input, {}).diagnostics.filter((d) =>
+			d.code.endsWith("/invalid-command-brace"),
+		);
+	const abbreviationWarnings = (input: string) =>
+		explainCommand(input, {}).diagnostics.filter((d) =>
+			d.code.endsWith("/possible-script-body-abbreviation"),
+		);
+
+	test("a root directive's slots keep their brace error", () => {
+		// Both are a device `syntax error` on CHR 7.25 (columns 8 and 13):
+		// the (verb, slot) table decides there, and neither `x` on `:put`
+		// nor `name` on `:local` takes a body through any spelling. The
+		// integration twin pins the rejections; the gate refuses them.
+		for (const input of [":put x={ :beep }", ":local name={ :put 1 }"]) {
+			const result = explainCommand(input, {});
+			expect({ input, braces: braceErrors(input) }).toMatchObject({
+				input,
+				braces: [{ severity: "error" }],
+			});
+			expect(result.verdict).toBe("fail");
+			// The gate refuses an error, so the assertion throws.
+			expect(() =>
+				assertOfflineSyntax(input, { surface: "execute" }),
+			).toThrow();
+		}
+	});
+
+	test("a `where` named comparison keeps its brace error, however wrapped", () => {
+		// Each is rejected on CHR 7.25 — `expected gateway value` at the top
+		// level, `expected comment value` inside `[find …]`, `expected
+		// gateway value` inside the `source={…}` wrap — because the property
+		// parser reads the value, whatever the body holds. The integration
+		// twin pins all three wordings.
+		for (const input of [
+			"/ip/route/print where gateway={ :beep }",
+			"/ip/address remove [find where comment={ :beep }]",
+			"/system/script add name=x source={ /ip/route/print where (gateway={ :beep }) }",
+		]) {
+			const result = explainCommand(input, {});
+			expect({ input, braces: braceErrors(input) }).toMatchObject({
+				input,
+				braces: [{ severity: "error" }],
+			});
+			expect(result.verdict).toBe("fail");
+			expect(abbreviationWarnings(input)).toEqual([]);
+		}
+	});
+
+	test("a space after the `=` warns like the glued spelling", () => {
+		// CHR 7.25 lowers `down= { :beep }` to `down-script=` exactly like
+		// `down={` — the integration twin pins the IL — so the spaced owner
+		// warns under the same gates (non-root, outside `where`, non-scope,
+		// non-proven, script-like) and the gate lets it through. `comment=`
+		// with a script-like body warns too though the device rejects it
+		// (`syntax error`): the same deliberate over-warn as the glued row.
+		for (const input of [
+			"/tool/netwatch add host=1.1.1.1 down= { :beep }",
+			"/tool/netwatch add host=1.1.1.1 comment= { :beep }",
+		]) {
+			const result = explainCommand(input, {});
+			const at = input.indexOf("{");
+			expect({
+				input,
+				braces: braceErrors(input),
+				warnings: abbreviationWarnings(input),
+				verdict: result.verdict,
+			}).toEqual({
+				input,
+				braces: [],
+				warnings: [
+					{
+						code: "explain/canonicalizer/possible-script-body-abbreviation",
+						severity: "warning",
+						message: expect.stringContaining("device validation decides"),
+						span: { start: at, end: at + 1 },
+						ev: expect.anything(),
+					},
+				],
+				verdict: "warn",
+			});
+			expect(assertOfflineSyntax(input, { surface: "execute" }).verdict).toBe(
+				"warn",
+			);
+		}
+	});
+
+	test("a spaced array-content brace keeps its error", () => {
+		// `comment= {1;2}` is a `syntax error` on CHR 7.25: the body is not
+		// script-like, so there is no abbreviation to guess. The integration
+		// twin pins the rejection.
+		const input = "/tool/netwatch add host=1.1.1.1 comment= {1;2}";
+		expect({ input, braces: braceErrors(input) }).toMatchObject({
+			input,
+			braces: [{ severity: "error" }],
+		});
+		expect(explainCommand(input, {}).verdict).toBe("fail");
+		expect(abbreviationWarnings(input)).toEqual([]);
+	});
+});

@@ -558,11 +558,19 @@ export function scopeNameFromMasked(
  * Whether this brace begins a context in which statement-leading comments exist.
  *
  * `floor` bounds the lookback exactly as in {@link scopeNameFromMasked}.
+ * `unprovenName` decides the unproven `name={` guess below: `"body"` reads it
+ * as a body, `"value"` as a value. Only the script-like disjunct is gated —
+ * a proven slot stays a body either way. Readers that are themselves deciding
+ * an error AT this brace pass `"value"` where the slot cannot bear a body
+ * (`args.ts` for a root directive's slots and a `where` named comparison,
+ * `group-faults.ts` for the bracketed form), so the guess does not swallow
+ * their error; every other reader keeps `"body"`.
  */
 export function braceStartsStatements(
 	text: string,
 	open: number,
 	floor = 0,
+	unprovenName: "body" | "value" = "body",
 ): boolean {
 	if (scopeNameFromMasked(text, open, floor) !== null) return true;
 	const index = statementIndex(text);
@@ -576,14 +584,13 @@ export function braceStartsStatements(
 		// is only a comment when the brace bears statements. The warning
 		// that marks the unproven slot lives in `args.ts`, which checks
 		// ambiguity before this skip.
+		if (isScriptBodyName(named.toLowerCase())) return true;
+		if (unprovenName === "value") return false;
 		const close = matchingBraceEnd(text, open);
-		return (
-			isScriptBodyName(named.toLowerCase()) ||
-			braceBodyIsScriptLike(
-				text,
-				open,
-				close === undefined ? text.length : close + 1,
-			)
+		return braceBodyIsScriptLike(
+			text,
+			open,
+			close === undefined ? text.length : close + 1,
 		);
 	}
 	// `source { :beep }` — the same body with the `=` left out (#350). Every

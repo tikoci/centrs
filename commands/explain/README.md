@@ -1723,14 +1723,19 @@ argument list (schema) offline cannot tell `down=` from `comment=`, which the
 device rejects. The contract: on a non-root command, outside `where`, an
 unproven `name={` with a script-like body warns
 `explain/canonicalizer/possible-script-body-abbreviation` (verdict `warn`, the
-offline gate lets it through) instead of failing with `invalid-command-brace`.
-The brace reads as a body for every reader — a `#` inside is a comment, not
-`invalid-hash` — while proven slots (`down-script=`, `s=`, `on-…`) stay
-silent and control scopes (`do={…}`) are never guesses. A bare word followed
-by `;`-separated members is array members, not commands, so
-`.proplist={name;comment}` keeps its error alongside the other array-content
-braces (`{1;2}`, `{"x"}`, `{}`), the spaced and positional forms, and `where`.
-The integration twin pins both device directions.
+offline gate lets it through) instead of failing with `invalid-command-brace` —
+glued or with the brace spaced off the `=` (`down= { :beep }` lowers to
+`down-script=` on CHR 7.25 exactly like the glued spelling, so the spaced
+owner warns under the same gates). The brace reads as a body for every
+reader — a `#` inside is a comment, not `invalid-hash` — while proven slots
+(`down-script=`, `s=`, `on-…`) stay silent and control scopes (`do={…}`) are
+never guesses. A bare word followed by `;`-separated members is array
+members, not commands, so `.proplist={name;comment}` keeps its error alongside
+the other array-content braces (`{1;2}`, `{"x"}`, `{}`), the positional form,
+and `where`. A root directive's slots (`:put x={…}`) and a `where` named
+comparison (`where gateway={…}`, however wrapped) keep their error too: the
+slot table and the property parser decide there, so the abbreviation guess
+never shields them (#554). The integration twin pins both device directions.
 
 The tradeoff is measured: a verdict sweep of the 948-row pinned corpus
 population against the pre-batch baseline reports zero verdict or diagnostic
