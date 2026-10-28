@@ -375,8 +375,9 @@ when the target is itself a CMR client.
   controller's own row through `run-script`, and rebooted a client through
   both. So a "reader" login on a 7.26beta1 controller is not read-only, and
   centrs' write gate (and `mcp=ro` on MCP) is the only gate. MikroTik
-  [says](https://forum.mikrotik.com/t/7-26beta-development-is-released/273582/139) 7.26beta2 refuses this for a `read` group; that is not yet
-  checked on a beta2 build. For a write,
+  [says](https://forum.mikrotik.com/t/7-26beta-development-is-released/273582/139) 7.26beta2 refuses this for a `read` group; #527 now carries
+  direct 7.26beta3 evidence that a restricted caller is refused, with the
+  first refusing release still unbracketed. For a write,
   centrs reads the login's own `/user` row and `/user/group` once (both are
   readable with just `read` + `api`). When the login lacks `write`, `test` or
   `reboot`, the result and the confirmation error carry

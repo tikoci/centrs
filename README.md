@@ -1,8 +1,8 @@
 # centrs
 
 `centrs` is the tikoci RouterOS interaction hub: a Bun/TypeScript library and
-CLI (with MCP, TUI, and HTTP proxy frontends planned) for talking to MikroTik
-RouterOS devices through a regularized, validated interface.
+CLI (with an MCP server; TUI and HTTP proxy frontends planned) for talking to
+MikroTik RouterOS devices through a regularized, validated interface.
 
 Preview builds are published on npm. To try the current offline analyzer without
 installing centrs or connecting to a router:

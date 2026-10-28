@@ -201,8 +201,10 @@ closeout of #236 promoted both live cells (complete). The
 plan, and what is deliberately out of this run, is the 2026-10-16 plan
 comment on #90. It is step 3 of the validation track below.
 
-**The CMR track is paused until RouterOS 7.26beta2** (maintainer decision
-2026-10-16). It was first from the 2026-10-12 decision on
+**The CMR track is paused** (maintainer decision 2026-10-16; held for the
+7.26beta caller-policy fix — #527 now carries direct 7.26beta3 evidence that a
+restricted caller is refused, with the first refusing release still
+unbracketed). It was first from the 2026-10-12 decision on
 [#441](https://github.com/tikoci/centrs/issues/441). Done: `execute --cmr`
 (#450), which runs one validated command on CMR clients through their
 controller. The contract is in
