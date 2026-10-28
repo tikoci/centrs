@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
+	type BroadcastInterface,
 	buildPacket,
 	decodeHeader,
 	directedBroadcast,
@@ -20,6 +21,8 @@ import {
 	macTelnetPasswordHash,
 	parseControlBlocks,
 	parseMac,
+	resolveEgressMac,
+	selectEgressMac,
 } from "../../src/protocols/mac-telnet.ts";
 import { mtweiKeygen } from "../../src/protocols/mtwei.ts";
 
@@ -226,6 +229,88 @@ describe("mac-telnet broadcast interfaces", () => {
 			expect(ifc.mac.some((octet) => octet !== 0)).toBe(true);
 			expect(ifc.broadcast).toMatch(/^\d{1,3}(\.\d{1,3}){3}$/);
 			expect(typeof ifc.name).toBe("string");
+		}
+	});
+});
+
+describe("mac-telnet egress MAC selection", () => {
+	// Stubbed interfaces: the selection logic is pinned deterministically,
+	// independent of the runner's NICs (a live-interface loop would assert
+	// nothing on a host with no external IPv4 and fail spuriously where two
+	// NICs share one subnet).
+	const lab: BroadcastInterface = {
+		name: "eth0",
+		address: "172.22.74.195",
+		broadcast: "172.22.74.255",
+		mac: parseMac("aa:bb:cc:dd:ee:01"),
+	};
+	const zt: BroadcastInterface = {
+		name: "zt0",
+		address: "172.29.8.151",
+		broadcast: "172.29.8.255",
+		mac: parseMac("aa:bb:cc:dd:ee:02"),
+	};
+	const ifaces = [lab, zt];
+
+	test("a directed-broadcast host resolves to its owning interface's MAC", () => {
+		// Regression (orca 2026-10-26): `connect()` to a broadcast reports
+		// local 0.0.0.0, so the egress probe matched no interface and an
+		// explicit `--host <broadcast>` fell back to a synthetic source MAC —
+		// which RouterOS's mac-server silently ignores (30s login timeout vs
+		// 7.26beta3 hardware despite mac-server=all). CHR answers synthetic
+		// MACs, so the integration suite stayed green while hardware timed out.
+		expect(selectEgressMac("172.22.74.255", ifaces, "0.0.0.0")).toEqual(
+			lab.mac,
+		);
+		expect(selectEgressMac("172.29.8.255", ifaces, "0.0.0.0")).toEqual(zt.mac);
+	});
+
+	test("a shared-subnet tie resolves to the first match, deterministically", () => {
+		const wifi: BroadcastInterface = {
+			...zt,
+			name: "wlan0",
+			address: "172.22.74.196",
+			broadcast: lab.broadcast,
+			mac: parseMac("aa:bb:cc:dd:ee:03"),
+		};
+		expect(selectEgressMac(lab.broadcast, [lab, wifi], "0.0.0.0")).toEqual(
+			lab.mac,
+		);
+		expect(selectEgressMac(lab.broadcast, [wifi, lab], "0.0.0.0")).toEqual(
+			wifi.mac,
+		);
+	});
+
+	test("a unicast host resolves via the probed egress address", () => {
+		expect(selectEgressMac("172.22.74.1", ifaces, lab.address)).toEqual(
+			lab.mac,
+		);
+		expect(selectEgressMac("172.29.8.1", ifaces, zt.address)).toEqual(zt.mac);
+	});
+
+	test("no match, no probe, or a 0.0.0.0 probe falls back", () => {
+		// The limited broadcast belongs to no one interface; the
+		// default-broadcast path sprays discovery instead.
+		expect(
+			selectEgressMac("255.255.255.255", ifaces, "0.0.0.0"),
+		).toBeUndefined();
+		expect(
+			selectEgressMac("255.255.255.255", ifaces, undefined),
+		).toBeUndefined();
+		// A foreign broadcast with no owning interface and a failed probe.
+		expect(selectEgressMac("10.9.8.255", ifaces, undefined)).toBeUndefined();
+		expect(selectEgressMac("10.9.8.255", ifaces, "0.0.0.0")).toBeUndefined();
+		// A unicast probe that matches no listed interface.
+		expect(selectEgressMac("10.1.2.3", ifaces, "10.9.9.9")).toBeUndefined();
+	});
+
+	test("resolveEgressMac feeds the live interfaces into the selection", async () => {
+		// Wiring check only: whatever the host has, the async wrapper agrees
+		// with the pure selection on the same inputs. No hardcoded addrs.
+		for (const ifc of listBroadcastInterfaces()) {
+			await expect(resolveEgressMac(ifc.broadcast, 20561)).resolves.toEqual(
+				selectEgressMac(ifc.broadcast, listBroadcastInterfaces(), "0.0.0.0"),
+			);
 		}
 	});
 });
