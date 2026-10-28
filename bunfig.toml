@@ -1,6 +1,7 @@
 entrypoint = "src/index.ts"
 
 [test]
-# Cache the CHR image before any test starts (#468); no-op without
-# CENTRS_RUN_FAST_INTEGRATION=1.
-preload = ["./test/integration/preload.ts"]
+# Hermetic HOME for the unit tier (#550; no-op when CHR integration is
+# enabled), then the CHR image cache (#468; no-op without
+# CENTRS_RUN_FAST_INTEGRATION=1).
+preload = ["./test/unit/preload.ts", "./test/integration/preload.ts"]

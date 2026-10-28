@@ -17,6 +17,7 @@ import {
 	runBoundedPool,
 	summarizeFanout,
 } from "../../src/index.ts";
+import { HERMETIC_ENV } from "./hermetic-env.ts";
 
 function fakeResolution(recordIndex: number): CdbResolution {
 	return {
@@ -69,23 +70,19 @@ const noSleep = async (): Promise<void> => undefined;
 describe("retrieve fanout orchestration", () => {
 	test("orders targets by recordIndex despite out-of-order completion", async () => {
 		const completionOrder: number[] = [];
-		const envelope = await retrieveGroup(
-			baseRequest,
-			{},
-			{
-				expand: async () => fakeExpansion(5),
-				sleep: noSleep,
-				execute: async (resolved) => {
-					const recordIndex = resolved.target.recordIndex ?? -1;
-					// Earlier indices finish LAST so completion order is reversed.
-					await new Promise((resolve) =>
-						setTimeout(resolve, (5 - recordIndex) * 5),
-					);
-					completionOrder.push(recordIndex);
-					return fakeSuccess(resolved);
-				},
+		const envelope = await retrieveGroup(baseRequest, HERMETIC_ENV, {
+			expand: async () => fakeExpansion(5),
+			sleep: noSleep,
+			execute: async (resolved) => {
+				const recordIndex = resolved.target.recordIndex ?? -1;
+				// Earlier indices finish LAST so completion order is reversed.
+				await new Promise((resolve) =>
+					setTimeout(resolve, (5 - recordIndex) * 5),
+				);
+				completionOrder.push(recordIndex);
+				return fakeSuccess(resolved);
 			},
-		);
+		});
 
 		expect(envelope.ok).toBe(true);
 		expect(envelope.data.targets.map((t) => t.meta.target.recordIndex)).toEqual(
@@ -97,23 +94,19 @@ describe("retrieve fanout orchestration", () => {
 	});
 
 	test("one inner failure does not flip the outer ok", async () => {
-		const envelope = await retrieveGroup(
-			baseRequest,
-			{},
-			{
-				expand: async () => fakeExpansion(2),
-				sleep: noSleep,
-				execute: async (resolved) => {
-					if ((resolved.target.recordIndex ?? -1) === 1) {
-						throw new CentrsError({
-							code: "transport/connection-refused",
-							summary: "refused",
-						});
-					}
-					return fakeSuccess(resolved);
-				},
+		const envelope = await retrieveGroup(baseRequest, HERMETIC_ENV, {
+			expand: async () => fakeExpansion(2),
+			sleep: noSleep,
+			execute: async (resolved) => {
+				if ((resolved.target.recordIndex ?? -1) === 1) {
+					throw new CentrsError({
+						code: "transport/connection-refused",
+						summary: "refused",
+					});
+				}
+				return fakeSuccess(resolved);
 			},
-		);
+		});
 
 		expect(envelope.ok).toBe(true);
 		expect(envelope.data.summary).toEqual({ total: 2, ok: 1, failed: 1 });
@@ -129,24 +122,20 @@ describe("retrieve fanout orchestration", () => {
 	});
 
 	test("empty / unknown group is ok:true with a cdb/empty-group warning", async () => {
-		const envelope = await retrieveGroup(
-			baseRequest,
-			{},
-			{
-				expand: async () => ({
-					empty: true,
-					targets: [],
-					warnings: [
-						{
-							code: "cdb/empty-group",
-							message: 'No CDB entries matched group "prod".',
-						},
-					],
-				}),
-				sleep: noSleep,
-				execute: async (resolved) => fakeSuccess(resolved),
-			},
-		);
+		const envelope = await retrieveGroup(baseRequest, HERMETIC_ENV, {
+			expand: async () => ({
+				empty: true,
+				targets: [],
+				warnings: [
+					{
+						code: "cdb/empty-group",
+						message: 'No CDB entries matched group "prod".',
+					},
+				],
+			}),
+			sleep: noSleep,
+			execute: async (resolved) => fakeSuccess(resolved),
+		});
 
 		expect(envelope.ok).toBe(true);
 		expect(envelope.data.summary).toEqual({ total: 0, ok: 0, failed: 0 });
@@ -164,40 +153,36 @@ describe("retrieve fanout orchestration", () => {
 			return next;
 		};
 
-		const envelope = await retrieveGroup(
-			baseRequest,
-			{},
-			{
-				expand: async () => fakeExpansion(3),
-				sleep: noSleep,
-				execute: async (resolved) => {
-					const index = resolved.target.recordIndex ?? -1;
-					const attempt = bump(index);
-					if (index === 0) {
-						// Retryable: fails twice then succeeds on attempt 3.
-						if (attempt < 3) {
-							throw new CentrsError({
-								code: "transport/network",
-								summary: "transient",
-							});
-						}
-						return fakeSuccess(resolved);
-					}
-					if (index === 1) {
-						// Retryable but always fails — must stop at 1 + 2 retries.
+		const envelope = await retrieveGroup(baseRequest, HERMETIC_ENV, {
+			expand: async () => fakeExpansion(3),
+			sleep: noSleep,
+			execute: async (resolved) => {
+				const index = resolved.target.recordIndex ?? -1;
+				const attempt = bump(index);
+				if (index === 0) {
+					// Retryable: fails twice then succeeds on attempt 3.
+					if (attempt < 3) {
 						throw new CentrsError({
-							code: "transport/connection-closed",
-							summary: "dropped",
+							code: "transport/network",
+							summary: "transient",
 						});
 					}
-					// Non-retryable: a single attempt, no retry.
+					return fakeSuccess(resolved);
+				}
+				if (index === 1) {
+					// Retryable but always fails — must stop at 1 + 2 retries.
 					throw new CentrsError({
-						code: "routeros/api-trap",
-						summary: "trap",
+						code: "transport/connection-closed",
+						summary: "dropped",
 					});
-				},
+				}
+				// Non-retryable: a single attempt, no retry.
+				throw new CentrsError({
+					code: "routeros/api-trap",
+					summary: "trap",
+				});
 			},
-		);
+		});
 
 		expect(calls.get(0)).toBe(3);
 		expect(calls.get(1)).toBe(3);
@@ -215,7 +200,7 @@ describe("retrieve fanout orchestration", () => {
 
 		const envelope = await retrieveGroup(
 			{ ...baseRequest, concurrency },
-			{},
+			HERMETIC_ENV,
 			{
 				expand: async () => fakeExpansion(8),
 				sleep: noSleep,
@@ -246,7 +231,7 @@ describe("retrieve fanout orchestration", () => {
 		const envelope = await retrieveFanout(
 			baseRequest,
 			selection,
-			{},
+			HERMETIC_ENV,
 			{
 				expand: async () => fakeExpansion(1),
 				sleep: noSleep,
@@ -270,7 +255,7 @@ describe("retrieve fanout orchestration", () => {
 		const envelope = await retrieveFanout(
 			baseRequest,
 			{ positionals: [], groups: [], all: false, default: true, where: [] },
-			{},
+			HERMETIC_ENV,
 			{
 				expand: async () => ({
 					empty: false,
@@ -333,27 +318,23 @@ describe("retrieve fanout member validation meta (GH#435)", () => {
 			source: "live /console/inspect request=child",
 			result: "passed" as const,
 		};
-		const envelope = await retrieveGroup(
-			baseRequest,
-			{},
-			{
-				expand: async () => fakeExpansion(2),
-				sleep: noSleep,
-				execute: async (resolved, trace) => {
-					if (resolved.target.recordIndex === 0) {
-						trace.validation = passed;
-						throw new CentrsError({
-							code: "routeros/request-failed",
-							summary: "RouterOS reported an error",
-						});
-					}
+		const envelope = await retrieveGroup(baseRequest, HERMETIC_ENV, {
+			expand: async () => fakeExpansion(2),
+			sleep: noSleep,
+			execute: async (resolved, trace) => {
+				if (resolved.target.recordIndex === 0) {
+					trace.validation = passed;
 					throw new CentrsError({
-						code: "transport/connection-refused",
-						summary: "refused",
+						code: "routeros/request-failed",
+						summary: "RouterOS reported an error",
 					});
-				},
+				}
+				throw new CentrsError({
+					code: "transport/connection-refused",
+					summary: "refused",
+				});
 			},
-		);
+		});
 		const [afterGate, interrupted] = envelope.data.targets;
 		expect(afterGate?.meta.validation).toEqual(passed);
 		expect(interrupted?.meta.validation).toEqual({
@@ -435,19 +416,15 @@ describe("retrieve fanout helpers", () => {
 			value: "native-api",
 			source: { kind: "comment-kv", key: "record:0:via" },
 		};
-		const envelope = await retrieveGroup(
-			baseRequest,
-			{},
-			{
-				expand: async () => ({
-					empty: false,
-					warnings: [],
-					targets: [{ kind: "cdb", recordIndex: 0, resolution }],
-				}),
-				sleep: noSleep,
-				execute: async (resolved) => fakeSuccess(resolved),
-			},
-		);
+		const envelope = await retrieveGroup(baseRequest, HERMETIC_ENV, {
+			expand: async () => ({
+				empty: false,
+				warnings: [],
+				targets: [{ kind: "cdb", recordIndex: 0, resolution }],
+			}),
+			sleep: noSleep,
+			execute: async (resolved) => fakeSuccess(resolved),
+		});
 
 		expect(envelope.meta.operation?.concurrency).toBe(4);
 	});

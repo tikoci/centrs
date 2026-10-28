@@ -12,6 +12,7 @@ import {
 	retrieveUnknownPathRemediation,
 } from "../../src/retrieve.ts";
 import { closedPort } from "./closed-port.ts";
+import { HERMETIC_ENV } from "./hermetic-env.ts";
 
 type FetchHandler = (
 	url: string,
@@ -525,7 +526,7 @@ describe("retrieve error envelopes keep what resolution found (#433)", () => {
 				username: "admin",
 				password: SECRET,
 			},
-			{},
+			HERMETIC_ENV,
 		);
 		expect(envelope.ok).toBe(false);
 		if (envelope.ok) return;
@@ -562,7 +563,7 @@ describe("retrieve error envelopes keep what resolution found (#433)", () => {
 				username: "admin",
 				password: SECRET,
 			},
-			{},
+			HERMETIC_ENV,
 		);
 		expect(envelope.ok).toBe(false);
 		if (envelope.ok) return;
@@ -583,7 +584,7 @@ describe("retrieve error envelopes keep what resolution found (#433)", () => {
 				wait: "1s",
 				password: SECRET,
 			},
-			{},
+			HERMETIC_ENV,
 		);
 		expect(envelope.ok).toBe(false);
 		if (envelope.ok) return;
@@ -601,7 +602,7 @@ describe("retrieve error envelopes keep what resolution found (#433)", () => {
 				via: "native-api",
 				wait: "1s",
 			},
-			{},
+			HERMETIC_ENV,
 		);
 		expect(pinned.meta).toEqual({
 			target: { input: "router1" },
@@ -670,7 +671,7 @@ describe("retrieve meta.validation reports what the gate concluded (GH#435)", ()
 				targetInput: `http://127.0.0.1:${port}`,
 				path: "/system/resource",
 			},
-			{},
+			HERMETIC_ENV,
 		);
 		expect(envelope.ok).toBe(false);
 		expect(envelope.meta.validation).toEqual({
@@ -696,7 +697,7 @@ describe("retrieve meta.validation reports what the gate concluded (GH#435)", ()
 				path: "/system/resource",
 				validate: false,
 			},
-			{},
+			HERMETIC_ENV,
 		);
 		expect(envelope.ok).toBe(false);
 		expect(envelope.meta.validation).toEqual({
@@ -722,7 +723,7 @@ describe("retrieve meta.validation reports what the gate concluded (GH#435)", ()
 		try {
 			const envelope = await retrieveEnvelope(
 				{ ...base, path: "/system/resource" },
-				{},
+				HERMETIC_ENV,
 			);
 			expect(envelope.ok).toBe(false);
 			if (envelope.ok) return;
@@ -750,7 +751,7 @@ describe("retrieve meta.validation reports what the gate concluded (GH#435)", ()
 		try {
 			const envelope = await retrieveEnvelope(
 				{ ...base, path: "/no/such/menu" },
-				{},
+				HERMETIC_ENV,
 			);
 			expect(envelope.ok).toBe(false);
 			if (envelope.ok) return;
@@ -780,7 +781,7 @@ describe("retrieve meta.validation reports what the gate concluded (GH#435)", ()
 		try {
 			const envelope = await retrieveEnvelope(
 				{ ...base, path: "/system/resource", query: ["uptime=5m"] },
-				{},
+				HERMETIC_ENV,
 			);
 			expect(envelope.ok).toBe(false);
 			if (envelope.ok) return;
@@ -801,7 +802,7 @@ describe("retrieve meta.validation reports what the gate concluded (GH#435)", ()
 		try {
 			const envelope = await retrieveEnvelope(
 				{ ...base, path: "/system/resource" },
-				{},
+				HERMETIC_ENV,
 			);
 			expect(envelope.ok).toBe(true);
 			expect(envelope.meta.validation?.result).toBe("passed");
@@ -947,7 +948,7 @@ describe("retrieve default output format is human-readable text", () => {
 	test("defaults to text when no --format/CENTRS_FORMAT is set", async () => {
 		const resolved = await resolveRetrieveRequest(
 			{ targetInput: "127.0.0.1", path: "/ip/address", via: "rest-api" },
-			{},
+			HERMETIC_ENV,
 		);
 		expect(resolved.format.value).toBe("text");
 	});
@@ -955,7 +956,7 @@ describe("retrieve default output format is human-readable text", () => {
 	test("honors CENTRS_FORMAT=json and explicit --format yaml", async () => {
 		const json = await resolveRetrieveRequest(
 			{ targetInput: "127.0.0.1", path: "/ip/address", via: "rest-api" },
-			{ CENTRS_FORMAT: "json" },
+			{ ...HERMETIC_ENV, CENTRS_FORMAT: "json" },
 		);
 		expect(json.format.value).toBe("json");
 		const yaml = await resolveRetrieveRequest(
@@ -965,7 +966,7 @@ describe("retrieve default output format is human-readable text", () => {
 				via: "rest-api",
 				format: "yaml",
 			},
-			{ CENTRS_FORMAT: "json" },
+			{ ...HERMETIC_ENV, CENTRS_FORMAT: "json" },
 		);
 		expect(yaml.format.value).toBe("yaml");
 	});
@@ -1029,7 +1030,7 @@ describe("resolveMacForRetrieve (shared by single + fanout paths)", () => {
 				via: "native-api",
 				resolve: "arp",
 			},
-			{},
+			HERMETIC_ENV,
 		).catch((error: CentrsError) => error);
 		// Either it resolved (live ARP hit) or it produced a structured ARP-miss
 		// error — never an unhandled crash.

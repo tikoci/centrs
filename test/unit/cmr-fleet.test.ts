@@ -10,6 +10,7 @@ import {
 	resolveCmrFleetScope,
 } from "../../src/core/cmr-fleet.ts";
 import { executeEnvelope } from "../../src/execute.ts";
+import { HERMETIC_ENV } from "./hermetic-env.ts";
 
 type Row = Record<string, string>;
 
@@ -473,8 +474,6 @@ function fakeController() {
 	return { server, seen };
 }
 
-const NO_ENV = { CENTRS_SKIP_ENV_FILE: "1" };
-
 describe("the write gate names the fleet (#453)", () => {
 	test("execute: the refusal names the reach and context.cmr; the warning rides the envelope", async () => {
 		const { server, seen } = fakeController();
@@ -489,7 +488,7 @@ describe("the write gate names the fleet (#453)", () => {
 					command: "/cmr/device/reboot labels=all",
 					stdinIsTty: false,
 				},
-				NO_ENV,
+				HERMETIC_ENV,
 			);
 			expect(envelope.ok).toBe(false);
 			if (envelope.ok) return;
@@ -533,7 +532,7 @@ describe("the write gate names the fleet (#453)", () => {
 						return false;
 					},
 				},
-				NO_ENV,
+				HERMETIC_ENV,
 			);
 			expect(prompts).toHaveLength(1);
 			expect(prompts[0]).toContain("`/cmr/vlan/add` on 3 CMR device(s)");
@@ -558,7 +557,7 @@ describe("the write gate names the fleet (#453)", () => {
 					via: "rest-api",
 					stdinIsTty: false,
 				},
-				NO_ENV,
+				HERMETIC_ENV,
 			);
 			expect(envelope.ok).toBe(false);
 			if (envelope.ok) return;
@@ -590,7 +589,7 @@ describe("the write gate names the fleet (#453)", () => {
 					via: "rest-api",
 					stdinIsTty: false,
 				},
-				NO_ENV,
+				HERMETIC_ENV,
 			);
 			expect(envelope.ok).toBe(false);
 			if (envelope.ok) return;
@@ -616,7 +615,7 @@ describe("the write gate names the fleet (#453)", () => {
 					command: "/system/identity/set name=x",
 					stdinIsTty: false,
 				},
-				NO_ENV,
+				HERMETIC_ENV,
 			);
 			expect(seen).toEqual([]);
 		} finally {

@@ -22,6 +22,7 @@ import {
 	validateTransferRequestShape,
 } from "../../src/index.ts";
 import { SftpClient } from "../../src/protocols/sftp.ts";
+import { HERMETIC_ENV } from "./hermetic-env.ts";
 
 // ── fetch mock (drives the REST adapter end-to-end, no CHR) ──────────────────
 
@@ -85,7 +86,7 @@ function baseRequest(overrides: Partial<TransferRequest>): TransferRequest {
 async function runTransfer(
 	request: TransferRequest,
 ): Promise<TransferSuccessEnvelope> {
-	return transfer(request, {});
+	return transfer(request, HERMETIC_ENV);
 }
 
 // ── pure: path normalization ─────────────────────────────────────────────────
@@ -369,7 +370,7 @@ describe("transfer error envelopes keep what resolution found (#391)", () => {
 					remote: "big.bin",
 					password: SECRET,
 				}),
-				{},
+				HERMETIC_ENV,
 			);
 			expect(envelope.ok).toBe(false);
 			if (envelope.ok) return;
@@ -405,7 +406,7 @@ describe("transfer error envelopes keep what resolution found (#391)", () => {
 	test("a failure before resolution keeps the minimal input-only envelope", async () => {
 		const envelope = await transferEnvelope(
 			{ verb: "upload", targetInput: "router1", password: SECRET },
-			{},
+			HERMETIC_ENV,
 		);
 		expect(envelope.ok).toBe(false);
 		if (envelope.ok) return;
@@ -484,7 +485,7 @@ describe("sftp auth failure tips (#391)", () => {
 	test("a resolved password is named as not sent, with a password transport tip", async () => {
 		const resolved = await resolveTransferRequest(
 			baseRequest({ via: "sftp", password: undefined }),
-			{ CENTRS_PASSWORD: "from-env" },
+			{ ...HERMETIC_ENV, CENTRS_PASSWORD: "from-env" },
 		);
 		const envelope = buildTransferErrorEnvelopeFromResolved(
 			resolved,
@@ -512,7 +513,7 @@ describe("sftp auth failure tips (#391)", () => {
 		const local = tmpFile("big-391-tip.bin", Buffer.alloc(70_000, 1));
 		const resolved = await resolveTransferRequest(
 			baseRequest({ verb: "upload", via: "sftp", local, password: "pw" }),
-			{},
+			HERMETIC_ENV,
 		);
 		const envelope = buildTransferErrorEnvelopeFromResolved(
 			resolved,
@@ -526,7 +527,7 @@ describe("sftp auth failure tips (#391)", () => {
 	test("a post-login permission refusal adds no password tips", async () => {
 		const resolved = await resolveTransferRequest(
 			baseRequest({ via: "sftp", password: "pw" }),
-			{},
+			HERMETIC_ENV,
 		);
 		const client = new SftpClient({
 			host: "127.0.0.1",
@@ -548,7 +549,7 @@ describe("sftp auth failure tips (#391)", () => {
 	test("no password, or a non-auth failure, adds no tips", async () => {
 		const noPassword = await resolveTransferRequest(
 			baseRequest({ via: "sftp", password: undefined }),
-			{},
+			HERMETIC_ENV,
 		);
 		expect(
 			buildTransferErrorEnvelopeFromResolved(noPassword, await sftpAuthError())
@@ -556,7 +557,7 @@ describe("sftp auth failure tips (#391)", () => {
 		).toEqual([]);
 		const withPassword = await resolveTransferRequest(
 			baseRequest({ via: "sftp", password: "pw" }),
-			{},
+			HERMETIC_ENV,
 		);
 		const timeout = new CentrsError({
 			code: "transport/timeout",
@@ -886,7 +887,7 @@ describe("transfer list", () => {
 		try {
 			const envelope = await transferEnvelope(
 				baseRequest({ verb: "list" }),
-				{},
+				HERMETIC_ENV,
 			);
 			expect(envelope.ok).toBe(false);
 			expect(envelope.meta.validation).toEqual({ enabled: false });
