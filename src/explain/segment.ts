@@ -669,7 +669,7 @@ function countExecutedBlockStatements(
 	depth: number,
 ): number {
 	const masked = maskComments(segmentText);
-	const storedDoHead = /^:(?:global|local|set)\b/.test(masked);
+	const storedDoHead = /^:(?:global|local|set)\b/i.test(masked);
 	let total = 0;
 	let i = 0;
 	const stack: string[] = [];

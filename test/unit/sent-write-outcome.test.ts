@@ -311,6 +311,25 @@ const permServer = Bun.serve({
 });
 afterAll(() => permServer.stop(true));
 
+/**
+ * #549 HTTP-200 form: a multi-statement script refused mid-run answers 200
+ * with the earlier statements' stdout trailed by the refusal in `ret` (the
+ * CHR P5 shape). Same warning rule as the 500 form: multi warns, single
+ * stays silent.
+ */
+const trailedRetServer = Bun.serve({
+	hostname: "127.0.0.1",
+	port: 0,
+	fetch: () =>
+		Response.json(
+			{
+				ret: "p5-first\r\nnot enough permissions (9) (/system/identity/set; line 1)",
+			},
+			{ status: 200 },
+		),
+});
+afterAll(() => trailedRetServer.stop(true));
+
 const refused = (envelope: { ok: boolean; error?: { code: string } }) => {
 	expect(envelope.ok).toBe(false);
 	expect(envelope.error?.code).toBe("routeros/permission-denied");
@@ -333,6 +352,30 @@ describe("a refused multi-statement write warns that it may be partly applied (#
 			{
 				...common,
 				port: permServer.port,
+				command: '/system/note/set note="x"',
+			},
+			ENV,
+		);
+		refused(single);
+		expect(warned(single)).toBe(false);
+	});
+
+	test("execute: an HTTP-200 trailed `ret` refusal warns for multi, silent for single (#549)", async () => {
+		const multi = await executeEnvelope(
+			{
+				...common,
+				port: trailedRetServer.port,
+				command: ':put "p5-first"; /system/identity/set name=centrs-perm-p5',
+			},
+			ENV,
+		);
+		refused(multi);
+		expect(warned(multi)).toBe(true);
+
+		const single = await executeEnvelope(
+			{
+				...common,
+				port: trailedRetServer.port,
 				command: '/system/note/set note="x"',
 			},
 			ENV,

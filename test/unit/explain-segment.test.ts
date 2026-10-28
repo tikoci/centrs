@@ -851,6 +851,8 @@ describe("countExecutableStatements — dispatch effects at any depth (#549)", (
 		// Stored bodies never run at dispatch: a refused single stays single.
 		["/system/script/add name=x source={ :put 1; :put 2 }", 1],
 		[":global f do={ :put 1; :put 2 }", 1],
+		[":GLOBAL f do={ :put 1; :put 2 }", 1],
+		[":Local f do={ :put 1; :put 2 }", 1],
 		// Separators inside strings are not statements.
 		[':if (true) do={ :put "a;b" }', 1],
 	])("counts %s as %i", (input, count) => {
