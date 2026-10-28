@@ -250,8 +250,9 @@ part of this section.
   earlier statements may have run (#549). Such a refusal carries
   `transport/write-outcome-unknown` alongside `routeros/permission-denied`,
   counting statements inside executed `:if`/`:for`/`:foreach`/`:while`/`:do`/`:retry`/`:onerror` scopes and
-  command substitutions (`[…]`) as well as top-level ones; single refused
-  statements, including `remove [find …]`, stay silent. The refusal itself
+  command substitutions (`[…]`) as well as top-level ones; a `/menu { … }`
+  prefix is navigation, not a statement. Single refused statements, including
+  `remove [find …]` and one wrapped in a menu block, stay silent. The refusal itself
   now surfaces as the error instead of `ok:true`: `/execute` answers HTTP 200
   with `not enough permissions (9) (…; line N)` as the last `ret` line after
   earlier statements' output (CHR 7.25, both transports).
