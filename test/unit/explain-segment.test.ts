@@ -867,6 +867,7 @@ describe("countExecutableStatements — dispatch effects at any depth (#549)", (
 		// Substitutions inside stored bodies and arrays do not run.
 		["/system/script/add name=x source={ :put [:put 1; :put 2] }", 1],
 		[":global f do={ :put [:put 1; :put 2] }", 1],
+		[":foreach i in={[:put 1; :put 2]} do={ :put $i }", 1],
 		// An unclosed substitution counts what precedes the break.
 		[":put [:put 1; :put 2", 1],
 	])("counts %s as %i", (input, count) => {
