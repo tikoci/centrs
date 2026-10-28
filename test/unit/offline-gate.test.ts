@@ -60,6 +60,17 @@ describe("offline gate — what it lets through", () => {
 			expect(assertOfflineSyntax(command, surface).verdict).not.toBe("fail");
 	});
 
+	test("an accepted first-segment abbreviation reaches the device (#525)", () => {
+		// CHR 7.24.5 and 7.23.8 lower `down=` to `down-script=`; stage 1 used to
+		// refuse it with `invalid-command-brace`. It warns now, so the device
+		// stage decides. `comment=` warns the same way and the device rejects it.
+		for (const command of [
+			"/tool/netwatch add host=1.1.1.1 down={ :beep }",
+			"/tool/netwatch add host=1.1.1.1 comment={ :beep }",
+		])
+			expect(assertOfflineSyntax(command, surface).verdict).toBe("warn");
+	});
+
 	test("a `where … in {…}` read reaches the device (#502)", () => {
 		// CHR 7.24.5 and 7.23.8 accept both; stage 1 used to refuse them.
 		for (const command of [

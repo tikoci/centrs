@@ -13,6 +13,7 @@ const describeFast = isChrIntegrationEnabled() ? describe : describe.skip;
 
 const WARNING = "explain/canonicalizer/possible-spaced-argument";
 const BRACE = "explain/canonicalizer/invalid-command-brace";
+const AMBIGUOUS = "explain/canonicalizer/possible-script-body-abbreviation";
 
 interface Chr {
 	exec(command: string): Promise<unknown>;
@@ -47,6 +48,7 @@ function offline(input: string) {
 			.filter((d) => d.code === WARNING)
 			.map((d) => input.slice(d.span.start, d.span.end)),
 		braces: result.diagnostics.filter((d) => d.code === BRACE).length,
+		ambiguous: result.diagnostics.filter((d) => d.code === AMBIGUOUS).length,
 	};
 }
 
@@ -147,6 +149,7 @@ describeFast("explain spaced arguments against CHR (#350)", () => {
 					read: false,
 					warnings: warns,
 					braces: 0,
+					ambiguous: 0,
 				});
 			}
 
@@ -162,6 +165,7 @@ describeFast("explain spaced arguments against CHR (#350)", () => {
 					read: false,
 					warnings: [],
 					braces: 0,
+					ambiguous: 0,
 				});
 			}
 
@@ -238,17 +242,31 @@ describeFast("explain spaced arguments against CHR (#350)", () => {
 				}).toEqual({ input, rejected: true, braces: 0 });
 			}
 
-			// All three stay the offline error: `zzzscript` lacks the hyphen of
-			// RouterOS's `…-script` names, so it is not a script-body shape.
+			// The spaced rows stay the offline error: `zzzscript` lacks the hyphen
+			// of RouterOS's `…-script` names, so it is not a script-body shape,
+			// and a spaced body after `comment` is not an abbreviation either.
+			// The `=` row warns instead of rejecting (#525): `comment={` with a
+			// script-like body may abbreviate a script slot the device knows,
+			// and offline has no per-command argument list to rule it out —
+			// the device pins above still show this one rejected.
 			for (const input of [
 				"/system/scheduler add name=x comment { :beep }",
-				"/tool/netwatch add host=1.1.1.1 comment={ :beep }",
 				"/system/script add name=x zzzscript { :beep }",
 			])
 				expect({ input, braces: offline(input).braces }).toEqual({
 					input,
 					braces: 1,
 				});
+			{
+				const input = "/tool/netwatch add host=1.1.1.1 comment={ :beep }";
+				expect({ input, ...offline(input) }).toEqual({
+					input,
+					read: false,
+					warnings: [],
+					braces: 0,
+					ambiguous: 1,
+				});
+			}
 		} finally {
 			await started.chr.destroy();
 		}
@@ -329,11 +347,35 @@ describeFast("explain spaced arguments against CHR (#350)", () => {
 				}).toEqual({ input, rejected: true, braces: 1 });
 			}
 
-			// The known limit, pinned: a first-segment abbreviation is accepted on
-			// device, and offline cannot tell it from `comment` without schema.
-			const firstSegment = "/tool/netwatch add host=1.1.1.1 down={ :beep }";
-			await accepted(firstSegment, ["down-script= :beep"]);
-			expect(offline(firstSegment).braces).toBe(1);
+			// The former known limit (#525): a first-segment abbreviation is
+			// accepted on device, and offline cannot tell it from `comment`
+			// without schema — so it warns and lets the device decide instead
+			// of rejecting. The device pins show each shape accepted as
+			// `down-script=`: a directive body, a bare command word, and a
+			// body after a comment line.
+			for (const { input, needle } of [
+				{
+					input: "/tool/netwatch add host=1.1.1.1 down={ :beep }",
+					needle: "down-script= :beep",
+				},
+				{
+					input: "/tool/netwatch add host=1.1.1.1 down={ beep }",
+					needle: "down-script= beep",
+				},
+				{
+					input: "/tool/netwatch add host=1.1.1.1 down={ # c\n :beep }",
+					needle: "down-script= # c",
+				},
+			]) {
+				await accepted(input, [needle]);
+				expect({ input, ...offline(input) }).toEqual({
+					input,
+					read: false,
+					warnings: [],
+					braces: 0,
+					ambiguous: 1,
+				});
+			}
 
 			// A run that names no command still opens a menu block.
 			for (const { input, needles } of [
@@ -366,6 +408,114 @@ describeFast("explain spaced arguments against CHR (#350)", () => {
 				requestedVersion: started.requestedVersion,
 				exampleIds: [35],
 			});
+		} finally {
+			await started.chr.destroy();
+		}
+	}, 300_000);
+
+	test("the abbreviation guess never shields a root slot or a `where` comparison (#554)", async () => {
+		const started = await startIntegrationChr();
+		try {
+			// Root slots: the (verb, slot) table decides, and neither slot
+			// takes a body through any spelling. The spaced rows bind like
+			// the glued ones (#350), so the device rejects them too.
+			for (const input of [
+				":put x={ :beep }",
+				":local name={ :put 1 }",
+				":put x= { :beep }",
+				":local name= { :put 1 }",
+			]) {
+				expect({
+					input,
+					rejected: PARSE_REJECTED.test(await parseOf(started.chr, input)),
+					...offline(input),
+				}).toEqual({
+					input,
+					rejected: true,
+					read: false,
+					warnings: [],
+					braces: 1,
+					ambiguous: 0,
+				});
+			}
+
+			// A `where` named comparison reads the brace with the property's
+			// own parser however the clause is wrapped, so the body the brace
+			// holds never matters.
+			for (const [input, wording] of [
+				["/ip/route/print where gateway={ :beep }", "expected gateway value"],
+				[
+					"/ip/address remove [find where comment={ :beep }]",
+					"expected comment value",
+				],
+				[
+					"/system/script add name=x source={ /ip/route/print where (gateway={ :beep }) }",
+					"expected gateway value",
+				],
+			] as const)
+				expect({
+					input,
+					parse: await parseOf(started.chr, input),
+					...offline(input),
+				}).toEqual({
+					input,
+					parse: expect.stringContaining(wording),
+					read: false,
+					warnings: [],
+					braces: 1,
+					ambiguous: 0,
+				});
+
+			// The spaced `name= {…}` spelling lowers exactly like the glued
+			// one, so it warns under the same gates instead of erroring.
+			{
+				const input = "/tool/netwatch add host=1.1.1.1 down= { :beep }";
+				const parsed = await parseOf(started.chr, input);
+				expect({
+					input,
+					rejected: PARSE_REJECTED_HINT.test(parsed),
+					evl: parsed.startsWith("(evl"),
+					lowered: parsed.includes("down-script= :beep"),
+				}).toEqual({ input, rejected: false, evl: true, lowered: true });
+				expect({ input, ...offline(input) }).toEqual({
+					input,
+					read: false,
+					warnings: [],
+					braces: 0,
+					ambiguous: 1,
+				});
+			}
+
+			// The spaced tradeoff mirrors the glued one: `comment= { :beep }`
+			// is rejected on the device but warns offline, while a spaced
+			// array-content brace keeps its error and a spaced proven slot
+			// stays silent.
+			for (const input of [
+				"/tool/netwatch add host=1.1.1.1 comment= { :beep }",
+				"/tool/netwatch add host=1.1.1.1 comment= {1;2}",
+			])
+				expect({
+					input,
+					rejected: PARSE_REJECTED.test(await parseOf(started.chr, input)),
+				}).toEqual({ input, rejected: true });
+			expect({
+				...offline("/tool/netwatch add host=1.1.1.1 comment= { :beep }"),
+			}).toEqual({ read: false, warnings: [], braces: 0, ambiguous: 1 });
+			expect({
+				...offline("/tool/netwatch add host=1.1.1.1 comment= {1;2}"),
+			}).toEqual({ read: false, warnings: [], braces: 1, ambiguous: 0 });
+			{
+				const input = "/tool/netwatch add host=1.1.1.1 down-script= { :beep }";
+				expect(await parseOf(started.chr, input)).toContain(
+					"down-script= :beep",
+				);
+				expect({ ...offline(input) }).toEqual({
+					read: false,
+					warnings: [],
+					braces: 0,
+					ambiguous: 0,
+				});
+			}
 		} finally {
 			await started.chr.destroy();
 		}

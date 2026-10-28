@@ -99,15 +99,80 @@ const SCRIPT_BODY_ARG = /^(?:source|script|.+-script|on-.+)$/;
  * offline misses it.
  *
  * Abbreviating the FIRST segment (`down={ :beep }` for `down-script`, also
- * accepted on device) stays outside. Every word is a prefix of `<word>-script`,
- * so admitting it would admit `comment={ :beep }`. Telling them apart needs the
- * command's argument list, which is schema.
+ * accepted on device) stays outside the PROVEN shape. Every word is a prefix
+ * of `<word>-script`, so admitting it here would admit `comment={ :beep }` as
+ * a confident body. Telling them apart needs the command's argument list,
+ * which is schema — so a `name={` with a script-like body that reaches this
+ * far reads as a body for every reader (comments inside are comments) but is
+ * warned as a possible abbreviation instead of passing silently (#525,
+ * `args.ts` → `invalidCommandBraceOffsets`).
  */
 const SCRIPT_BODY_ABBREVIATION =
 	/^(?:s(?:o(?:u(?:r(?:c)?)?)?)?|sc(?:r(?:i(?:p)?)?)?|on?|.+-(?:s(?:c(?:r(?:i(?:p)?)?)?)?)?)$/;
 
-function isScriptBodyName(name: string): boolean {
+/** Whether `name` is a proven script-body slot (full or pinned abbreviation). */
+export function isScriptBodyName(name: string): boolean {
 	return SCRIPT_BODY_ARG.test(name) || SCRIPT_BODY_ABBREVIATION.test(name);
+}
+
+function isAsciiLetter(char: string | undefined): boolean {
+	if (char === undefined) return false;
+	return (char >= "A" && char <= "Z") || (char >= "a" && char <= "z");
+}
+
+/**
+ * Whether the `{` at `open` holds a script-like body (#525). `end` is the
+ * exclusive brace end (or the text length when unclosed).
+ *
+ * A body opens with a directive, an absolute command, or one bare command
+ * word: `{ :beep }`, `{ /ip … }`, `{ beep }` and `{ # comment⏎:beep }` are
+ * all accepted on CHR 7.25. A bare word followed by a top-level `;` is array
+ * members, not commands — `.proplist={name;comment}` is device-rejected —
+ * so it keeps the error, as do `{1;2}`, `{"x"}`, `{}` and `$`-led values,
+ * which cannot open a command at all. The scan touches each byte between
+ * the braces once, skipping strings and `#`-to-end-of-line runs, so it is
+ * linear; it works on masked and unmasked text alike (a masked comment is
+ * already whitespace).
+ */
+export function braceBodyIsScriptLike(
+	text: string,
+	open: number,
+	end: number,
+): boolean {
+	let j = open + 1;
+	for (;;) {
+		if (j >= end) return false;
+		const c = text[j] as string;
+		if (c === " " || c === "\t" || c === "\r" || c === "\n") {
+			j++;
+			continue;
+		}
+		if (c === "#") {
+			while (j < end && text[j] !== "\n") j++;
+			continue;
+		}
+		if (c === ":" || c === "/") return true;
+		if (!isAsciiLetter(c)) return false;
+		break;
+	}
+	let depth = 0;
+	while (j < end) {
+		const c = text[j] as string;
+		if (c === '"') {
+			const scan = scanQuotedString(text, j);
+			j = Math.min(scan.end, end);
+			continue;
+		}
+		if (c === "#") {
+			while (j < end && text[j] !== "\n") j++;
+			continue;
+		}
+		if (c === "{" || c === "[" || c === "(") depth++;
+		else if ((c === "}" || c === "]" || c === ")") && depth > 0) depth--;
+		else if (c === ";" && depth === 0) return false;
+		j++;
+	}
+	return true;
 }
 
 /** Grounded scripting directives whose positional arity makes a later `#` fatal. */
@@ -493,18 +558,41 @@ export function scopeNameFromMasked(
  * Whether this brace begins a context in which statement-leading comments exist.
  *
  * `floor` bounds the lookback exactly as in {@link scopeNameFromMasked}.
+ * `unprovenName` decides the unproven `name={` guess below: `"body"` reads it
+ * as a body, `"value"` as a value. Only the script-like disjunct is gated —
+ * a proven slot stays a body either way. Readers that are themselves deciding
+ * an error AT this brace pass `"value"` where the slot cannot bear a body
+ * (`args.ts` for a root directive's slots and a `where` named comparison,
+ * `group-faults.ts` for the bracketed form), so the guess does not swallow
+ * their error; every other reader keeps `"body"`.
  */
 export function braceStartsStatements(
 	text: string,
 	open: number,
 	floor = 0,
+	unprovenName: "body" | "value" = "body",
 ): boolean {
 	if (scopeNameFromMasked(text, open, floor) !== null) return true;
 	const index = statementIndex(text);
 	const boundary = index.boundaries[open] ?? -1;
 	const start = Math.max(boundary + 1, floor);
 	const named = trailingName(text, start, open);
-	if (named !== null) return isScriptBodyName(named.toLowerCase());
+	if (named !== null) {
+		// A `name={` with a script-like body reads as a body for every
+		// reader, proven slot or not (#525): `down={ beep }` and
+		// `down={ # comment⏎:beep }` are accepted on CHR 7.25, and the `#`
+		// is only a comment when the brace bears statements. The warning
+		// that marks the unproven slot lives in `args.ts`, which checks
+		// ambiguity before this skip.
+		if (isScriptBodyName(named.toLowerCase())) return true;
+		if (unprovenName === "value") return false;
+		const close = matchingBraceEnd(text, open);
+		return braceBodyIsScriptLike(
+			text,
+			open,
+			close === undefined ? text.length : close + 1,
+		);
+	}
 	// `source { :beep }` — the same body with the `=` left out (#350). Every
 	// grounded spelling lowers to the `source=` IL on CHR 7.22.1 and 7.24.5:
 	// `/system/script add name=beep source { :beep }`, `/system/scheduler add

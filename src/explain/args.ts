@@ -78,7 +78,12 @@
 
 import { isScopeBrace, isScopeBraceIn } from "./blocks.ts";
 import { braceSlotAcceptsBrace, braceSlotTakesArray } from "./brace-slots.ts";
-import { braceStartsStatements } from "./scope-brace.ts";
+import {
+	braceBodyIsScriptLike,
+	braceStartsStatements,
+	isScriptBodyName,
+	scopeNameFromMasked,
+} from "./scope-brace.ts";
 import {
 	type MaskedRange,
 	maskComments,
@@ -350,6 +355,34 @@ function braceValueOwner(
 	if (at === tokenStart) return null;
 	if (text[at - 1] !== "=") return undefined;
 	const name = text.slice(tokenStart, at - 1);
+	return ARGUMENT_NAME.test(name) ? name.toLowerCase() : undefined;
+}
+
+/**
+ * The `name` of a `name= {…}` brace: the token before the gap ends in a glued
+ * `name=` run (#554).
+ *
+ * {@link braceValueOwner} only sees the `=` glued to the brace (`down={`). A
+ * space after the `=` starts a new token, so the brace reads as positional
+ * there — but on CHR 7.25 `down= { :beep }` lowers to `down-script=` exactly
+ * like the glued spelling, while `comment= {1;2}` is a `syntax error` at the
+ * `{`. Only spaces and tabs span the gap: a newline there is a statement
+ * boundary, not a gap, and the name run must start its token, so `=down= {`
+ * and `down = {` own nothing.
+ */
+function spacedBraceOwner(text: string, at: number): string | undefined {
+	let j = at - 1;
+	let gap = 0;
+	while (text[j] === " " || text[j] === "\t") {
+		j--;
+		gap++;
+	}
+	if (gap === 0 || text[j] !== "=") return undefined;
+	const nameEnd = j;
+	j--;
+	while (j >= 0 && /[A-Za-z0-9.-]/.test(text[j] as string)) j--;
+	if (j >= 0 && !/[\s([]/.test(text[j] as string)) return undefined;
+	const name = text.slice(j + 1, nameEnd);
 	return ARGUMENT_NAME.test(name) ? name.toLowerCase() : undefined;
 }
 
@@ -1715,6 +1748,22 @@ export function comparesNamedValue(
 	return /^[A-Za-z.]/.test(name) && /[\s(]/.test(text[j] as string);
 }
 
+/** One top-level `{` in command arguments that is not a proven body. */
+export interface CommandBraceFinding {
+	/** Offset of the `{` in the text passed to the lexer. */
+	at: number;
+	/**
+	 * True when `name={` with a script-like body on a non-root command outside
+	 * `where`, where `name` is not a proven script-body slot (#525). The brace
+	 * may abbreviate one (`down=` for `down-script=`), but telling it from
+	 * `comment=` needs the command's argument list, which is schema — so the
+	 * caller warns instead of rejecting, and the device decides.
+	 */
+	ambiguous: boolean;
+	/** The `name` of `name=`, lower-cased, when `ambiguous` is true. */
+	name?: string;
+}
+
 /**
  * Locate top-level `{...}` values that RouterOS rejects in command arguments.
  *
@@ -1724,15 +1773,21 @@ export function comparesNamedValue(
  * excluded: their brace is a script body, not an array. The caller applies
  * this only to non-root commands; root scripting directives use the
  * `(verb, slot)` table instead.
+ *
+ * A `name={` with a script-like body that is not a proven slot is returned
+ * with `ambiguous: true` rather than as an error (#525), and so is the spaced
+ * `name= {…}` spelling (`down= { :beep }` lowers to `down-script=` on CHR
+ * 7.25). Array-content braces (`comment={1;2}`), positional braces, `where`
+ * comparisons and root slots keep their rejection.
  */
 export function invalidCommandBraceOffsets(
 	text: string,
 	from: number,
 	directiveVerb?: string,
 	range?: MaskedRange,
-): number[] {
+): CommandBraceFinding[] {
 	const structural = maskOf(range) ?? maskComments(text);
-	const offsets: number[] = [];
+	const offsets: CommandBraceFinding[] = [];
 	const stack: string[] = [];
 	let i = Math.max(0, from);
 	let tokenStart: number | null = null;
@@ -1783,7 +1838,54 @@ export function invalidCommandBraceOffsets(
 			tokenStart === null
 				? undefined
 				: braceValueOwner(structural, tokenStart, i);
-		const slot = owner === null ? `#${positionals}` : owner;
+		// A space after the `=` owns the brace the same way the glued `=`
+		// does (#554), so the slot attributes the spaced owner before
+		// falling back to positional: `:put x= { :beep }` reads slot `x`,
+		// not `#0` (which `put` accepts, swallowing the error).
+		const spacedOwner =
+			typeof owner === "string" ? undefined : spacedBraceOwner(structural, i);
+		const slot = owner === null ? (spacedOwner ?? `#${positionals}`) : owner;
+		// A `where` named comparison reads the brace with the property's own
+		// parser and rejects it (`expected <name> value`), so the #525 body
+		// guess must not shield it below — `gateway={ :beep }` included.
+		const inWhereComparison =
+			directiveVerb === undefined &&
+			whereAt !== null &&
+			comparesNamedValue(structural, i, whereAt);
+		// The ambiguity check comes first: `braceStartsStatements` reads an
+		// unproven `name={` with a script-like body as a body too (#525), so
+		// reaching that skip would swallow the warning that marks the guess.
+		// Control scopes (`do={` on a monitor, `:retry … command={`) are not
+		// guesses — the scope table already proves them — so they stay out.
+		// A space after the `=` owns the brace the same way the glued `=`
+		// does (`down= { :beep }` lowers to `down-script=` on CHR 7.25), so
+		// the spaced owner warns under the same gates.
+		const scopeName =
+			directiveVerb === undefined && whereAt === null
+				? range === undefined
+					? scopeNameFromMasked(structural, i)
+					: scopeNameFromMasked(range.masked, range.start + i, range.start)
+				: null;
+		const ambiguousOwner = typeof owner === "string" ? owner : spacedOwner;
+		if (
+			directiveVerb === undefined &&
+			whereAt === null &&
+			scopeName === null &&
+			typeof ambiguousOwner === "string" &&
+			!isScriptBodyName(ambiguousOwner) &&
+			braceBodyIsScriptLike(structural, i, end ?? structural.length)
+		) {
+			offsets.push({ at: i, ambiguous: true, name: ambiguousOwner });
+			i = end ?? i + 1;
+			continue;
+		}
+		// A root directive's slots and a `where` named comparison never take
+		// a script body through an unproven name: `:put x={ :beep }` and
+		// `where gateway={ :beep }` are device rejections, so the brace reads
+		// as a VALUE for the body check and the error below stands (#554).
+		// Proven slots still skip — the gate is only the unproven disjunct.
+		const unprovenName =
+			directiveVerb !== undefined || inWhereComparison ? "value" : "body";
 		if (
 			// Asked of the DOCUMENT when the caller anchored this statement, so the
 			// statement index behind it is the document's one index rather than a
@@ -1791,19 +1893,22 @@ export function invalidCommandBraceOffsets(
 			// subtree, and so was rebuilt once per enclosing level (#322). The floor
 			// makes the two readings the same answer (`scope-brace.ts`).
 			(range === undefined
-				? braceStartsStatements(structural, i)
-				: braceStartsStatements(range.masked, range.start + i, range.start)) ||
+				? braceStartsStatements(structural, i, 0, unprovenName)
+				: braceStartsStatements(
+						range.masked,
+						range.start + i,
+						range.start,
+						unprovenName,
+					)) ||
 			(directiveVerb !== undefined &&
 				slot !== undefined &&
 				braceSlotAcceptsBrace(directiveVerb, slot)) ||
-			(directiveVerb === undefined &&
-				whereAt !== null &&
-				!comparesNamedValue(structural, i, whereAt))
+			(directiveVerb === undefined && whereAt !== null && !inWhereComparison)
 		) {
 			i = end ?? structural.length;
 			continue;
 		}
-		offsets.push(i);
+		offsets.push({ at: i, ambiguous: false });
 		i = end ?? i + 1;
 	}
 	return offsets;

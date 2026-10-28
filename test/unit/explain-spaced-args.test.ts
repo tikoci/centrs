@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { maskComments, segmentStatements } from "../../src/explain/segment.ts";
 import { explainCommand } from "../../src/explain.ts";
+import { assertOfflineSyntax } from "../../src/offline-gate.ts";
 
 const CODE = "explain/canonicalizer/possible-spaced-argument";
 
@@ -258,15 +259,82 @@ describe("explain — a script body may drop its `=` before the brace (#350)", (
 	});
 
 	test("a brace after any other argument is still an error", () => {
-		// `comment { :beep }` and `comment={ :beep }` are `syntax error` on both.
+		// `comment { :beep }` is a `syntax error` on CHR 7.22.1 and 7.24.5: the
+		// spaced pairing is unproven and the slot is not a script body.
+		const input = "/system/scheduler add name=x comment { :beep }";
+		expect({ input, braces: braceErrors(input).length }).toEqual({
+			input,
+			braces: 1,
+		});
+	});
+
+	test("a script-like `name={` the slot cannot prove is a warning, not an error (#525)", () => {
+		// `comment={ :beep }` is a `syntax error` on CHR 7.22.1 and 7.24.5, and
+		// `down={ :beep }` lowers to `down-script=` there — the integration twin
+		// pins both. Offline cannot tell them apart without the command's
+		// argument list (schema), so since #525 it warns and lets the device
+		// decide, instead of hard-rejecting the accepted spelling. Array-content
+		// braces (`comment={1;2}`) keep their error; see `explain-values.test.ts`.
+		// A body also opens with a bare command word (`down={ beep }`) or
+		// after a comment line, both accepted on CHR 7.25 — and the `#` is a
+		// comment there, not `invalid-hash`, because the brace reads as a body
+		// for every reader. A bare word followed by `;`-separated members is
+		// array members, not commands (`.proplist={name;comment}` is
+		// device-rejected), so it keeps the error below.
 		for (const input of [
-			"/system/scheduler add name=x comment { :beep }",
 			"/tool/netwatch add host=1.1.1.1 comment={ :beep }",
+			"/tool/netwatch add host=1.1.1.1 down={ :beep }",
+			"/tool/netwatch add host=1.1.1.1 down={ beep }",
+			"/tool/netwatch add host=1.1.1.1 down={ # comment\n :beep }",
 		]) {
-			expect({ input, braces: braceErrors(input).length }).toEqual({
+			const result = explainCommand(input, {});
+			const at = input.indexOf("{");
+			expect({
 				input,
-				braces: 1,
+				braces: braceErrors(input),
+				hashes: result.diagnostics.filter((d) =>
+					d.code.endsWith("/invalid-hash"),
+				),
+				warnings: result.diagnostics.filter((d) =>
+					d.code.endsWith("/possible-script-body-abbreviation"),
+				),
+				verdict: result.verdict,
+			}).toMatchObject({
+				input,
+				braces: [],
+				hashes: [],
+				warnings: [
+					{
+						severity: "warning",
+						span: { start: at, end: at + 1 },
+					},
+				],
+				verdict: "warn",
 			});
+			// A warning passes the offline gate; the device rejects `comment=`
+			// and accepts `down=` at stage 2.
+			expect(assertOfflineSyntax(input, { surface: "execute" }).verdict).toBe(
+				"warn",
+			);
+		}
+	});
+
+	test("control scopes are proven bodies, not abbreviation guesses (#525)", () => {
+		// `do={` on a monitor command and `command=` under `:retry` are in
+		// the scope table (`scope-brace.ts`), so they stay silent — the
+		// ambiguity warning is only for slots no table proves.
+		for (const input of [
+			"/log print follow do={ :put $message }",
+			":retry delay=1s max=3 command={ :put 1 } on-error={ :put 2 }",
+		]) {
+			const result = explainCommand(input, {});
+			expect({
+				input,
+				braces: braceErrors(input),
+				ambiguous: result.diagnostics.filter((d) =>
+					d.code.endsWith("/possible-script-body-abbreviation"),
+				),
+			}).toEqual({ input, braces: [], ambiguous: [] });
 		}
 	});
 
@@ -345,14 +413,11 @@ describe("explain — a brace after a command is its operand, not a menu block (
 
 	test("a name that cannot abbreviate a script slot is still an error", () => {
 		// `co` and `com` are rejected on CHR 7.24.5 (`expected end of command`,
-		// `syntax error`), as is `comment`. A first-segment abbreviation such as
-		// `down={ :beep }` is ACCEPTED there (it lowers to `down-script=`) and
-		// offline still rejects it: every word is a prefix of `<word>-script`, so
-		// admitting it would admit `comment`. That is the known limit.
+		// `syntax error`), as is `comment`. The spaced pairing is unproven, so
+		// the brace stays an error; the `=` spelling warns instead (#525).
 		for (const input of [
 			"/system/script add name beep co { :beep }",
 			"/system/script add name beep com { :beep }",
-			"/tool/netwatch add host=1.1.1.1 down={ :beep }",
 		]) {
 			expect({ input, braces: braceErrors(input) }).toEqual({
 				input,
@@ -366,6 +431,45 @@ describe("explain — a brace after a command is its operand, not a menu block (
 			).length,
 		).toBe(2);
 		expect(explainCommand(":put myScript={#test}", {}).verdict).toBe("fail");
+	});
+
+	test("an accepted first-segment abbreviation reaches the device (#525)", () => {
+		// `down={ :beep }` lowers to `down-script=` on CHR 7.24.5 and 7.23.8 —
+		// the integration twin pins the IL — and the offline gate used to refuse
+		// it with `invalid-command-brace` at [37,38). Every word is a prefix of
+		// `<word>-script`, so the slot cannot be proven without schema; since
+		// #525 the gate warns and lets the device decide.
+		const input = "/tool/netwatch add host=1.1.1.1 down={ :beep }";
+		const result = explainCommand(input, {});
+		expect({
+			statements: result.structure.statements.map((s) => s.span),
+			braces: braceErrors(input),
+			warnings: result.diagnostics.map((d) => ({
+				code: d.code,
+				span: d.span,
+			})),
+			verdict: result.verdict,
+			runtimeAcceptance: result.runtimeAcceptance,
+		}).toEqual({
+			statements: [{ start: 0, end: input.length }],
+			braces: 0,
+			warnings: [
+				{
+					code: "explain/canonicalizer/possible-script-body-abbreviation",
+					span: { start: 37, end: 38 },
+				},
+			],
+			verdict: "warn",
+			runtimeAcceptance: "not-proven",
+		});
+		expect(result.diagnostics[0]?.message).toContain("`down=`");
+		expect(result.diagnostics[0]?.message).toContain(
+			"device validation decides",
+		);
+		// The gate passes a warning through to the device stage; it threw before.
+		expect(assertOfflineSyntax(input, { surface: "execute" }).verdict).toBe(
+			"warn",
+		);
 	});
 
 	test("a positional brace after a command is an error", () => {
@@ -411,5 +515,114 @@ describe("explain — a brace after a command is its operand, not a menu block (
 			{ path: "/system/script" },
 			{ path: "/system/script", verb: "print", args: {} },
 		]);
+	});
+});
+
+describe("explain — the abbreviation guess never shields a root slot or a `where` comparison (#554)", () => {
+	const braceErrors = (input: string) =>
+		explainCommand(input, {}).diagnostics.filter((d) =>
+			d.code.endsWith("/invalid-command-brace"),
+		);
+	const abbreviationWarnings = (input: string) =>
+		explainCommand(input, {}).diagnostics.filter((d) =>
+			d.code.endsWith("/possible-script-body-abbreviation"),
+		);
+
+	test("a root directive's slots keep their brace error", () => {
+		// Both are a device `syntax error` on CHR 7.25 (columns 8 and 13):
+		// the (verb, slot) table decides there, and neither `x` on `:put`
+		// nor `name` on `:local` takes a body through any spelling. The
+		// spaced rows bind like the glued ones (#350), so the slot — not a
+		// positional fallback — decides there too. The integration twin
+		// pins all four rejections; the gate refuses them.
+		for (const input of [
+			":put x={ :beep }",
+			":local name={ :put 1 }",
+			":put x= { :beep }",
+			":local name= { :put 1 }",
+		]) {
+			const result = explainCommand(input, {});
+			expect({ input, braces: braceErrors(input) }).toMatchObject({
+				input,
+				braces: [{ severity: "error" }],
+			});
+			expect(result.verdict).toBe("fail");
+			// The gate refuses an error, so the assertion throws.
+			expect(() =>
+				assertOfflineSyntax(input, { surface: "execute" }),
+			).toThrow();
+		}
+	});
+
+	test("a `where` named comparison keeps its brace error, however wrapped", () => {
+		// Each is rejected on CHR 7.25 — `expected gateway value` at the top
+		// level, `expected comment value` inside `[find …]`, `expected
+		// gateway value` inside the `source={…}` wrap — because the property
+		// parser reads the value, whatever the body holds. The integration
+		// twin pins all three wordings.
+		for (const input of [
+			"/ip/route/print where gateway={ :beep }",
+			"/ip/address remove [find where comment={ :beep }]",
+			"/system/script add name=x source={ /ip/route/print where (gateway={ :beep }) }",
+		]) {
+			const result = explainCommand(input, {});
+			expect({ input, braces: braceErrors(input) }).toMatchObject({
+				input,
+				braces: [{ severity: "error" }],
+			});
+			expect(result.verdict).toBe("fail");
+			expect(abbreviationWarnings(input)).toEqual([]);
+		}
+	});
+
+	test("a space after the `=` warns like the glued spelling", () => {
+		// CHR 7.25 lowers `down= { :beep }` to `down-script=` exactly like
+		// `down={` — the integration twin pins the IL — so the spaced owner
+		// warns under the same gates (non-root, outside `where`, non-scope,
+		// non-proven, script-like) and the gate lets it through. `comment=`
+		// with a script-like body warns too though the device rejects it
+		// (`syntax error`): the same deliberate over-warn as the glued row.
+		for (const input of [
+			"/tool/netwatch add host=1.1.1.1 down= { :beep }",
+			"/tool/netwatch add host=1.1.1.1 comment= { :beep }",
+		]) {
+			const result = explainCommand(input, {});
+			const at = input.indexOf("{");
+			expect({
+				input,
+				braces: braceErrors(input),
+				warnings: abbreviationWarnings(input),
+				verdict: result.verdict,
+			}).toEqual({
+				input,
+				braces: [],
+				warnings: [
+					{
+						code: "explain/canonicalizer/possible-script-body-abbreviation",
+						severity: "warning",
+						message: expect.stringContaining("device validation decides"),
+						span: { start: at, end: at + 1 },
+						ev: expect.anything(),
+					},
+				],
+				verdict: "warn",
+			});
+			expect(assertOfflineSyntax(input, { surface: "execute" }).verdict).toBe(
+				"warn",
+			);
+		}
+	});
+
+	test("a spaced array-content brace keeps its error", () => {
+		// `comment= {1;2}` is a `syntax error` on CHR 7.25: the body is not
+		// script-like, so there is no abbreviation to guess. The integration
+		// twin pins the rejection.
+		const input = "/tool/netwatch add host=1.1.1.1 comment= {1;2}";
+		expect({ input, braces: braceErrors(input) }).toMatchObject({
+			input,
+			braces: [{ severity: "error" }],
+		});
+		expect(explainCommand(input, {}).verdict).toBe("fail");
+		expect(abbreviationWarnings(input)).toEqual([]);
 	});
 });

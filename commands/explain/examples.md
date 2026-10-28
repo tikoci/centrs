@@ -792,10 +792,12 @@ RouterOS accepts any unique prefix of an argument name. An abbreviation that
 can only stand for a script-valued name keeps its body in either spelling:
 `sour { :beep }`, `down-scr { :beep }` and `o={ :beep }` lower to `source=`,
 `down-script=` and `on-event=` on CHR 7.24.5 and 7.23.8. Abbreviating the first
-segment (`down={ :beep }` for `down-script`) is accepted on the device too, but
-offline still reports `invalid-command-brace`. Every word is a prefix of some
-`<word>-script`, so telling it from `comment={ :beep }` needs the command's
-argument list.
+segment (`down={ :beep }` for `down-script`) is accepted on the device too, and
+offline warns `possible-script-body-abbreviation` there instead of rejecting
+(#525): every word is a prefix of some `<word>-script`, so telling it from
+`comment={ :beep }` needs the command's argument list, and the device decides.
+The tradeoff is deliberate — `comment={ :beep }`, which the device rejects,
+carries the same warning — and `data.verdict` stays `warn`, never `pass`.
 
 A brace straight after a command is a device error, and offline now reports it.
 `/system/script add { :beep }`, `/ip/route/print {1;2}` and
