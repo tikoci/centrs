@@ -419,7 +419,10 @@ interface BracketFrame {
 	pendingSetTarget: boolean;
 	pendingErrVar: boolean;
 	pendingDecl: SymbolClass | null;
+	pendingDeclNameValue: boolean;
 	pendingLoopVars: boolean;
+	loopCounterOpen: boolean;
+	pendingLoopCounterValue: boolean;
 	declaredHere: boolean;
 	headSigil: ":" | "/" | "";
 	cont: Continuation;
@@ -511,6 +514,20 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		char: "{" | "[" | "(" | '"';
 		at: number;
 		statements: boolean;
+		/**
+		 * #533 reorder — a `{…}` resets the statement it interrupts, but a
+		 * `:for`/`:foreach` head stays open for `counter=` past it (notably a
+		 * `:foreach … in={…}` array), so the flag rides the frame and the
+		 * matching `}` restores it. Only `}` restores: `[` has the
+		 * `BracketFrame`, quotes and `(` never reset.
+		 */
+		loopCounterOpen: boolean;
+		/**
+		 * #533 reorder — likewise a `:local`/`:global` head stays open for a
+		 * later `name=` past an array VALUE (`:local value={1;2} name=foo`).
+		 * Saved only on a `{` that is an argument value; `}` restores it.
+		 */
+		pendingDecl?: SymbolClass | null;
 	}[] = [];
 	/** bracket/brace nesting, strings excluded (the S8 filter region uses it). */
 	let depth = 0;
@@ -525,7 +542,23 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 	/** depth at which a filter word opened its region, or null. */
 	let filterDepth: number | null = null;
 	let pendingDecl: SymbolClass | null = null;
+	/**
+	 * #533 — the pending `:local`/`:global` declaration waits for the VALUE of
+	 * a `name=` argument (`:local name=foo` declares `foo`, not `name`). Set
+	 * when a `name=` arg name is read, cleared after its value declares or is
+	 * skipped. Values of other args (`value=`) never declare.
+	 */
+	let pendingDeclNameValue = false;
 	let pendingLoopVars = false;
+	/**
+	 * #533 reorder — a `:for`/`:foreach` head is still open for a named
+	 * `counter=`: unlike `pendingLoopVars` (positional vars, ended by
+	 * `in=`/`from=`/any `arg=`), this survives the whole head — CHR accepts
+	 * `:for from=1 counter=i to=2` — and only `do` (the body) closes it.
+	 */
+	let loopCounterOpen = false;
+	/** The next value word is a `counter=` loop var. */
+	let pendingLoopCounterValue = false;
 	/** inside a space-separated menu path run, where bare words are `dir` (S16). */
 	let inMenuPath = false;
 	/**
@@ -593,7 +626,10 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		pendingSetTarget = false;
 		pendingErrVar = false;
 		pendingDecl = null;
+		pendingDeclNameValue = false;
 		pendingLoopVars = false;
+		loopCounterOpen = false;
+		pendingLoopCounterValue = false;
 		declaredHere = false;
 		headSigil = "";
 		cont = "none";
@@ -666,7 +702,10 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			pendingSetTarget,
 			pendingErrVar,
 			pendingDecl,
+			pendingDeclNameValue,
 			pendingLoopVars,
+			loopCounterOpen,
+			pendingLoopCounterValue,
 			declaredHere,
 			headSigil,
 			cont,
@@ -719,7 +758,10 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		pendingSetTarget = frame.pendingSetTarget;
 		pendingErrVar = frame.pendingErrVar;
 		pendingDecl = frame.pendingDecl;
+		pendingDeclNameValue = frame.pendingDeclNameValue;
 		pendingLoopVars = frame.pendingLoopVars;
+		loopCounterOpen = frame.loopCounterOpen;
+		pendingLoopCounterValue = frame.pendingLoopCounterValue;
 		declaredHere = frame.declaredHere;
 		headSigil = frame.headSigil;
 		cont = frame.cont;
@@ -807,7 +849,12 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 					// string. A scan that swallowed this as string bytes would flip
 					// its quote phase on the first nested string and lose every
 					// binding after it.
-					frames.push({ char: next, at: i + 1, statements: next === "[" });
+					frames.push({
+						char: next,
+						at: i + 1,
+						statements: next === "[",
+						loopCounterOpen,
+					});
 					depth++;
 					if (next === "[") {
 						// F6 — and it is a statement context like any other `[`. A `$[`
@@ -990,7 +1037,28 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			// `set-dns`, and the console carries the class across the quotes, so the
 			// span includes them. Without this the string is skipped and the next
 			// bare word (`do`) is declared instead.
-			if (pendingDecl !== null || pendingLoopVars || pendingErrVar) {
+			if (
+				pendingDecl !== null ||
+				pendingLoopVars ||
+				pendingErrVar ||
+				pendingLoopCounterValue
+			) {
+				// #533 — a quoted VALUE of a named arg declares only for `name=`.
+				// `:local name="foo"` declares `foo`; `:local value="foo"` declares
+				// nothing and stays a string (so `$` inside still classifies, S9).
+				// Positional quotes (`:local "foo"`) declare.
+				if (pendingDecl !== null) {
+					const prev = prevNonSpace(text, i);
+					if ((prev === "=" || prev === ",") && !pendingDeclNameValue) {
+						frames.push({
+							char: '"',
+							at: i,
+							statements: false,
+							loopCounterOpen,
+						});
+						continue;
+					}
+				}
 				const close = text.indexOf('"', i + 1);
 				if (close > i) {
 					const name = text.slice(i + 1, close);
@@ -1014,6 +1082,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 						const binding = bind(name, cls, i + 1);
 						if (binding !== null) bindingIds.push(binding.id);
 						pendingDecl = null;
+						pendingDeclNameValue = false;
 						declaredHere = true;
 					} else {
 						// F7 — statement scope, and for `:onerror` the enclosing claim
@@ -1039,7 +1108,12 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 					continue;
 				}
 			}
-			frames.push({ char: '"', at: i, statements: false });
+			frames.push({
+				char: '"',
+				at: i,
+				statements: false,
+				loopCounterOpen,
+			});
 			continue;
 		}
 
@@ -1052,6 +1126,9 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 					(c === "{" &&
 						(frames.at(-1)?.statements ?? true) &&
 						braceStartsStatements(text, i)),
+				loopCounterOpen,
+				pendingDecl:
+					c === "{" && prevNonSpace(text, i) === "=" ? pendingDecl : null,
 			});
 			depth++;
 			if (c === "[") openBracket(leadBefore, i);
@@ -1087,7 +1164,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 				defects.push(defectAt("unbalanced-close", i, c));
 				continue;
 			}
-			frames.pop();
+			const popped = frames.pop();
 			if (filterDepth !== null && depth <= filterDepth) filterDepth = null;
 			// F6 — restore the statement the `[` interrupted, and drop the bracket's
 			// scope. Ordered after the `filterDepth` clear on purpose: the saved
@@ -1098,6 +1175,11 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 				if (suppressedScopes > 0) suppressedScopes--;
 				else if (scopes.length > 1) scopes.pop();
 				resetStatement();
+				// #533 reorder — the head outlives its own array braces.
+				if (popped !== undefined) {
+					loopCounterOpen = popped.loopCounterOpen;
+					pendingDecl = popped.pendingDecl ?? null;
+				}
 			}
 			if (depth > 0) depth--;
 			continue;
@@ -1220,8 +1302,10 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 					pathOpen = true;
 				}
 				if (DECL[lower] !== undefined) pendingDecl = DECL[lower] as SymbolClass;
-				else if (LOOP_HEADS.has(lower)) pendingLoopVars = true;
-				else if (lower === "set") pendingSetTarget = true;
+				else if (LOOP_HEADS.has(lower)) {
+					pendingLoopVars = true;
+					loopCounterOpen = true;
+				} else if (lower === "set") pendingSetTarget = true;
 				else if (ERRVAR_HEADS.has(lower)) pendingErrVar = true;
 				// S8 — `find`/`where` open a filter region from HEAD position too.
 				// `[find comment=$tag]` is the commonest shape of the whole corpus and
@@ -1315,6 +1399,17 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 
 			// S1/S2 — this word is the declared name.
 			if (pendingDecl !== null) {
+				// #533 — named spelling (`:local name=foo value=1`): an argument
+				// NAME (`word=`) is never the declaration. Only `name=` carries
+				// it; its value declares. Other values (`value=foo`) are skipped,
+				// and the pending declaration survives for a later `name=`
+				// (`value=1 name=foo`). A positional word (`:local foo`, `:local
+				// name`) declares as before.
+				if (nextNonSpace(text, j) === "=") {
+					pendingDeclNameValue = lower === "name";
+					continue;
+				}
+				if (isValue && !pendingDeclNameValue) continue;
 				const binding = bind(word, pendingDecl, wordStart);
 				record(
 					wordStart,
@@ -1327,6 +1422,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 					binding === null ? [] : [binding.id],
 				);
 				pendingDecl = null;
+				pendingDeclNameValue = false;
 				declaredHere = true;
 				continue;
 			}
@@ -1334,6 +1430,13 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			// S3 — `:foreach k,v in=…`: every word before `in=`/`from=` is a loop
 			// variable.
 			if (pendingLoopVars) {
+				// #533 — named spelling (`:for counter=i …`): `counter=` carries
+				// the loop var(s); the word `counter` itself is never one. Any
+				// other `arg=` ends the var list, like `in=`/`from=` already did.
+				if (nextNonSpace(text, j) === "=") {
+					if (lower !== "counter") pendingLoopVars = false;
+					continue;
+				}
 				if (lower === "in" || lower === "from") {
 					pendingLoopVars = false;
 					continue;
@@ -1353,6 +1456,43 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 					binding === null ? [] : [binding.id],
 				);
 				continue;
+			}
+
+			// #533 reorder — a named `counter=` past `in=`/`from=` or other
+			// args still carries the loop var: CHR accepts
+			// `:for from=1 counter=i to=2`, and the value binds exactly like
+			// a positional. Only `do` (the body) closes the head; a value of
+			// another arg, or a further arg name, just ends this `counter=`.
+			if (!isValue && lower === "do") {
+				loopCounterOpen = false;
+				pendingLoopCounterValue = false;
+			}
+			if (
+				loopCounterOpen &&
+				lower === "counter" &&
+				nextNonSpace(text, j) === "="
+			) {
+				pendingLoopCounterValue = true;
+				continue;
+			}
+			if (pendingLoopCounterValue) {
+				if (nextNonSpace(text, j) === "=" || !isValue) {
+					pendingLoopCounterValue = false;
+				} else {
+					openStatementScope(wordStart);
+					const counterBinding = bind(word, "auto", wordStart);
+					record(
+						wordStart,
+						j,
+						word,
+						"auto",
+						true,
+						undefined,
+						"binding",
+						counterBinding === null ? [] : [counterBinding.id],
+					);
+					continue;
+				}
 			}
 
 			if (FILTER_WORDS.has(lower)) {
