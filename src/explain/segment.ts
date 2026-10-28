@@ -646,7 +646,8 @@ const MAX_DISPATCH_STATEMENT_DEPTH = 16;
  * branches exclude each other.
  *
  * A segment with executed blocks or substitutions counts their inner
- * statements, not itself (a control head is not an effect); any other segment
+ * statements, not itself (a control head is not an effect); a `/menu { … }`
+ * prefix counts nothing (navigation is not an effect); any other segment
  * counts one. So the commonest write shape, `/… remove [find …]`, stays one
  * statement — at the cost of a lone substitution that itself writes before a
  * refused enclosing statement, which also counts one. Past the depth cap the
@@ -658,10 +659,15 @@ export function countExecutableStatements(text: string): number {
 }
 
 function countExecutableStatementsWithin(text: string, depth: number): number {
-	const { segments } = segmentStatements(text);
+	const { segments, ascii } = segmentStatements(text);
 	if (depth >= MAX_DISPATCH_STATEMENT_DEPTH) return segments.length;
 	let count = 0;
 	for (const segment of segments) {
+		// A `/menu { … }` prefix only navigates; it is not an effect. The
+		// `ascii` guard is load-bearing: segment offsets are analyzed-byte
+		// offsets, which are string indexes only for pure-ASCII input.
+		if (ascii && segment.menuOnly && /^\s*\{/.test(text.slice(segment.end)))
+			continue;
 		const inner = countExecutedBlockStatements(segment.text, depth);
 		count += inner > 0 ? inner : 1;
 	}

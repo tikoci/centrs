@@ -39,6 +39,10 @@ import {
  *   /system/identity/set …]`, over REST: the substitution's first statement
  *   runs before the refused write, so the same code and warning.
  * - P10 the P9 script over native-api: the same code and warning.
+ * - P11 a lone refused write wrapped in a menu block,
+ *   `/system/identity { set … }`, over REST: the prefix only navigates, so
+ *   the dispatch counts one statement and stays silent like P1.
+ * - P12 the P11 script over native-api: the same code and silence.
  * - C1 `read,write,api,rest-api`, REST `set`: succeeds, so P1's refusal is the
  *   missing policy and not the command.
  */
@@ -207,6 +211,35 @@ describeFast("REST permission refusals (routeros/permission-denied)", () => {
 				expect(await identity()).toBe(before);
 			}
 
+			const menuWrapped = "/system/identity { set name=centrs-perm-p11 }";
+			for (const [id, transport] of [
+				["P11", rest(users.ro[0])],
+				[
+					"P12",
+					{
+						targetInput: "127.0.0.1",
+						port: chr.ports.api,
+						via: "native-api" as const,
+						username: users.ro[0],
+						password: PASSWORD,
+					},
+				],
+			] as const) {
+				const envelope = await executeEnvelope({
+					...transport,
+					command: menuWrapped,
+					yes: true,
+				});
+				expect({ id, ok: envelope.ok }).toEqual({ id, ok: false });
+				if (!envelope.ok) {
+					expect(envelope.error.code).toBe("routeros/permission-denied");
+				}
+				expect(envelope.warnings.map((warning) => warning.code)).not.toContain(
+					"transport/write-outcome-unknown",
+				);
+				expect(await identity()).toBe(before);
+			}
+
 			const p3 = await retrieveEnvelope(
 				{ ...rest(users.noApi[0]), path: "/system/resource" },
 				{},
@@ -259,6 +292,8 @@ describeFast("REST permission refusals (routeros/permission-denied)", () => {
 					"P8",
 					"P9",
 					"P10",
+					"P11",
+					"P12",
 					"C1",
 				],
 			});

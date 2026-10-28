@@ -868,6 +868,11 @@ describe("countExecutableStatements — dispatch effects at any depth (#549)", (
 		["/system/script/add name=x source={ :put [:put 1; :put 2] }", 1],
 		[":global f do={ :put [:put 1; :put 2] }", 1],
 		[":foreach i in={[:put 1; :put 2]} do={ :put $i }", 1],
+		// A `/menu { … }` prefix only navigates, so a lone body write stays
+		// a single statement; nesting adds no statements either.
+		["/ip/address { add address=192.0.2.1/32 interface=ether1 }", 1],
+		["/ip { /address { add address=192.0.2.1/32 interface=ether1 } }", 1],
+		["/ip/address { add address=192.0.2.1/32 interface=ether1; :put 1 }", 2],
 		// An unclosed substitution counts what precedes the break.
 		[":put [:put 1; :put 2", 1],
 	])("counts %s as %i", (input, count) => {

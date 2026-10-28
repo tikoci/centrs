@@ -294,9 +294,10 @@ error envelope, single-target or fan-out, carries the warning
 `routeros/permission-denied` carries the same warning: statements before the
 refused one may already have run (#549). Statements inside executed control
 scopes (`:if … do={…}`) and command substitutions (`[…]`) count; stored bodies
-(`source={…}`, `:global f do={…}`) do not. A single refused statement did not
+(`source={…}`, `:global f do={…}`) do not, and a `/menu { … }` prefix is
+navigation, not a statement. A single refused statement did not
 run and stays silent, including one fed by a lone substitution
-(`remove [find …]`).
+(`remove [find …]`) or wrapped in a menu block.
 
 ## CMR clients through their controller (`--cmr`)
 
