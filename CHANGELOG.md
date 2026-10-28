@@ -277,6 +277,12 @@ part of this section.
   `:for from=1 counter=i to=2` binds `i`, so later `$` references link;
   previously the argument name was declared and a reordered `counter=` left
   `$i` unbound.
+- mac-telnet with an explicit directed-broadcast `--host` (`192.168.74.255`)
+  sends the owning interface's real MAC (#546, #547). On Linux, `connect()` to
+  a broadcast reports `0.0.0.0`, so the session fell back to a synthetic
+  source MAC, which hardware ignores: a 30 s timeout on an RB1100Dx4 running
+  7.26beta3. On that unit a real MAC gets a reply in ~0.35 s and a synthetic
+  one none. CHR answers both, so the CHR suite never saw it.
 
 ### Maintenance
 
@@ -296,6 +302,10 @@ part of this section.
   (Security tab), and locally with `bun run lint:actions` (#266). Its first
   run found two `${{ … }}` expansions inside shell scripts, in `lab.yaml` and
   `qa.yaml`; both now go through `env:`.
+- The unit tier no longer reads the developer's `~/.config/tikoci` state
+  (settings, CDB) (#550, #557). A `bunfig.toml` preload sandboxes `HOME` and
+  `XDG_CONFIG_HOME`, so a real and a fake home give the same result. Ambient
+  `CENTRS_*` variables are still read.
 
 ## 0.1.8 — 2026-10-12
 
