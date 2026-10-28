@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
+import { mapRouterOsError } from "../../src/core/routeros-errors.ts";
 import {
 	type ApiReply,
 	attributeWord,
@@ -428,6 +429,38 @@ describe("native-api session command flow", () => {
 		await expect(promise).rejects.toMatchObject({ code: "routeros/api-trap" });
 	});
 
+	test("post-login traps classify under routeros/* regardless of text (#540)", async () => {
+		// `/user/add name=-2` is rejected with text containing "invalid user
+		// name". REST carries the same string as `detail` and maps it to
+		// routeros/command-failed, so the native trap must agree — login-like
+		// text after a successful login is never transport/auth-failed.
+		const cases = [
+			{
+				message: "failure: invalid user name",
+				code: "routeros/command-failed",
+			},
+			{
+				message: "invalid user name or password (6)",
+				code: "routeros/api-trap",
+			},
+		] as const;
+		for (const { message, code } of cases) {
+			const transport = new FakeTransport();
+			const promise = transport.apiSession.talk({ command: "/user/add" });
+			const tag = transport.lastTag();
+			transport.reply(
+				["!trap", "=category=6", `=message=${message}`, `.tag=${tag}`],
+				["!done", `.tag=${tag}`],
+			);
+			await expect(promise).rejects.toMatchObject({ code });
+		}
+		expect(
+			mapRouterOsError("failure: invalid user name", {
+				transport: "rest-api",
+			}).code,
+		).toBe("routeros/command-failed");
+	});
+
 	test("multiplexes concurrent tagged commands", async () => {
 		const transport = new FakeTransport();
 		const first = transport.apiSession.talk({ command: "/a/print" });
@@ -523,22 +556,34 @@ describe("native-api login flow", () => {
 	});
 });
 
-describe("isNativeAuthFailure (grounded auth classification)", () => {
-	test("classifies live RouterOS auth trap strings as auth failures", () => {
-		const authMessages = [
+describe("isNativeAuthFailure (login-exchange classification, #540)", () => {
+	test("classifies any trap on /login as an auth failure", () => {
+		// Grounded login-exchange strings, plus an unrecognized one: the
+		// sentence decides, never the text.
+		for (const message of [
 			"could not authenticate - radius timeout (13)",
 			"invalid user name or password (6)",
 			"not logged in",
 			"access denied",
 			"bad password",
-		];
-		for (const message of authMessages) {
-			expect(isNativeAuthFailure("/ip/address/print", message)).toBe(true);
+			"unexpected",
+		]) {
+			expect(isNativeAuthFailure("/login", message)).toBe(true);
 		}
 	});
 
-	test("treats any failure on /login as an auth failure", () => {
-		expect(isNativeAuthFailure("/login", "unexpected")).toBe(true);
+	test("never classifies a post-login trap as auth, regardless of text", () => {
+		for (const message of [
+			"could not authenticate - radius timeout (13)",
+			"invalid user name or password (6)",
+			"failure: invalid user name",
+			"not logged in",
+			"access denied",
+			"bad password",
+		]) {
+			expect(isNativeAuthFailure("/user/add", message)).toBe(false);
+			expect(isNativeAuthFailure("/ip/address/print", message)).toBe(false);
+		}
 	});
 
 	test("does not misclassify a genuine syntax/parse trap as auth", () => {

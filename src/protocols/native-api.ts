@@ -345,19 +345,20 @@ export function readAttribute(
 /**
  * Classify a native-API `!trap` as an authentication failure.
  *
- * Auth failures surface on `/login` (bad credentials) or on any command when
- * the session is not authorized, so the trap message is matched rather than
- * relying on the command word alone. The strings are grounded on live RouterOS
- * CHR output: "invalid user name or password", "could not authenticate -
- * radius timeout", "not logged in", "access denied". Misclassifying these as a
- * syntax/validation error was the reported `execute` bug.
+ * Only the login exchange (`/login`) can fail authentication: a trap there
+ * means bad credentials (or a dead RADIUS backend), whatever its text —
+ * grounded on live RouterOS CHR output ("invalid user name or password",
+ * "could not authenticate - radius timeout"). Traps from any later sentence
+ * are RouterOS command answers and classify under `routeros/*` regardless of
+ * text: matching login-like words on every command misreported `/user/add
+ * name=-2` ("invalid user name") as an auth failure though login had succeeded
+ * (#540), while REST mapped the same string to `routeros/command-failed`.
  */
-export function isNativeAuthFailure(command: string, message: string): boolean {
-	return (
-		/not logged in|access denied|invalid user|could not authenticate|authentication failed|radius (?:timeout|error)|bad password|password|\blogin\b|\buser\b/i.test(
-			message,
-		) || command === "/login"
-	);
+export function isNativeAuthFailure(
+	command: string,
+	_message: string,
+): boolean {
+	return command === "/login";
 }
 
 /**
