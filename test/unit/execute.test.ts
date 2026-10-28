@@ -21,6 +21,7 @@ import {
 } from "../../src/offline-gate.ts";
 import type { ProtocolAdapter } from "../../src/protocols/adapter.ts";
 import { closedPort } from "./closed-port.ts";
+import { HERMETIC_ENV } from "./hermetic-env.ts";
 
 describe("execute canonicalization", () => {
 	test("extracts path, verb, attributes, and quoted values", () => {
@@ -58,7 +59,7 @@ describe("execute confirmation gate", () => {
 					via: "rest-api",
 					stdinIsTty: false,
 				},
-				{},
+				HERMETIC_ENV,
 			);
 		} catch (error) {
 			expect(error).toBeInstanceOf(CentrsError);
@@ -88,7 +89,7 @@ describe("execute confirmation gate", () => {
 					via: "rest-api",
 					stdinIsTty: false,
 				},
-				{},
+				HERMETIC_ENV,
 			);
 			expect(envelope.ok).toBe(false);
 			if (!envelope.ok) {
@@ -114,7 +115,7 @@ describe("execute preflight does not mask transport failures", () => {
 				username: "x",
 				password: "y",
 			},
-			{},
+			HERMETIC_ENV,
 		);
 		expect(envelope.ok).toBe(false);
 		if (!envelope.ok) {
@@ -132,7 +133,7 @@ describe("execute default output format is human-readable text", () => {
 				command: "/ip/address/print",
 				via: "native-api",
 			},
-			{},
+			HERMETIC_ENV,
 		);
 		expect(resolved.format.value).toBe("text");
 	});
@@ -144,7 +145,7 @@ describe("execute default output format is human-readable text", () => {
 				command: "/ip/address/print",
 				via: "native-api",
 			},
-			{ CENTRS_FORMAT: "json" },
+			{ ...HERMETIC_ENV, CENTRS_FORMAT: "json" },
 		);
 		expect(resolved.format.value).toBe("json");
 	});
@@ -157,7 +158,7 @@ describe("execute default output format is human-readable text", () => {
 				via: "native-api",
 				format: "yaml",
 			},
-			{ CENTRS_FORMAT: "json" },
+			{ ...HERMETIC_ENV, CENTRS_FORMAT: "json" },
 		);
 		expect(resolved.format.value).toBe("yaml");
 	});
@@ -170,7 +171,7 @@ describe("execute default output format is human-readable text", () => {
 					command: "/ip/address/print",
 					via: "native-api",
 				},
-				{ CENTRS_FORMAT: "xml" },
+				{ ...HERMETIC_ENV, CENTRS_FORMAT: "xml" },
 			),
 		).rejects.toMatchObject({ code: "settings/invalid-format" });
 	});
@@ -184,7 +185,7 @@ describe("execute default output format is human-readable text", () => {
 					via: "native-api",
 					format: "invalid",
 				},
-				{},
+				HERMETIC_ENV,
 			),
 		).rejects.toMatchObject({ code: "settings/invalid-format" });
 	});
@@ -197,7 +198,7 @@ describe("execute bare-MAC transport default honors host precedence", () => {
 	test("bare MAC with no host/via defaults to mac-telnet, addressing the MAC", async () => {
 		const resolved = await resolveExecuteRequest(
 			{ targetInput: MAC, command: "/system/identity/print" },
-			{},
+			HERMETIC_ENV,
 		);
 		expect(resolved.via.value).toBe("mac-telnet");
 		// The MAC is the device identity; delivery defaults to L2 broadcast.
@@ -209,7 +210,7 @@ describe("execute bare-MAC transport default honors host precedence", () => {
 	test("MAC positional with --host IP defaults to native-api, targets the IP", async () => {
 		const resolved = await resolveExecuteRequest(
 			{ targetInput: MAC, host: IP, command: "/system/identity/print" },
-			{},
+			HERMETIC_ENV,
 		);
 		expect(resolved.via.value).toBe("native-api");
 		expect(resolved.target.host).toBe(IP);
@@ -218,7 +219,7 @@ describe("execute bare-MAC transport default honors host precedence", () => {
 	test("MAC positional with CENTRS_HOST IP defaults to native-api", async () => {
 		const resolved = await resolveExecuteRequest(
 			{ targetInput: MAC, command: "/system/identity/print" },
-			{ CENTRS_HOST: IP },
+			{ ...HERMETIC_ENV, CENTRS_HOST: IP },
 		);
 		expect(resolved.via.value).toBe("native-api");
 		expect(resolved.target.host).toBe(IP);
@@ -231,7 +232,7 @@ describe("execute honors an explicit URL target's scheme and port (#426)", () =>
 	test("an http:// URL with no via pinned selects rest-api on its port", async () => {
 		const resolved = await resolveExecuteRequest(
 			{ targetInput: "http://127.0.0.1:9", command },
-			{},
+			HERMETIC_ENV,
 		);
 		expect(resolved.via.value).toBe("rest-api");
 		expect(resolved.via.source).toEqual({
@@ -244,7 +245,7 @@ describe("execute honors an explicit URL target's scheme and port (#426)", () =>
 	test("an https:// --host selects rest-api over TLS", async () => {
 		const resolved = await resolveExecuteRequest(
 			{ host: "https://192.0.2.10", command },
-			{},
+			HERMETIC_ENV,
 		);
 		expect(resolved.via.value).toBe("rest-api");
 		expect(resolved.target.baseUrl).toBe("https://192.0.2.10:443/rest");
@@ -253,7 +254,7 @@ describe("execute honors an explicit URL target's scheme and port (#426)", () =>
 	test("a URL in CENTRS_HOST selects rest-api", async () => {
 		const resolved = await resolveExecuteRequest(
 			{ targetInput: "192.0.2.99", command },
-			{ CENTRS_HOST: "http://192.0.2.10:8080" },
+			{ ...HERMETIC_ENV, CENTRS_HOST: "http://192.0.2.10:8080" },
 		);
 		expect(resolved.via.value).toBe("rest-api");
 		expect(resolved.target.port).toBe(8080);
@@ -262,7 +263,7 @@ describe("execute honors an explicit URL target's scheme and port (#426)", () =>
 	test("a bare host:port keeps native-api and dials the typed port", async () => {
 		const resolved = await resolveExecuteRequest(
 			{ targetInput: "127.0.0.1:9", command },
-			{},
+			HERMETIC_ENV,
 		);
 		expect(resolved.via.value).toBe("native-api");
 		expect(resolved.via.source).toEqual({ kind: "default", key: "via" });
@@ -272,14 +273,14 @@ describe("execute honors an explicit URL target's scheme and port (#426)", () =>
 	test("a pinned via wins over the URL and keeps its typed port", async () => {
 		const pinned = await resolveExecuteRequest(
 			{ targetInput: "http://127.0.0.1:9", command, via: "native-api" },
-			{},
+			HERMETIC_ENV,
 		);
 		expect(pinned.via.value).toBe("native-api");
 		expect(pinned.target.baseUrl).toBe("api://127.0.0.1:9");
 
 		const fromEnv = await resolveExecuteRequest(
 			{ targetInput: "http://127.0.0.1:9", command },
-			{ CENTRS_VIA: "native-api" },
+			{ ...HERMETIC_ENV, CENTRS_VIA: "native-api" },
 		);
 		expect(fromEnv.via.value).toBe("native-api");
 		expect(fromEnv.target.baseUrl).toBe("api://127.0.0.1:9");
@@ -387,7 +388,7 @@ describe("validation metadata survives the error boundary (#354, PR #356 review)
 				via: "rest-api",
 				...overrides,
 			},
-			{},
+			HERMETIC_ENV,
 		);
 	}
 
@@ -636,7 +637,7 @@ describe("validation metadata survives the error boundary (#354, PR #356 review)
 				username: "admin",
 				password: "",
 			},
-			{},
+			HERMETIC_ENV,
 		);
 		expect(envelope.ok).toBe(false);
 		if (envelope.ok) return;

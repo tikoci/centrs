@@ -19,6 +19,7 @@ import type {
 	SelectionMember,
 	TargetSelection,
 } from "../../src/resolver/selection.ts";
+import { HERMETIC_ENV } from "./hermetic-env.ts";
 
 function cdbMember(target: string, recordIndex: number): SelectionMember {
 	return {
@@ -171,7 +172,7 @@ describe("apiFanout", () => {
 			const envelope = await apiFanout(
 				{ ...base, method, yes: true },
 				selection(),
-				{},
+				HERMETIC_ENV,
 				{
 					expand: async () => expansionOf([cdbMember("10.0.0.1", 0)]),
 					execute: async (_resolved, trace) => {
@@ -202,7 +203,12 @@ describe("apiFanout", () => {
 			execute: async (resolved) => fakeSuccess(base, resolved),
 			sleep: async () => {},
 		};
-		const envelope = await apiFanout(base, selection(), {}, internals);
+		const envelope = await apiFanout(
+			base,
+			selection(),
+			HERMETIC_ENV,
+			internals,
+		);
 		expect(envelope.ok).toBe(true);
 		expect(envelope.data.summary).toEqual({ total: 2, ok: 2, failed: 0 });
 		expect(envelope.data.targets.map((t) => t.meta.target.recordIndex)).toEqual(
@@ -227,7 +233,12 @@ describe("apiFanout", () => {
 			},
 			sleep: async () => {},
 		};
-		const envelope = await apiFanout(base, selection(), {}, internals);
+		const envelope = await apiFanout(
+			base,
+			selection(),
+			HERMETIC_ENV,
+			internals,
+		);
 		expect(envelope.data.summary).toEqual({ total: 2, ok: 1, failed: 1 });
 		expect(fanoutExitCode(envelope)).toBe(2);
 		const failed = envelope.data.targets.find((t) => !t.ok);
@@ -244,7 +255,12 @@ describe("apiFanout", () => {
 				empty: true,
 			}),
 		};
-		const envelope = await apiFanout(base, selection(), {}, internals);
+		const envelope = await apiFanout(
+			base,
+			selection(),
+			HERMETIC_ENV,
+			internals,
+		);
 		expect(envelope.data.summary).toEqual({ total: 0, ok: 0, failed: 0 });
 		expect(envelope.warnings.map((w) => w.code)).toContain("cdb/empty-group");
 		expect(fanoutExitCode(envelope)).toBe(0);
@@ -266,7 +282,7 @@ describe("apiFanout", () => {
 		const error = await apiFanout(
 			{ ...base, method: "PUT", fields: { address: "10.0.0.1/32" }, yes: true },
 			selection(),
-			{},
+			HERMETIC_ENV,
 			internals,
 		).catch((e: unknown) => e);
 		expect(error).toBeInstanceOf(CentrsError);
@@ -284,7 +300,12 @@ describe("apiFanout", () => {
 			execute: async (resolved) => fakeSuccess(base, resolved),
 		};
 		await expect(
-			apiFanout({ ...base, method: "PUT" }, selection(), {}, internals),
+			apiFanout(
+				{ ...base, method: "PUT" },
+				selection(),
+				HERMETIC_ENV,
+				internals,
+			),
 		).rejects.toThrow(/2 router\(s\)/);
 	});
 
@@ -298,7 +319,7 @@ describe("apiFanout", () => {
 		const envelope = await apiFanout(
 			{ ...base, method: "PUT", yes: true },
 			selection(),
-			{},
+			HERMETIC_ENV,
 			internals,
 		);
 		expect(envelope.data.summary.ok).toBe(2);
@@ -314,7 +335,7 @@ describe("apiFanout", () => {
 		const envelope = await apiFanout(
 			{ ...base, default: true } as ApiRequest,
 			selection({ default: true }),
-			{},
+			HERMETIC_ENV,
 			internals,
 		);
 		const defaultTarget = envelope.data.targets.find(
@@ -338,10 +359,15 @@ describe("apiFanout", () => {
 			sleep: async () => {},
 		};
 		await expect(
-			apiFanout({ ...base, via: "ssh" }, selection(), {}, internals),
+			apiFanout({ ...base, via: "ssh" }, selection(), HERMETIC_ENV, internals),
 		).rejects.toMatchObject({ code: "routeros/protocol-not-implemented" });
 		await expect(
-			apiFanout({ ...base, via: "bogus" }, selection(), {}, internals),
+			apiFanout(
+				{ ...base, via: "bogus" },
+				selection(),
+				HERMETIC_ENV,
+				internals,
+			),
 		).rejects.toMatchObject({ code: "settings/invalid-via" });
 		// The throw is pre-flight: selection never expanded.
 		expect(expanded).toBe(false);
@@ -354,7 +380,12 @@ describe("apiFanout", () => {
 			sleep: async () => {},
 		};
 		await expect(
-			apiFanout(base, selection(), { CENTRS_VIA: "bogus" }, internals),
+			apiFanout(
+				base,
+				selection(),
+				{ ...HERMETIC_ENV, CENTRS_VIA: "bogus" },
+				internals,
+			),
 		).rejects.toMatchObject({ code: "settings/invalid-via" });
 	});
 

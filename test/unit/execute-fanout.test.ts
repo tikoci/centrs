@@ -20,6 +20,7 @@ import type {
 	SelectionMember,
 	TargetSelection,
 } from "../../src/resolver/selection.ts";
+import { HERMETIC_ENV } from "./hermetic-env.ts";
 
 function cdbMember(target: string, recordIndex: number): SelectionMember {
 	return {
@@ -202,7 +203,7 @@ describe("executeFanout", () => {
 		const error = await executeFanout(
 			{ command: "/cmr/device/dashboard numbers=*1", stdinIsTty: false },
 			selection(),
-			{},
+			HERMETIC_ENV,
 			{
 				expand: async () => expansionOf([cdbMember("10.0.0.1", 0)]),
 				execute: async (resolved) => {
@@ -245,7 +246,7 @@ describe("executeFanout", () => {
 			const envelope = await executeFanout(
 				{ command, yes: true, stdinIsTty: false },
 				selection(),
-				{},
+				HERMETIC_ENV,
 				{
 					expand: async () => expansionOf([cdbMember("10.0.0.1", 0)]),
 					execute: sentDrop(sent, attempts),
@@ -272,7 +273,12 @@ describe("executeFanout", () => {
 			execute: async (resolved) => fakeSuccess(resolved),
 			sleep: async () => {},
 		};
-		const envelope = await executeFanout(base, selection(), {}, internals);
+		const envelope = await executeFanout(
+			base,
+			selection(),
+			HERMETIC_ENV,
+			internals,
+		);
 		expect(envelope.ok).toBe(true);
 		expect(envelope.data.summary).toEqual({ total: 2, ok: 2, failed: 0 });
 		expect(envelope.data.targets.map((t) => t.meta.target.recordIndex)).toEqual(
@@ -297,7 +303,12 @@ describe("executeFanout", () => {
 			},
 			sleep: async () => {},
 		};
-		const envelope = await executeFanout(base, selection(), {}, internals);
+		const envelope = await executeFanout(
+			base,
+			selection(),
+			HERMETIC_ENV,
+			internals,
+		);
 		expect(envelope.data.summary).toEqual({ total: 2, ok: 1, failed: 1 });
 		expect(fanoutExitCode(envelope)).toBe(2);
 		const failed = envelope.data.targets.find((t) => !t.ok);
@@ -314,7 +325,12 @@ describe("executeFanout", () => {
 				empty: true,
 			}),
 		};
-		const envelope = await executeFanout(base, selection(), {}, internals);
+		const envelope = await executeFanout(
+			base,
+			selection(),
+			HERMETIC_ENV,
+			internals,
+		);
 		expect(envelope.data.summary).toEqual({ total: 0, ok: 0, failed: 0 });
 		expect(envelope.warnings.map((w) => w.code)).toContain("cdb/empty-group");
 		expect(fanoutExitCode(envelope)).toBe(0);
@@ -336,7 +352,7 @@ describe("executeFanout", () => {
 		const error = await executeFanout(
 			{ ...base, command: WRITE, yes: true },
 			selection(),
-			{},
+			HERMETIC_ENV,
 			internals,
 		).catch((e: unknown) => e);
 		expect(error).toBeInstanceOf(CentrsError);
@@ -357,7 +373,7 @@ describe("executeFanout", () => {
 			executeFanout(
 				{ command: WRITE, stdinIsTty: false },
 				selection(),
-				{},
+				HERMETIC_ENV,
 				internals,
 			),
 		).rejects.toThrow(/2 router\(s\)/);
@@ -373,7 +389,7 @@ describe("executeFanout", () => {
 		const envelope = await executeFanout(
 			{ command: WRITE, yes: true, stdinIsTty: false },
 			selection(),
-			{},
+			HERMETIC_ENV,
 			internals,
 		);
 		expect(envelope.data.summary.ok).toBe(2);
@@ -394,7 +410,7 @@ describe("executeFanout", () => {
 		const envelope = await executeFanout(
 			{ command: READ, host: "192.0.2.1", stdinIsTty: false },
 			selection({ groups: [], quickchr: ["lab", "edge"] }),
-			{},
+			HERMETIC_ENV,
 			internals,
 		);
 		expect(envelope.ok).toBe(true);
@@ -422,7 +438,7 @@ describe("executeFanout", () => {
 		const envelope = await executeFanout(
 			{ command: READ, stdinIsTty: false },
 			selection({ groups: [], quickchr: ["centrs-test-no-such-machine"] }),
-			{},
+			HERMETIC_ENV,
 			internals,
 		);
 		expect(envelope.ok).toBe(true);
@@ -442,7 +458,7 @@ describe("executeFanout", () => {
 		const envelope = await executeFanout(
 			base,
 			selection({ default: true }),
-			{},
+			HERMETIC_ENV,
 			internals,
 		);
 		const defaultTarget = envelope.data.targets.find(

@@ -20,6 +20,7 @@ import {
 	type TransferFanoutInternals,
 	transferFanout,
 } from "../../src/transfer-fanout.ts";
+import { HERMETIC_ENV } from "./hermetic-env.ts";
 
 function cdbMember(
 	target: string,
@@ -181,7 +182,7 @@ describe("transferFanout", () => {
 		const envelope = await transferFanout(
 			{ verb: "list" },
 			selection(),
-			{},
+			HERMETIC_ENV,
 			internals,
 		);
 		expect(envelope.ok).toBe(true);
@@ -208,7 +209,7 @@ describe("transferFanout", () => {
 		const envelope = await transferFanout(
 			{ verb: "list" },
 			selection(),
-			{},
+			HERMETIC_ENV,
 			internals,
 		);
 		expect(envelope.data.summary).toEqual({ total: 2, ok: 1, failed: 1 });
@@ -282,7 +283,7 @@ describe("transferFanout", () => {
 					password: "hidden-fanout-pw",
 				},
 				selection(),
-				{},
+				HERMETIC_ENV,
 				{
 					expand: async () =>
 						expansionOf([
@@ -335,7 +336,7 @@ describe("transferFanout", () => {
 		const envelope = await transferFanout(
 			{ verb: "list" },
 			selection(),
-			{},
+			HERMETIC_ENV,
 			internals,
 		);
 		expect(envelope.data.summary).toEqual({ total: 0, ok: 0, failed: 0 });
@@ -355,7 +356,7 @@ describe("transferFanout", () => {
 		const error = await transferFanout(
 			{ verb: "remove", remote: "/f", yes: true, stdinIsTty: false },
 			selection(),
-			{},
+			HERMETIC_ENV,
 			internals,
 		).catch((e: unknown) => e);
 		expect(error).toBeInstanceOf(CentrsError);
@@ -374,7 +375,7 @@ describe("transferFanout", () => {
 			transferFanout(
 				{ verb: "download", remote: "/f.npk" },
 				selection(),
-				{},
+				HERMETIC_ENV,
 				internals,
 			),
 		).rejects.toMatchObject({ code: "usage/conflicting-flags" });
@@ -398,7 +399,7 @@ describe("transferFanout", () => {
 		const envelope = await transferFanout(
 			{ verb: "download", remote: "/flash/log.npk", outDir: "/tmp/out" },
 			selection(),
-			{},
+			HERMETIC_ENV,
 			internals,
 		);
 		expect(envelope.data.summary.ok).toBe(2);
@@ -422,7 +423,7 @@ describe("transferFanout", () => {
 			transferFanout(
 				{ verb: "remove", remote: "/f", stdinIsTty: false },
 				selection(),
-				{},
+				HERMETIC_ENV,
 				internals,
 			),
 		).rejects.toThrow(/2 router\(s\)/);
@@ -438,7 +439,7 @@ describe("transferFanout", () => {
 		const envelope = await transferFanout(
 			{ verb: "remove", remote: "/f", yes: true, stdinIsTty: false },
 			selection(),
-			{},
+			HERMETIC_ENV,
 			internals,
 		);
 		expect(envelope.data.summary.ok).toBe(2);
@@ -454,7 +455,7 @@ describe("transferFanout", () => {
 		const envelope = await transferFanout(
 			{ verb: "list" },
 			selection({ default: true }),
-			{},
+			HERMETIC_ENV,
 			internals,
 		);
 		const defaultTarget = envelope.data.targets.find(
@@ -484,7 +485,7 @@ describe("transferFanout", () => {
 		const envelope = await transferFanout(
 			{ verb: "list" },
 			selection({ groups: [], positionals: ["1.2.3.4"] }),
-			{},
+			HERMETIC_ENV,
 			internals,
 		);
 		const target = envelope.data.targets[0];

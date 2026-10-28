@@ -15,6 +15,7 @@ import type { ProtocolAdapter } from "../../src/protocols/index.ts";
 import { classifyParseResult } from "../../src/protocols/mac-telnet-console.ts";
 import longTerm from "../fixtures/explain/live-probes.long-term.json";
 import stable from "../fixtures/explain/live-probes.stable.json";
+import { HERMETIC_ENV } from "./hermetic-env.ts";
 
 type Backend = Parameters<typeof collectExplainEvidence>[2];
 
@@ -159,7 +160,7 @@ describe("live evidence controls", () => {
 		const result = await explainLiveEnvelope(
 			{ input: ":put 1", targetInput: "edge1", quickchr: "missing-491" },
 			{},
-			{},
+			HERMETIC_ENV,
 		);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error.code).toBe("usage/conflicting-flags");
@@ -359,7 +360,7 @@ describe("live evidence controls", () => {
 				via: "ssh",
 			},
 			{},
-			{},
+			HERMETIC_ENV,
 		);
 		expect(result.ok).toBe(false);
 		expect(JSON.stringify(result)).not.toContain("private-token");
@@ -392,7 +393,7 @@ test("live envelope omits the offline-only tip and preserves caller tips", async
 			const result = await explainLiveEnvelope(
 				{ input, targetInput: server.url.href },
 				{ tips: [tip], format: { value: "yaml", source } },
-				{},
+				HERMETIC_ENV,
 			);
 			expect(result.ok).toBe(true);
 			expect(result.tips).toEqual([tip]);
@@ -425,7 +426,7 @@ test("actual REST authentication failure keeps resolved target and produces a co
 					source: { kind: "config", key: "CENTRS_FORMAT" },
 				},
 			},
-			{},
+			HERMETIC_ENV,
 		);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error.code).toBe("transport/auth-failed");
@@ -456,7 +457,7 @@ test("actual REST timeout is bounded and does not dispatch later probes", async 
 		const result = await explainLiveEnvelope(
 			{ input: ":put 1", targetInput: server.url.href, timeout: "20ms" },
 			{},
-			{},
+			HERMETIC_ENV,
 		);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error.code).toBe("transport/timeout");

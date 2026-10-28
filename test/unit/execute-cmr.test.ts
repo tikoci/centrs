@@ -29,6 +29,7 @@ import {
 } from "../../src/execute-cmr.ts";
 import { classifyParseResult } from "../../src/protocols/mac-telnet-console.ts";
 import { runCliCaptured as run } from "./cli-capture.ts";
+import { HERMETIC_ENV } from "./hermetic-env.ts";
 
 /**
  * `execute --cmr` (#450) against an injected controller. The device behaviour
@@ -128,14 +129,10 @@ function request(
 }
 
 async function runFake(f: Fake, overrides: Partial<ExecuteCmrRequest> = {}) {
-	return executeCmr(
-		request(overrides),
-		{ CENTRS_SKIP_ENV_FILE: "1" },
-		{
-			controller: () => f.controller,
-			nonce: () => NONCE,
-		},
-	);
+	return executeCmr(request(overrides), HERMETIC_ENV, {
+		controller: () => f.controller,
+		nonce: () => NONCE,
+	});
 }
 
 function codes(envelope: {
@@ -1040,7 +1037,7 @@ describe("execute --cmr: write gate and cancellation", () => {
 		});
 		const envelope = await executeCmr(
 			{ ...request(), signal: abort.signal, concurrency: 1 },
-			{ CENTRS_SKIP_ENV_FILE: "1" },
+			HERMETIC_ENV,
 			{ controller: () => f.controller, nonce: () => NONCE },
 		);
 		expect(f.dispatch.map((c) => c.numbers)).toEqual(["*1"]);
@@ -1083,7 +1080,7 @@ describe("execute --cmr: cancellation through the production adapters", () => {
 					timeout: "5s",
 					signal: abort.signal,
 				},
-				{ CENTRS_SKIP_ENV_FILE: "1" },
+				HERMETIC_ENV,
 			);
 			await arrived.promise;
 			abort.abort();
@@ -1115,7 +1112,7 @@ describe("execute --cmr: cancellation through the production adapters", () => {
 					timeout: "5s",
 					signal: abort.signal,
 				},
-				{ CENTRS_SKIP_ENV_FILE: "1" },
+				HERMETIC_ENV,
 			);
 			await arrived.promise;
 			abort.abort();
@@ -1195,7 +1192,7 @@ describe("execute --cmr: CLI usage", () => {
 
 describe("console-only CMR views are refused before dialing", () => {
 	const DASHBOARD = "/cmr/device/dashboard numbers=*2";
-	const env = { CENTRS_SKIP_ENV_FILE: "1" };
+	const env = HERMETIC_ENV;
 	const target = { targetInput: "192.0.2.1", stdinIsTty: false };
 
 	// The plain (structured) spellings, abbreviated or not. Script spellings
@@ -1419,7 +1416,7 @@ describe("the dashboard is found in the device's `:parse` return", () => {
 });
 
 describe("raw run-script through api/execute: validation is scoped to the controller", () => {
-	const env = { CENTRS_SKIP_ENV_FILE: "1" };
+	const env = HERMETIC_ENV;
 	const codes = (warnings: readonly { code: string }[]) =>
 		warnings.map((w) => w.code);
 

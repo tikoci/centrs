@@ -23,6 +23,7 @@ import { CentrsError } from "../../src/errors.ts";
 import { OFFLINE_GATE_SOURCE } from "../../src/offline-gate.ts";
 import { closedPort } from "./closed-port.ts";
 import { FakeFollowRouter } from "./fake-follow-router.ts";
+import { HERMETIC_ENV } from "./hermetic-env.ts";
 
 describe("normalizeApiEndpoint", () => {
 	test("lenient variants canonicalize to one slash path", () => {
@@ -268,7 +269,7 @@ describe("api meta.validation on a gate that never answered (GH#435)", () => {
 				endpoint: "ip/address",
 				targetInput: `http://127.0.0.1:${closedPort()}`,
 			},
-			{},
+			HERMETIC_ENV,
 		);
 		expect(envelope.ok).toBe(false);
 		if (envelope.ok) return;
@@ -313,7 +314,7 @@ describe("api meta.validation on a gate that never answered (GH#435)", () => {
 				yes: true,
 				targetInput: `http://127.0.0.1:${closedPort()}`,
 			},
-			{},
+			HERMETIC_ENV,
 		);
 		expect(envelope.ok).toBe(false);
 		if (envelope.ok) return;
@@ -335,7 +336,7 @@ describe("api meta.validation on a gate that never answered (GH#435)", () => {
 				via: "rest-api",
 				targetInput: "127.0.0.1:1",
 			},
-			{},
+			HERMETIC_ENV,
 		)) {
 			envelopes.push(envelope);
 		}
@@ -367,7 +368,7 @@ describe("api meta.validation on a gate that never answered (GH#435)", () => {
 				via: "native-api",
 				targetInput: `127.0.0.1:${closedPort()}`,
 			},
-			{},
+			HERMETIC_ENV,
 		)) {
 			envelopes.push(envelope);
 		}
@@ -406,7 +407,7 @@ describe("apiStream tips (#480 review)", () => {
 				fields: { address: "192.0.2.9/24" },
 				yes: true,
 			},
-			{},
+			HERMETIC_ENV,
 		)) {
 			lines.push(line);
 		}
@@ -427,7 +428,7 @@ describe("apiEnvelope usage errors (no I/O)", () => {
 				targetInput: "192.0.2.1",
 				listen: true,
 			} as Parameters<typeof apiEnvelope>[0],
-			{},
+			HERMETIC_ENV,
 		);
 		expect(envelope.ok).toBe(false);
 		if (!envelope.ok) {
@@ -441,7 +442,7 @@ describe("apiEnvelope usage errors (no I/O)", () => {
 	test("an unsupported -X method is usage/invalid-method", async () => {
 		const envelope = await apiEnvelope(
 			{ endpoint: "ip/address", targetInput: "192.0.2.1", method: "HEAD" },
-			{},
+			HERMETIC_ENV,
 		);
 		expect(envelope.ok).toBe(false);
 		if (!envelope.ok) {
@@ -458,7 +459,7 @@ describe("apiEnvelope usage errors (no I/O)", () => {
 				fields: { a: "1" },
 				data: "{}",
 			},
-			{},
+			HERMETIC_ENV,
 		);
 		expect(envelope.ok).toBe(false);
 		if (!envelope.ok) {
@@ -479,7 +480,7 @@ describe("apiEnvelope usage errors (no I/O)", () => {
 				fields: { script: ":put 1", extra: "x" },
 				yes: true,
 			},
-			{},
+			HERMETIC_ENV,
 		);
 		expect(envelope.ok).toBe(false);
 		if (!envelope.ok) {
@@ -491,7 +492,7 @@ describe("apiEnvelope usage errors (no I/O)", () => {
 	test("an empty endpoint is input/invalid-command", async () => {
 		const envelope = await apiEnvelope(
 			{ endpoint: "", targetInput: "192.0.2.1" },
-			{},
+			HERMETIC_ENV,
 		);
 		expect(envelope.ok).toBe(false);
 		if (!envelope.ok) {
@@ -503,7 +504,7 @@ describe("apiEnvelope usage errors (no I/O)", () => {
 		for (const method of ["PATCH", "DELETE"]) {
 			const envelope = await apiEnvelope(
 				{ endpoint: "ip/address", targetInput: "192.0.2.1", method },
-				{},
+				HERMETIC_ENV,
 			);
 			expect(envelope.ok).toBe(false);
 			if (!envelope.ok) {
@@ -516,7 +517,7 @@ describe("apiEnvelope usage errors (no I/O)", () => {
 		const envelope = buildApiErrorEnvelope(
 			{ endpoint: "ip/address", method: "HEAD" },
 			new Error("boom"),
-			{},
+			HERMETIC_ENV,
 		);
 		expect(envelope.meta.operation?.request.method).toBe("HEAD");
 		expect(envelope.meta.operation?.request.verb).toBeNull();
@@ -602,21 +603,24 @@ describe("`--raw` is a precedence layer for --validate, not an override (#154)",
 	test("an explicit --validate outranks --raw in both directions", async () => {
 		const on = await resolveApiRequest(
 			{ ...base, raw: true, validate: true },
-			{},
+			HERMETIC_ENV,
 		);
 		expect(on.validate.value).toBe(true);
 		expect(on.validate.source.kind).toBe("explicit");
 
 		const off = await resolveApiRequest(
 			{ ...base, raw: true, validate: false },
-			{},
+			HERMETIC_ENV,
 		);
 		expect(off.validate.value).toBe(false);
 		expect(off.validate.source.kind).toBe("explicit");
 	});
 
 	test("--raw alone still defaults validation off, and says so", async () => {
-		const resolved = await resolveApiRequest({ ...base, raw: true }, {});
+		const resolved = await resolveApiRequest(
+			{ ...base, raw: true },
+			HERMETIC_ENV,
+		);
 		expect(resolved.validate.value).toBe(false);
 		// The provenance is kept: "off because --raw", not an anonymous default.
 		expect(resolved.validate.source).toEqual({ kind: "cli", key: "--raw" });
@@ -625,9 +629,7 @@ describe("`--raw` is a precedence layer for --validate, not an override (#154)",
 	test("--raw outranks the ambient sources, so it behaves the same everywhere", async () => {
 		const resolved = await resolveApiRequest(
 			{ ...base, raw: true },
-			{
-				CENTRS_VALIDATE: "true",
-			},
+			{ ...HERMETIC_ENV, CENTRS_VALIDATE: "true" },
 		);
 		expect(resolved.validate.value).toBe(false);
 		expect(resolved.validate.source).toEqual({ kind: "cli", key: "--raw" });
@@ -641,7 +643,7 @@ describe("`--raw` is a precedence layer for --validate, not an override (#154)",
 		// validation rejection exactly as it covers any other preflight failure.
 		const resolved = await resolveApiRequest(
 			{ ...base, raw: true, validate: true },
-			{},
+			HERMETIC_ENV,
 		);
 		expect(resolved.validate.value).toBe(true);
 
@@ -678,14 +680,14 @@ describe("`--raw` is a precedence layer for --validate, not an override (#154)",
 		const envelope = buildApiErrorEnvelope(
 			{ ...base, raw: true, validate: true },
 			new CentrsError({ code: "usage/invalid-flag", summary: "nope." }),
-			{},
+			HERMETIC_ENV,
 		);
 		expect(envelope.meta.operation?.request.validate).toBe(true);
 
 		const off = buildApiErrorEnvelope(
 			{ ...base, raw: true },
 			new CentrsError({ code: "usage/invalid-flag", summary: "nope." }),
-			{},
+			HERMETIC_ENV,
 		);
 		expect(off.meta.operation?.request.validate).toBe(false);
 	});
@@ -697,9 +699,7 @@ describe("`--raw` is a precedence layer for --validate, not an override (#154)",
 		// never needed it — reintroducing the machine-dependence this layer removes.
 		const resolved = await resolveApiRequest(
 			{ ...base, raw: true },
-			{
-				CENTRS_VALIDATE: "maybe",
-			},
+			{ ...HERMETIC_ENV, CENTRS_VALIDATE: "maybe" },
 		);
 		expect(resolved.validate.value).toBe(false);
 		// An explicit `--validate` short-circuits the ladder for the same reason,
@@ -707,26 +707,27 @@ describe("`--raw` is a precedence layer for --validate, not an override (#154)",
 		// resolves, not something special to `--raw`.
 		const explicit = await resolveApiRequest(
 			{ ...base, raw: true, validate: true },
-			{ CENTRS_VALIDATE: "maybe" },
+			{ ...HERMETIC_ENV, CENTRS_VALIDATE: "maybe" },
 		);
 		expect(explicit.validate.value).toBe(true);
 
 		// The junk value is still reported where it is actually consulted: no
 		// `--raw`, no explicit flag, so the ambient layer is the deciding one.
 		expect(
-			resolveApiRequest({ ...base }, { CENTRS_VALIDATE: "maybe" }),
+			resolveApiRequest(
+				{ ...base },
+				{ ...HERMETIC_ENV, CENTRS_VALIDATE: "maybe" },
+			),
 		).rejects.toThrow(/boolean/i);
 	});
 
 	test("without --raw the ladder is untouched", async () => {
-		expect((await resolveApiRequest({ ...base }, {})).validate.value).toBe(
-			true,
-		);
+		expect(
+			(await resolveApiRequest({ ...base }, HERMETIC_ENV)).validate.value,
+		).toBe(true);
 		const env = await resolveApiRequest(
 			{ ...base },
-			{
-				CENTRS_VALIDATE: "false",
-			},
+			{ ...HERMETIC_ENV, CENTRS_VALIDATE: "false" },
 		);
 		expect(env.validate.value).toBe(false);
 		expect(env.validate.source.kind).toBe("env");
@@ -746,7 +747,7 @@ describe("api validation metadata survives the error boundary (#354, PR #356 rev
 		// here reported `/console/inspect` as the failing validator and dropped
 		// `stages`, which is exactly the accepted-vs-skipped distinction the
 		// validation contract requires readers to be able to make.
-		const resolved = await resolveApiRequest({ ...base }, {});
+		const resolved = await resolveApiRequest({ ...base }, HERMETIC_ENV);
 		const settled = {
 			enabled: true,
 			source: "/console/inspect request=child",
@@ -767,7 +768,7 @@ describe("api validation metadata survives the error boundary (#354, PR #356 rev
 	test("a structured request's offline stage is skipped, with the reason named", async () => {
 		// `api` only offline-gates script mode; a path plus a body is not a CLI
 		// string. Saying `passed` here would claim an analysis that never ran.
-		const resolved = await resolveApiRequest({ ...base }, {});
+		const resolved = await resolveApiRequest({ ...base }, HERMETIC_ENV);
 		const envelope = buildApiErrorEnvelopeFromResolved(
 			resolved,
 			new CentrsError({
@@ -792,7 +793,7 @@ describe("api validation metadata survives the error boundary (#354, PR #356 rev
 				method: "POST",
 				fields: { script: "/ip/address/add no-such-arg=x" },
 			},
-			{},
+			HERMETIC_ENV,
 		);
 		const envelope = buildApiErrorEnvelopeFromResolved(
 			resolved,
@@ -816,7 +817,7 @@ describe("api validation metadata survives the error boundary (#354, PR #356 rev
 
 	test("a structured device rejection is a name-level verdict with no syntax summary (#535)", async () => {
 		// A structured request runs no `:parse`; `/console/inspect` refused it.
-		const resolved = await resolveApiRequest({ ...base }, {});
+		const resolved = await resolveApiRequest({ ...base }, HERMETIC_ENV);
 		const envelope = buildApiErrorEnvelopeFromResolved(
 			resolved,
 			new CentrsError({
@@ -833,7 +834,10 @@ describe("api validation metadata survives the error boundary (#354, PR #356 rev
 	});
 
 	test("--raw (validation disabled) lists both stages as skipped", async () => {
-		const resolved = await resolveApiRequest({ ...base, raw: true }, {});
+		const resolved = await resolveApiRequest(
+			{ ...base, raw: true },
+			HERMETIC_ENV,
+		);
 		const envelope = buildApiErrorEnvelopeFromResolved(
 			resolved,
 			new CentrsError({ code: "transport/unreachable", summary: "nope" }),
