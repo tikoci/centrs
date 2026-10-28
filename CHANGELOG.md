@@ -239,6 +239,39 @@ part of this section.
   a native API login. A write that failed after it was sent, in single-target
   or fan-out mode, carries the new warning `transport/write-outcome-unknown`,
   because it may have run. Reads keep the retry.
+- A bare known-menu path (`/system/identity`) reads as a read in `execute`,
+  not `usage/confirmation-required` (#543). It still answers nothing, so the
+  envelope steers to `/print` / `retrieve` with `tip/execute-bare-menu-path`.
+  Unknown paths, known-mutator verbs, and any attribute or query stay gated.
+- `retrieve /system/routerboard` on a router without the menu (CHR) names the
+  workaround: the `validation/unknown-path` remediation points at
+  `/system/license --attributes system-id` instead of the generic text (#545).
+- `execute` warns when a multi-statement write is refused for permission after
+  earlier statements may have run (#549). Such a refusal carries
+  `transport/write-outcome-unknown` alongside `routeros/permission-denied`,
+  counting statements inside executed `:if`/`:for`/`:foreach` scopes as well
+  as top-level ones; single refused statements stay silent. The refusal itself
+  now surfaces as the error instead of `ok:true`: `/execute` answers HTTP 200
+  with `not enough permissions (9) (…; line N)` as the last `ret` line after
+  earlier statements' output (CHR 7.25, both transports).
+- The offline gate no longer hard-rejects first-segment script-body
+  abbreviations it cannot prove (#525). `down={ :beep }`, accepted on device
+  as `down-script=`, warns `possible-script-body-abbreviation` and reaches
+  device validation instead of failing with `invalid-command-brace`. Bodies
+  opening with one bare command word or after a comment line warn too, and
+  the brace reads as a body for every reader. A bare word followed by
+  `;`-separated members keeps its error, as do the other array-content
+  braces, spaced and positional forms, and `where`; `comment={ :beep }`
+  deliberately warns though the device rejects it.
+- Native-API traps classify authentication by sentence, never trap text
+  (#540). Only a trap on `/login` is `transport/auth-failed`; a later command
+  rejected with login-like text (`/user/add name=-2` answering `invalid user
+  name`) is `routeros/command-failed`, agreeing with REST.
+- `explain` symbols declare the value of named `name=`/`counter=` spellings in
+  any argument order (#533). `:local name=no` declares `no`, and
+  `:for from=1 counter=i to=2` binds `i`, so later `$` references link;
+  previously the argument name was declared and a reordered `counter=` left
+  `$i` unbound.
 
 ### Maintenance
 

@@ -96,7 +96,7 @@ size-aware. Grounding: [Files](https://help.mikrotik.com/docs/spaces/ROS/pages/2
 | `rest` / `native` | rest-api / native-api | small via `/file/get … contents` (**≤ 60 KB**); **large via chunked `/file/read offset chunk-size≤32768`** | **`/file/set contents=` ≤ 60 KB only** — no chunked write |
 | `sftp` (default secure) | ssh | any size | any size |
 | `scp` | ssh | any size | any size |
-| `fetch` *(deferred)* | rest-api/native-api + inbound HTTP | router PUTs to centrs (`upload=yes http-method=put src-path=…`) | router GETs from centrs (`url=http://centrs/… dst-path=…`) |
+| `fetch` *(deferred, upload-only)* | rest-api/native-api + inbound HTTP | chunked `/file/read` (router PUT fails: `only [s]ftp modes support upload`, #548) | router GETs from centrs (`url=http://centrs/… dst-path=…`) |
 | `ftp` *(gated)* | ftp | any size | any size |
 
 Auto-selection (no `--via`):
@@ -375,9 +375,9 @@ done rule. The first coded pass targets `rest`/`native` (no SSH dependency);
   (random URL token, bound to the interface facing the router) and drives the
   router with `/tool/fetch` over `rest`/`native`. **upload**: serve the local
   file, `fetch url=http://<advertise>/<token> dst-path=<remote>` → router GETs.
-  **download**: `fetch upload=yes http-method=put url=http://<advertise>/<token>
-  src-path=<remote>` → router PUTs to centrs (`http-method` any since 7.21;
-  binary REST serialization fixed 7.17). Open questions: advertise-host
+  **download** stays on chunked `/file/read`: router PUTs fail with `only
+  [s]ftp modes support upload` (#548), and HTTP `http-data` caps at 60000
+  bytes, so the PUT half cannot carry files. Open questions: advertise-host
   auto-detection behind NAT, HTTP-vs-HTTPS + `check-certificate`, and whether to
   add fetch's `user`/`password` on top of the URL token.
 - **ssh** — `sftp` is **built** (`src/protocols/sftp.ts`, host OpenSSH `sftp`
