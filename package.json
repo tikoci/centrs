@@ -12,18 +12,18 @@
 	"packageManager": "bun@1.4.2",
 	"license": "MIT",
 	"devDependencies": {
-		"@biomejs/biome": "2.5.15",
+		"@biomejs/biome": "2.6.3",
 		"@secretlint/secretlint-rule-preset-recommend": "^13.0.7",
 		"@types/bun": "1.4.2",
 		"cloc": "^2.6.0-cloc",
 		"cspell": "^10.3.6",
 		"has-flag": "4.0.0",
-		"markdownlint-cli2": "^0.23.3",
+		"markdownlint-cli2": "^0.24.0",
 		"secretlint": "^13.0.7",
 		"typedoc": "^0.28.20"
 	},
 	"optionalDependencies": {
-		"@tikoci/quickchr": "^0.4.8"
+		"@tikoci/quickchr": "^0.5.2"
 	},
 	"peerDependencies": {
 		"typescript": "^6.0.3"
