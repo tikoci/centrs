@@ -201,6 +201,12 @@ part of this section.
 
 ### Fixed
 
+- The `explain` catalog generator skips the CLI Reference's new
+  `compare-versions` widget page (2026-10-30). The page carries no command
+  entry, and it aborted the catalog drift report. The refreshed catalog adds
+  10 published paths (`/interface/wifi/easymesh/*`,
+  `/app/settings/remove-certificate`, three `/system/resource/hardware`
+  commands), and the `/cmr/client` gates drop `!powerpc`.
 - `retrieve --sample`, `--follow` and `--wait` no longer report a validation
   verdict the gate never gave (#537). A cancellation before the gate ran now
   reports the device stage `not reached` (`interrupted` for `--sample` and

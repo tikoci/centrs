@@ -257,6 +257,22 @@ today's path/verb/args split and script-vs-structured gate:
   `/interface/wifi/dashboard` and `/system/dashboard` are `inspect` only: the
   trees carry them, the manual publishes no menu entry for them.
 
+  **Source refresh (accepted 2026-10-30).** The CLI Reference added
+  `compare-versions`, a version-comparison widget page with no `**Type:**`
+  entry. `llms.txt` lists it as a page and the sitemap serves it as a category
+  URL, so it aborted the parser and would have aborted the orphan-dir check.
+  It joins `index` as a hand-audited non-command slug, excluded from both
+  inventories. The CLI Reference moves from 1,099 pages / 1,106 entries to
+  1,109 / 1,116; the inspect pins and the 636-menu union are unchanged. The
+  catalog grows from 1,166 to 1,176 paths: 1,005 `both`, 67 `inspect`, 104
+  `published`. It adds 10 paths and removes none, with no kind change and no
+  provenance loss. The additions are `/app/settings/remove-certificate`, three
+  `/system/resource/hardware` commands (`power-cycle`, `power-reset`,
+  `reset-overcurrent`), and `/interface/wifi/easymesh` with five children. The
+  three `/cmr/client` gate strings drop `!powerpc`. easymesh is published with
+  no gate and is in no CHR tree through 7.26beta3, so the unexplained residue
+  grows from `/root/terminal` alone to seven paths.
+
 There are real unknowns in how far offline parsing can go (expression
 grammar, scope fidelity vs `:parse`, `[]`-nesting corner cases). Grounding
 those unknowns was **phase 0** (#185); its findings are folded in throughout

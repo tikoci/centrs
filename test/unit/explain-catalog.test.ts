@@ -323,15 +323,29 @@ describe("explain/catalog — effectiveGates", () => {
 	 * and the publication removed `/root`, leaving its still-published child
 	 * `/root/terminal` as the sole path with no stated gate. A growing set would
 	 * be a real event.
+	 *
+	 * It grew on 2026-10-30: the CLI Reference published `/interface/wifi/easymesh`
+	 * and five children with no Package, Conditions or Syscap marker, while every
+	 * sibling under `/interface/wifi` is in the pinned trees. easymesh is in no
+	 * CHR tree through 7.26beta3 (rosetta `routeros_command_version_check`) and
+	 * in no changelog, so nothing yet explains its absence.
 	 */
-	test("the unexplained residue is one path", () => {
+	test("the unexplained residue is /root/terminal and the easymesh family", () => {
 		const residue = [...PATH_CATALOG]
 			.filter(([path, entry]) => {
 				if (entry.provenance !== "published") return false;
 				return effectiveGates(path.split("/").filter(Boolean)).length === 0;
 			})
 			.map(([path]) => path);
-		expect(residue).toEqual(["/root/terminal"]);
+		expect(residue).toEqual([
+			"/interface/wifi/easymesh",
+			"/interface/wifi/easymesh/bss",
+			"/interface/wifi/easymesh/dpp-trigger",
+			"/interface/wifi/easymesh/sta",
+			"/interface/wifi/easymesh/topology",
+			"/interface/wifi/easymesh/wps-push-button",
+			"/root/terminal",
+		]);
 	});
 });
 
@@ -742,6 +756,31 @@ describe("explain/catalog — discovery", () => {
 				].join("\n"),
 			),
 		).toEqual(["app", "beep"]);
+	});
+
+	/**
+	 * `compare-versions` (2026-10-30) is a `<CliCompare />` widget page: the
+	 * sitemap serves it as a category URL and `llms.txt` lists it as a page, and
+	 * it publishes no `**Type:**` entry. Neither inventory may carry it, or the
+	 * orphan check aborts on a dir with no menu page and the parser on a heading
+	 * with no Type.
+	 */
+	test("a prose page is excluded from both inventories", () => {
+		const withProse = [
+			sitemap,
+			loc("/docs/cli-reference/compare-versions/"),
+		].join("\n");
+		const llmsWithProse = [
+			llms,
+			link("Compare", "/docs/cli-reference/compare-versions.md"),
+		].join("\n");
+		expect(categoryDirSlugs(withProse)).toEqual(["app"]);
+		expect(llmsSlugs(llmsWithProse)).toEqual(["app", "app/cleanup", "beep"]);
+		expect(discoverSlugs(withProse, llmsWithProse)).toEqual([
+			"app",
+			"app/cleanup",
+			"beep",
+		]);
 	});
 
 	test("the inventory is the union, and the category page survives it", () => {
