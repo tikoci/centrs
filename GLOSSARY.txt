@@ -721,8 +721,11 @@ remoteap # caps-man definition module for `/caps-man/remote-cap`
 seccfg # caps-man definition module for `/caps-man/security`
 ifaces # CLI-Reference definition module for `/tool/graphing/interface`
 datapath # `/caps-man/datapath` — the real CLI menu behind `dpathcfg`
-easymesh # `/interface/wifi/easymesh` — the doc spelling of `/interface/wifi/wps-push-button`
+easymesh # `/interface/wifi/easymesh` — once a doc spelling of `/interface/wifi/wps-push-button`; published as its own ungated menu since 2026-10-30, in no CHR tree through 7.26beta3
 wps # Wi-Fi Protected Setup — `/interface/wifi/wps-push-button`
+bss # Wi-Fi basic service set — `/interface/wifi/easymesh/bss`
+dpp # Wi-Fi Device Provisioning Protocol — `/interface/wifi/easymesh/dpp-trigger`
+overcurrent # `/system/resource/hardware/reset-overcurrent`, gated by syscap `usb-hub`
 qos # switch-chip quality of service — `/interface/ethernet/switch/qos`, a real menu segment R1 must never drop
 qca # Qualcomm Atheros — the `wireless-qca` package gate
 multiswitch # syscap gate: more than one switch chip

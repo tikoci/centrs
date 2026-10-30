@@ -97,11 +97,19 @@ export const LLMS_TXT_URL = `${MANUAL_BASE}/llms.txt`;
 export const CLI_PREFIX = "/docs/cli-reference/";
 const CLI_SLUG = /^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/;
 /**
- * The section landing page: the argument-type glossary prose. It is listed in
- * `llms.txt` like any other `.md`, but publishes no `**Type:**` entry, so it is
- * not a CLI path and the loud-fail parser would (correctly) reject it.
+ * Prose pages listed in `llms.txt` like any other `.md` that publish no
+ * `**Type:**` entry, so they are not CLI paths and the loud-fail parser would
+ * (correctly) reject them. Each is a hand-audited exclusion, not a pattern:
+ *
+ *   index            the section landing page: the argument-type glossary prose
+ *   compare-versions the version-comparison widget page (`<CliCompare />`),
+ *                    added 2026-10-30; a new page of this kind is a signal to
+ *                    read it, so it earns an entry here rather than a skip rule
  */
-const SECTION_INDEX_SLUG = "index";
+const NON_COMMAND_SLUGS: ReadonlySet<string> = new Set([
+	"index",
+	"compare-versions",
+]);
 
 /**
  * Published doc spelling -> real CLI spelling. HAND-AUDITED; the generator
@@ -197,7 +205,7 @@ function cliRefPath(location: string, base: string): string | null {
 function pageSlug(path: string): string | null {
 	if (path.endsWith("/")) return null;
 	const slug = path.slice(CLI_PREFIX.length).replace(/\.md$/, "");
-	if (slug === "" || slug === SECTION_INDEX_SLUG || !CLI_SLUG.test(slug))
+	if (slug === "" || NON_COMMAND_SLUGS.has(slug) || !CLI_SLUG.test(slug))
 		return null;
 	return slug;
 }
@@ -218,7 +226,9 @@ export function sitemapSlugs(sitemapXml: string): string[] {
  * the directory slug (`app/` -> `app`). The page that carries the menu's own
  * entry is {@link categoryPageSlugs}.
  *
- * The section root itself (`/docs/cli-reference/`) is not a menu and is skipped.
+ * The section root itself (`/docs/cli-reference/`) is not a menu and is skipped,
+ * and so is a {@link NON_COMMAND_SLUGS} page the sitemap happens to serve with a
+ * trailing slash (`compare-versions/`).
  */
 export function categoryDirSlugs(sitemapXml: string): string[] {
 	const slugs = new Set<string>();
@@ -226,7 +236,8 @@ export function categoryDirSlugs(sitemapXml: string): string[] {
 		const path = cliRefPath(decodeXml(match[1] ?? ""), SITEMAP_URL);
 		if (path === null || !path.endsWith("/")) continue;
 		const dir = path.slice(CLI_PREFIX.length).replace(/\/$/, "");
-		if (dir === "" || !CLI_SLUG.test(dir)) continue;
+		if (dir === "" || NON_COMMAND_SLUGS.has(dir) || !CLI_SLUG.test(dir))
+			continue;
 		slugs.add(dir);
 	}
 	return [...slugs].sort();

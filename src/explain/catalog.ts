@@ -9,7 +9,7 @@
  * Union of two first-order sources (#228):
  *
  * 1. MikroTik's published CLI Reference (`https://manual.mikrotik.com/docs/cli-reference/`),
- *    1,099 pages, 1,106 entries — first-order about the definition
+ *    1,109 pages, 1,116 entries — first-order about the definition
  *    structs and their build-time gates. Since #285 every page is a leaf whose
  *    slug is the CLI path, so no spelling has to be rewritten to be looked up.
  * 2. 8 pinned restraml `/console/inspect` trees
@@ -28,9 +28,9 @@
  *
  * | Kind | Total | `both` | `inspect` | `published` |
  * | ---- | ----- | ------ | --------- | ----------- |
- * | `menu` | 568 | 457 | 67 | 44 |
- * | `command` | 477 | 436 | 0 | 41 |
- * | `settings` | 121 | 112 | 0 | 9 |
+ * | `menu` | 571 | 457 | 67 | 47 |
+ * | `command` | 483 | 436 | 0 | 47 |
+ * | `settings` | 122 | 112 | 0 | 10 |
  *
  * Zero navigation-vs-command contradictions between the two sources. Generation
  * aborts if that ever stops holding, rather than picking a winner. Where a path
@@ -49,9 +49,9 @@
  *
  * **Gates conjoin down a path, so read them with {@link effectiveGates}, not
  * row by row.** A row states only what the publication stated at that entry.
- * Read row-wise, 1 published-only path looks ungated; read with
+ * Read row-wise, 7 published-only paths look ungated; read with
  * ancestry, the residue carrying no published explanation for its absence at
- * all is 1.
+ * all is 7.
  *
  * Tree COMMANDS are not enumerated — those are the generic CRUD leaves
  * `verbs.ts` already owns. The command rows here are the published,
@@ -91,7 +91,7 @@ export interface CatalogEntry {
  * `path|kind|provenance|package|conditions|syscap` — with trailing empty
  * columns trimmed. Lower-cased, slash-led and sorted by path.
  *
- * Text rather than ~1,166 object literals so that one path is one line in a
+ * Text rather than ~1,176 object literals so that one path is one line in a
  * review diff, and so the formatter has nothing to re-wrap.
  */
 const ROWS = `
@@ -101,6 +101,7 @@ const ROWS = `
 /app/remove|command|both|container||app
 /app/restart|command|both|container||app
 /app/settings|settings|both|container||app
+/app/settings/remove-certificate|command|published|container||app
 /app/setup|command|both|container||app
 /app/update|command|both|container||app
 /beep|command|both
@@ -160,9 +161,9 @@ const ROWS = `
 /cmr/alert|menu|both|cmr
 /cmr/alert/show-devices|command|both|cmr
 /cmr/alert/test|command|both|cmr
-/cmr/client|settings|both||!smips, !powerpc
-/cmr/client/forget|command|both||!smips, !powerpc
-/cmr/client/pair|command|both||!smips, !powerpc
+/cmr/client|settings|both||!smips
+/cmr/client/forget|command|both||!smips
+/cmr/client/pair|command|both||!smips
 /cmr/client/push-button|command|both
 /cmr/device|menu|both|cmr
 /cmr/device/apptraffic|command|both|cmr
@@ -485,6 +486,12 @@ const ROWS = `
 /interface/wifi/dashboard/show-logs|command|both
 /interface/wifi/datapath|menu|both
 /interface/wifi/devel|command|both
+/interface/wifi/easymesh|settings|published
+/interface/wifi/easymesh/bss|menu|published
+/interface/wifi/easymesh/dpp-trigger|command|published
+/interface/wifi/easymesh/sta|menu|published
+/interface/wifi/easymesh/topology|menu|published
+/interface/wifi/easymesh/wps-push-button|command|published
 /interface/wifi/flat-snoop|command|both
 /interface/wifi/frequency-scan|command|both
 /interface/wifi/interworking|menu|both
@@ -1095,6 +1102,9 @@ const ROWS = `
 /system/resource/cpu|menu|both
 /system/resource/hardware|menu|both||!powerpc, !smips
 /system/resource/hardware/authorize|command|both||!powerpc, !smips
+/system/resource/hardware/power-cycle|command|published||!powerpc, !smips|usb-hub
+/system/resource/hardware/power-reset|command|published||!powerpc, !smips, !i386
+/system/resource/hardware/reset-overcurrent|command|published||!powerpc, !smips|usb-hub
 /system/resource/hardware/usb-power-reset|command|both||!powerpc, !smips, i386
 /system/resource/hardware/usb-settings|settings|both||!powerpc, !smips
 /system/resource/irq|menu|both
@@ -1373,8 +1383,8 @@ export interface CatalogGate {
  * parent's `syscap` applies even though the child entry states none: the gates
  * up a path CONJOIN, they do not override.
  *
- * Read row-wise, 1 published-only path looks ungated; read with
- * ancestry the residue is 1. The gap between the two is the
+ * Read row-wise, 7 published-only paths look ungated; read with
+ * ancestry the residue is 7. The gap between the two is the
  * conjunction, and it is what a caller has to reproduce: a child's silence about
  * a gate is not the absence of one. #228's finding — that a published-only path
  * almost always explains its own absence — is about the ancestry-aware number.
