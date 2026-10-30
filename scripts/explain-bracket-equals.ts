@@ -231,7 +231,7 @@ export function scanEqualsSites(text: string): EqualsSite[] {
 		}
 		if (ch === '"') {
 			const scan = scanQuotedString(text, i);
-			i = scan.end > i + 1 ? scan.end : i + 1;
+			i = Math.max(scan.end, i + 1);
 			word = "";
 			continue;
 		}

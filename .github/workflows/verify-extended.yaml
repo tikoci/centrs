@@ -41,7 +41,7 @@ on:
         type: string
         default: "chr-smoke.test.ts"
       packages:
-        description: "Extra RouterOS packages to install in the CHR (comma/space-separated, e.g. \"container\"). Empty = bare CHR."
+        description: 'Extra RouterOS packages to install in the CHR (comma/space-separated, e.g. "container"). Empty = bare CHR.'
         type: string
         default: ""
 

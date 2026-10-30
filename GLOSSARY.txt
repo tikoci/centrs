@@ -116,6 +116,7 @@ fat-chr
 figcaption
 FlaUI
 frontends
+frontmatter # YAML metadata block at the top of a Markdown file (e.g. instruction applyTo headers)
 haakonnessjoen
 Hammerspoon
 HMAC

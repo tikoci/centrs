@@ -1,11 +1,11 @@
 # markdownlint config for centrs
 # Signal rules on, noise rules off.
 default: true
-MD001: false   # heading increment — enforce elsewhere
-MD013: false   # line length — prose is readable at any width
-MD024:         # duplicate headings — siblings_only allows same name under different parents (changelog)
+MD001: false # heading increment — enforce elsewhere
+MD013: false # line length — prose is readable at any width
+MD024: # duplicate headings — siblings_only allows same name under different parents (changelog)
   siblings_only: true
-MD033:         # inline HTML — allow semantic elements GitHub renders
+MD033: # inline HTML — allow semantic elements GitHub renders
   allowed_elements:
     - kbd
     - mark
@@ -22,7 +22,7 @@ MD033:         # inline HTML — allow semantic elements GitHub renders
     - figcaption
     - br
     - small
-    - strong 
+    - strong
     - cite
     - code
     - del
@@ -36,12 +36,12 @@ MD033:         # inline HTML — allow semantic elements GitHub renders
     - time
     - tt
     - var
-MD040: true    # fenced code blocks must have a language tag
-MD046:         # fenced blocks only (no indented code blocks)
-  style: fenced  
-MD048:         # backtick fence style
+MD040: true # fenced code blocks must have a language tag
+MD046: # fenced blocks only (no indented code blocks)
+  style: fenced
+MD048: # backtick fence style
   style: backtick
-MD051: true    # link fragments must resolve
-MD056: true    # table rows must have consistent column counts
-MD058: true    # blanks around tables
-MD060: false   # table column spacing — auto-formatter handles this
+MD051: true # link fragments must resolve
+MD056: true # table rows must have consistent column counts
+MD058: true # blanks around tables
+MD060: false # table column spacing — not enforced (biome skips markdown, see biome.json)
