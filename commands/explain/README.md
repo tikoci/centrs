@@ -3288,7 +3288,10 @@ a missing mandatory value, and a name collision. That was verified rather than
 assumed — each blocker statement was replayed through `:put [:parse …]` and
 `/console/inspect request=highlight` on both versions and **accepted every
 time**, with controls (`no-such-attr=`, an unterminated string, a nonexistent
-menu) correctly rejected. So these results carry **no** implication about
+menu) correctly rejected by `:parse`. `highlight` is the weaker of the two: it
+marks only the nonexistent menu with an `error` class, reading the bad
+attribute as `obj-inactive` and the unterminated string as ordinary tokens, so
+the controls' rejection rests on `:parse`. So these results carry **no** implication about
 whether `explain` can parse the forms, and they do not license claims about the
 export styles in general: the captures come from one synthetic configuration on
 CHR, which has a single NIC and no switch or wireless hardware, so its defconf
@@ -3299,7 +3302,8 @@ scripts and corpora were never promoted, so the counts above rest on those
 lab captures). Validity check: `bun run explain:probe:import-blocker-validity`
 (promoted from the q203 lab for #272; replays the four blockers plus the
 three rejecting controls through `:parse` and `highlight` on a disposable
-CHR per version).
+CHR per version; re-run on 7.23.2 and 7.24rc2 for #568, 6/6 and 7/7 rows
+agree).
 
 **Non-blocking / deferred (not ratification-gating):** Q5 expression depth, Q7
 tokenizer corners, Q9 potential-command taxonomy, Q12 span-vocabulary draft —

@@ -10,9 +10,12 @@
  * proves nothing.
  *
  * Each row's durable answer lives in `commands/explain/README.md` (the q203
- * importability section): the blockers are accepted by both validators, the
- * controls rejected. This probe makes a RouterOS version bump a rerun
- * instead of an archaeology exercise.
+ * importability section): the blockers are accepted by both validators, and
+ * `:parse` rejects every control. `highlight` is the weaker gate — it marks
+ * only the nonexistent menu with an `error` class (the bad attribute reads
+ * `obj-inactive`, the unterminated string carries no error class) — so each
+ * row also pins the highlight answer it expects. This probe makes a RouterOS
+ * version bump a rerun instead of an archaeology exercise.
  *
  * Run: bun run explain:probe:import-blocker-validity [versions...] [--dump]
  * (defaults: 7.23.2 7.24rc2, the versions the README claim was measured on).
@@ -20,12 +23,18 @@
  * `.scratch/explain-import-blocker-validity.v<version>.json` (in-flight by
  * design, not a fixture).
  */
+import { routerOsStringLiteral } from "../../src/core/routeros-string.ts";
+import { CentrsError } from "../../src/errors.ts";
+import { classifyParseResult } from "../../src/protocols/mac-telnet-console.ts";
 import { openChr, probeOutputPath } from "./chr.ts";
 
 interface Case {
 	label: string;
 	stmt: string;
+	/** The `:parse` answer — the gate that must reject every control. */
 	expect: "valid" | "invalid";
+	/** Whether `highlight` marks an `error` class anywhere in the statement. */
+	highlight: "clean" | "flagged";
 	why: string;
 	versions?: string[];
 }
@@ -35,24 +44,28 @@ const CASES: Case[] = [
 		label: "blocker 1 — dhcp-client add",
 		stmt: "/ip dhcp-client add interface=ether1 name=client1",
 		expect: "valid",
+		highlight: "clean",
 		why: "import failed on a DUPLICATE object, which is device state, not syntax",
 	},
 	{
 		label: "blocker 2 — interface list set builtin",
 		stmt: '/interface list set [ find name=all ] comment="contains all interfaces" exclude="" include="" name=all',
 		expect: "valid",
+		highlight: "clean",
 		why: "import failed because the object is builtin — an authorization/state fact",
 	},
 	{
 		label: "blocker 3 — snmp community, hide-sensitive form",
 		stmt: "/snmp community add addresses=0.0.0.0/0 name=canary-snmp-priv security=private",
 		expect: "valid",
+		highlight: "clean",
 		why: "import failed on a MISSING MANDATORY VALUE, checked at apply time",
 	},
 	{
 		label: "blocker 4 — keymat-provider add (7.24rc2 only)",
 		stmt: "/system keymat-provider add disabled=yes key-size=0 name=default qkd-cache-size=0 qkd-certificate=*0 type=qkd",
 		expect: "valid",
+		highlight: "clean",
 		why: "import failed on a duplicate name inside the boot window",
 		versions: ["7.24rc2"],
 	},
@@ -61,27 +74,39 @@ const CASES: Case[] = [
 		label: "CONTROL bad attribute",
 		stmt: "/ip address add no-such-attr=198.51.100.1/32 interface=ether1",
 		expect: "invalid",
+		highlight: "clean",
 		why: "unknown attribute — must be rejected or the probe proves nothing",
 	},
 	{
 		label: "CONTROL unterminated string",
 		stmt: '/system identity set name="unterminated',
 		expect: "invalid",
+		highlight: "clean",
 		why: "genuine syntax error — must be rejected",
 	},
 	{
 		label: "CONTROL nonexistent menu",
 		stmt: "/no/such/menu add name=x",
 		expect: "invalid",
+		highlight: "flagged",
 		why: "path does not exist on the device",
 	},
 ];
 
 const DUMP = Bun.argv.includes("--dump");
 
-/** RouterOS string literal: escape `\` and `"` only (matches src/execute.ts). */
-function routerOsStringLiteral(value: string): string {
-	return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+/**
+ * Classify a `:parse` return with the production gate, so this probe's verdict
+ * is the one `execute` would reach: "accepted", or the `validation/*` code.
+ */
+function parseVerdict(output: string, stmt: string): string {
+	try {
+		classifyParseResult(output, stmt, "rest-api");
+		return "accepted";
+	} catch (error) {
+		if (!(error instanceof CentrsError)) throw error;
+		return error.code;
+	}
 }
 
 async function main(version: string) {
@@ -108,44 +133,49 @@ async function main(version: string) {
 						`:put [:parse ${routerOsStringLiteral(c.stmt)}]`,
 					)) as { output?: string }
 				).output?.trim() ?? "";
-			// `:parse` returns the compiled script handle on success and an error
-			// string on failure; either way RouterOS puts it in `output`.
-			const parseOk = !/error|expected|bad |invalid|syntax|no such/i.test(
-				parse,
-			);
+			const parseCode = parseVerdict(parse, c.stmt);
+			const parseOk = parseCode === "accepted";
 
-			// The highlight record is a per-token classification stream, NOT a
-			// list where a failure shows up as `type: "error"` — an earlier pass
-			// of this probe read it that way and reported "clean" for an
-			// unterminated string, i.e. it discriminated nothing. Dump the raw
-			// record and look for an `error` CLASS inside it.
+			// The highlight record is ONE comma-separated per-byte class string
+			// (`"dir,cmd,cmd,error,none,…"`), not a list where a failure shows up
+			// as `type: "error"` or a quoted `"error"` — two earlier passes of
+			// this probe read it those ways and reported every control "clean",
+			// i.e. it discriminated nothing. Split it and look for the class.
 			let highlightOk: boolean;
 			let highlightNote: string;
 			try {
-				const res = await chr.rest("/console/inspect", {
+				const res = (await chr.rest("/console/inspect", {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({ request: "highlight", input: c.stmt }),
-				});
+				})) as { highlight?: string }[];
 				const raw = JSON.stringify(res);
-				highlightOk = !/"error"/.test(raw);
+				const classes = (res[0]?.highlight ?? "").split(",");
+				highlightOk = !classes.includes("error");
 				highlightNote = `${raw.length}B raw${DUMP ? `: ${raw.slice(0, 400)}` : ""}`;
 			} catch (e) {
 				highlightOk = false;
 				highlightNote = `THREW ${(e as Error).message.slice(0, 60)}`;
 			}
 
+			// Each validator is checked against its own expectation: a combined
+			// verdict lets one gate's rejection mask the other gate being broken.
 			const verdict = parseOk && highlightOk ? "valid" : "invalid";
-			const agrees = verdict === c.expect ? "OK " : "MISMATCH";
+			const highlight = highlightOk ? "clean" : "flagged";
+			const agrees =
+				parseOk === (c.expect === "valid") && highlight === c.highlight
+					? "OK "
+					: "MISMATCH";
 			if (agrees === "MISMATCH") mismatches++;
 			console.log(
-				`${agrees} ${c.label}\n     parse=${parseOk ? "accepted" : "REJECTED"} (${JSON.stringify(parse.slice(0, 70))})\n     highlight=${highlightOk ? "clean" : "flagged"} (${highlightNote})\n     expected ${c.expect} — ${c.why}`,
+				`${agrees} ${c.label}\n     parse=${parseOk ? "accepted" : `REJECTED ${parseCode}`} (${JSON.stringify(parse.slice(0, 70))})\n     highlight=${highlight} (${highlightNote})\n     expected ${c.expect}, highlight ${c.highlight} — ${c.why}`,
 			);
 			records.push({
 				label: c.label,
 				stmt: c.stmt,
 				expect: c.expect,
 				parse,
+				parseCode,
 				parseOk,
 				highlightOk,
 				highlightNote,
