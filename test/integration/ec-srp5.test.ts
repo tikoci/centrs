@@ -134,12 +134,13 @@ describeFast("EC-SRP5 minimal-length RouterOS discriminators (#565)", () => {
 						);
 					})().then(peer.resolve, peer.reject);
 				});
+				let launch: Promise<void> | undefined;
 				try {
 					await new Promise<void>((resolve, reject) => {
 						server.once("error", reject);
 						server.listen(2000, "127.0.0.1", resolve);
 					});
-					const launch = executeEnvelope(
+					launch = executeEnvelope(
 						{
 							quickchr: started.chr.name,
 							command: `/tool/bandwidth-test address=10.0.2.2 protocol=tcp direction=receive user=${vector.username} password=${vector.password} duration=5s`,
@@ -158,7 +159,11 @@ describeFast("EC-SRP5 minimal-length RouterOS discriminators (#565)", () => {
 				} finally {
 					clearTimeout(deadline);
 					socket?.destroy();
-					server.close();
+					// The next case reuses port 2000 and the device's btest client:
+					// wait for both to wind down. Cleanup errors never mask the
+					// original failure (close errors when listen itself failed).
+					await launch?.catch(() => {});
+					await new Promise<void>((resolve) => server.close(() => resolve()));
 				}
 			}
 			await recordIntegrationEvidence({
