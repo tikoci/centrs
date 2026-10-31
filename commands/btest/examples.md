@@ -99,6 +99,12 @@ and non-zero throughput. This is the example that exercises the net-new
 server-side EC-SRP5 verifier against real RouterOS (TCP keeps the gated path off
 the SLIRP UDP-reverse-NAT question).
 
+`test/integration/ec-srp5.test.ts` also exercises this exchange with chosen
+test salts and ephemeral scalars: a short REDP1 loop hash input, a short shared
+`z`, and a REDP1 input whose leading zero must stay. RouterOS's client proof
+must match the minimal-length derivation. This discriminator stops at the
+proof; the normal btest suites cover completed sessions and throughput (#565).
+
 ### 4. Wrong credentials are rejected
 
 > *Designed, not yet gated* — the auth-reject path is asserted by the loopback

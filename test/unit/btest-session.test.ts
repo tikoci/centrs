@@ -21,7 +21,6 @@ import {
 	type BtestControlChannel,
 	type BtestRunSummary,
 	type BtestSessionResult,
-	btestShared,
 	calcSendIntervalMs,
 	channelFromSocket,
 	clientHandshake,
@@ -308,17 +307,6 @@ describe("btest handshake — no auth", () => {
 });
 
 describe("btest handshake — EC-SRP5", () => {
-	test("hashes `z` without its leading zero bytes, as RouterOS btest does", () => {
-		// CHR 7.24.5 rejects the padded form exactly when `z` begins with 0x00.
-		const j = new Uint8Array(32).fill(7);
-		const padded = Uint8Array.from([0, 0, 0x9a, ...new Uint8Array(29).fill(1)]);
-		expect([...btestShared({ j, z: padded }).z]).toEqual([
-			...padded.subarray(2),
-		]);
-		const full = Uint8Array.from([0x9a, ...new Uint8Array(31)]);
-		expect(btestShared({ j, z: full }).z).toBe(full);
-	});
-
 	test(
 		"matching credentials authenticate both roles",
 		async () => {
