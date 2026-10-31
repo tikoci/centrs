@@ -94,6 +94,7 @@ cwd
 datagram
 davidanson
 DDNS
+dsv # `:serialize to=dsv` delimiter-separated-values format (RouterOS 7.x); the #374 comma-value control pins offline acceptance of a `delimiter=,` value
 dialable # an endpoint a client can actually connect to (advertised AND reachable)
 defconf
 demux
