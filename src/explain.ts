@@ -145,6 +145,7 @@ import { escapeSpans } from "./explain/escape-tokens.ts";
 import { findGroupFaults, type GroupFault } from "./explain/group-faults.ts";
 import { isKnownMenuPath } from "./explain/is-known-menu.ts";
 import { operatorSpans } from "./explain/operator-tokens.ts";
+import { pastedPromptTips } from "./explain/pasted-prompt.ts";
 import { type PathTokenCandidate, pathSpans } from "./explain/path-tokens.ts";
 import {
 	type Resolution,
@@ -2871,6 +2872,7 @@ export function explainEnvelope(
 			"No router was given, so this is the canonicalizer's reading alone.",
 			"Add a router (`centrs explain <router> '<input>'`) for read-only parse, highlight and argument-name evidence; `--schema` and `--complete` then describe paths and complete at the cursor.",
 		),
+		...pastedPromptTips(input),
 		...(options.tips ?? []),
 	];
 	const warnings: Warning[] = [...(options.warnings ?? [])];

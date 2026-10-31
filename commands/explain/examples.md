@@ -888,7 +888,11 @@ centrs explain '[admin@MikroTik] > /ip address print' --json
 `data.verdict` is `fail` with `explain/canonicalizer/invalid-at-sign` at the
 `@`. The device answers `syntax error (line 1 column 7)`, the same byte. This
 is a pasted console prompt. `:put a@b` and `comment=a@b` pass, because a `@` is
-a value byte in an argument.
+a value byte in an argument. The envelope also carries
+`tip/explain-pasted-prompt` offering the stripped `/ip address print` as
+repair text (never applied). A `/menu>` prompt such as
+`/interface/lte> monitor lte1` keeps a `warn` abstention with the same tip
+shape, offering `monitor lte1` typed at `/interface/lte`.
 
 ### 41. A named comparison brace inside a `[find where …]` is rejected
 
