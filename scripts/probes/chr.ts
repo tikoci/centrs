@@ -21,6 +21,8 @@ export interface ProbeChr {
 	exec(command: string): Promise<unknown>;
 	/** Issue a REST request; GET is the default when no init is supplied. */
 	rest(path: string, init?: RequestInit): Promise<unknown>;
+	/** Upload a local file to the guest verbatim (q203 lab precedent). */
+	upload(localPath: string, remotePath?: string): Promise<unknown>;
 	/** Stop and delete the machine. */
 	remove(): Promise<void>;
 }
