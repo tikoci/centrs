@@ -532,13 +532,14 @@ How it is wired:
 - **MTWEI hash encoding (grounded, #565):** RouterOS hashes shared `z` and the
   REDP1 loop seed minimal-length; `haakonnessjoen/MAC-Telnet`'s `mtwei.c` pads
   both to 32 bytes. When they differ, the padded proof fails. On CHR 7.25 over
-  the L2 harness (2026-10-31, about 700 logins): short-`z` logins accepted the
-  minimal proof 8 of 8 times and rejected the padded proof 1 of 1. The `z` edge
-  hits about 1 in 256 logins. The REDP1 edge depends on the salt RouterOS
-  generates at each password change, about 1 in 317 changes. It fails every
-  login until the next change, and no MAC-Telnet run has hit it yet: its
-  grounding is `libucrypto` plus btest and WinBox. The shared core is
-  `src/protocols/ec-srp5.ts`.
+  the L2 harness (2026-10-31): short-`z` logins accepted the minimal proof 8 of
+  8 and rejected the padded proof 1 of 1 (about 700 logins). The `z` edge hits
+  about 1 in 256 logins. The REDP1 edge depends on the salt RouterOS generates
+  at each password change, about 1 in 317 changes; it fails every login until
+  the next change. A password-rotation scan over raw handshakes to PASSSALT
+  found divergent salts, and on one the minimal proof was accepted 3 of 3 while
+  the padded proof was rejected 3 of 3, all with a clean 32-byte `z` to isolate
+  the edge. The shared core is `src/protocols/ec-srp5.ts`.
 - **Console quirks to know:** a successful write **prints no output** (no `.id`,
   unlike REST/native — `data.ret` is empty on a successful add); and there is a
   ~10s terminal-negotiation stall on every login (a latency cost, not a
