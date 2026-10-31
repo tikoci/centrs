@@ -374,6 +374,8 @@ underflows
 Werror
 
 # MTWEI / EC-SRP vocabulary (src/protocols/mtwei.ts, mac-telnet auth)
+# libucrypto: RouterOS's shared cryptography library; EC-SRP5 encoding source.
+libucrypto
 # docrypto: mtwei.c's client EC-SRP proof function (mtwei_docrypto), ported to TS.
 docrypto
 # redp: REDP1 (IEEE P1363.2) random-point derivation used in the MTWEI tangle.

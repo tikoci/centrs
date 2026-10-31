@@ -283,6 +283,12 @@ part of this section.
   `:for from=1 counter=i to=2` binds `i`, so later `$` references link;
   previously the argument name was declared and a reordered `counter=` left
   `$i` unbound.
+- EC-SRP5 hashes shared `z` and the REDP1 loop seed minimal-length, as
+  RouterOS does (#565). centrs padded both to 32 bytes, following `mtwei.c`.
+  As a result, about 1 in 256 MAC-Telnet logins failed on a short `z`. On
+  both MAC-Telnet and btest, every login failed for an account whose salt hit
+  the REDP1 edge, about 1 in 317 password changes. btest's `z`-only workaround
+  (#516) is replaced by the shared fix.
 - mac-telnet with an explicit directed-broadcast `--host` (`192.168.74.255`)
   sends the owning interface's real MAC (#546, #547). On Linux, `connect()` to
   a broadcast reports `0.0.0.0`, so the session fell back to a synthetic

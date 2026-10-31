@@ -16,9 +16,14 @@
  * (`haakonnessjoen/MAC-Telnet`, © Yandex 2022), cross-checked against the WinBox
  * EC-SRP5 reference (`Lab/winbox-terminal-protocol`) and `tikoci/m2ir`'s
  * `winbox-ipc/ec-srp5-handshake.yaml` (derived from MarginResearch's PoC). The
- * curve constants, point encoding, identity hash, and proof derivation match all
- * three, and the proof is accepted by real RouterOS over the MAC-Telnet L2
- * harness.
+ * curve constants, point encoding and identity hash match all three.
+ *
+ * The hash inputs do not: `mtwei.c` pads the REDP1 loop seed and shared `z` to
+ * 32 bytes (`BN_bn2binpad`), but RouterOS hashes them minimal-length (#565).
+ * Grounded in `libucrypto.so` 6.49.23/7.25 and live CHR A/B runs over WinBox,
+ * btest and MAC-Telnet, where the padded proof is rejected whenever the two
+ * forms differ. Public-key X and the REDP1 input stay fixed at 32 bytes.
+ * Reference vectors and provenance live in `test/fixtures/ec-srp5.json`.
  */
 
 import { createHash, randomBytes } from "node:crypto";
@@ -129,6 +134,11 @@ export function bigIntToBytesBE(value: bigint, length: number): Uint8Array {
 		v >>= 8n;
 	}
 	return out;
+}
+
+/** Minimal unsigned big-endian hash input; retain one byte for zero. */
+function bigIntToBytesMinimal(value: bigint): Uint8Array {
+	return bigIntToBytesBE(value, Math.ceil(value.toString(16).length / 2));
 }
 
 export function sha256(...chunks: readonly Uint8Array[]): Uint8Array {
@@ -297,18 +307,18 @@ export function ecSrp5Id(
 export function redp1(montgomeryX: Uint8Array, parity: number): Point {
 	let seed = bytesToBigIntBE(sha256(montgomeryX));
 	for (;;) {
-		const candidate = sha256(bigIntToBytesBE(seed, 32));
+		const candidate = sha256(bigIntToBytesMinimal(seed));
 		const xWeier = mod(bytesToBigIntBE(candidate) + M2W, P);
 		const point = liftX(xWeier, parity);
 		if (point !== null) return point;
-		seed = mod(seed + 1n, 1n << 256n);
+		seed += 1n;
 	}
 }
 
 /**
  * Shared-secret material `(j, z)` common to both EC-SRP5 roles.
  *   j = SHA256(clientMontX ‖ serverMontX)  (the two 32-byte Montgomery Xs)
- *   z = Montgomery-X of the agreed shared point
+ *   z = minimal-length big-endian Montgomery-X of the agreed shared point
  * The confirmation codes are derived from these (see {@link ecSrp5ClientConfirm}
  * / {@link ecSrp5ServerConfirm}).
  */
@@ -360,14 +370,13 @@ export function ecSrp5ClientShared(
 			remediation: "The peer key may be invalid; confirm the device.",
 		});
 	}
-	const z = bigIntToBytesBE(mod(pt.x + W2M, P), 32);
+	const z = bigIntToBytesMinimal(mod(pt.x + W2M, P));
 	return { j, z };
 }
 
 /**
  * Compute the 32-byte EC-SRP5 **client** authentication proof
- * (`mtwei_docrypto`): `SHA256(j ‖ z)`. Unchanged in bytes from the original
- * `mtwei.c` port — MAC-Telnet's MTWEI uses this directly.
+ * (`mtwei_docrypto`): `SHA256(j ‖ z)`. MAC-Telnet's MTWEI uses this directly.
  */
 export function ecSrp5ClientProof(
 	privateKey: bigint,
@@ -445,7 +454,7 @@ export function ecSrp5ServerShared(
 			remediation: "The peer key may be invalid; confirm the client.",
 		});
 	}
-	const z = bigIntToBytesBE(mod(pt.x + W2M, P), 32);
+	const z = bigIntToBytesMinimal(mod(pt.x + W2M, P));
 	return { j, z };
 }
 

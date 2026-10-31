@@ -139,6 +139,15 @@ is net-new — `mtwei.ts` only implements the client. A bad proof (or a client t
 will not offer EC-SRP5 against an `authenticate=yes` server) maps to
 `transport/auth-failed`. Legacy pre-6.43 double-MD5 is out of scope for v1.
 
+The shared core hashes minimal-length big-endian integers in the REDP1 loop
+and for shared-point `z`; public keys and the REDP1 input keep their fixed
+32-byte X encoding (#565). The distinction is grounded in RouterOS
+`libucrypto.so` 6.49.23/7.25 and `tikoci/m2ir`'s live WinBox discriminators.
+`test/fixtures/ec-srp5.json` pins calculated regression transcripts;
+`test/integration/ec-srp5.test.ts` forces the encoding edges against a real
+CHR btest client, including a short `z` and a leading-zero REDP1 input
+(confirmed on CHR 7.23.8 and 7.25).
+
 ## Output
 
 btest runs over time, so it emits **live records** during the run plus a final

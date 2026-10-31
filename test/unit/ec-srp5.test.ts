@@ -19,7 +19,87 @@ import {
 	ecSrp5ServerConfirm,
 	ecSrp5ServerPublicKey,
 	ecSrp5ServerShared,
+	encodePoint,
+	redp1,
+	sha256,
 } from "../../src/protocols/ec-srp5.ts";
+import { mtweiDocrypto } from "../../src/protocols/mtwei.ts";
+import vectors from "../fixtures/ec-srp5.json";
+
+const fromHex = (value: string): Uint8Array =>
+	new Uint8Array(Buffer.from(value, "hex"));
+const toHex = (value: Uint8Array): string => Buffer.from(value).toString("hex");
+
+describe("EC-SRP5 RouterOS minimal-length encodings (#565)", () => {
+	for (const vector of [vectors.shortZ, ...vectors.redp1]) {
+		test(`both roles match the reference transcript for salt ${vector.salt}`, () => {
+			const validator = ecSrp5Id(
+				vector.username,
+				vector.password,
+				fromHex(vector.salt),
+			);
+			expect(toHex(validator)).toBe(vector.validator);
+			const clientArgs = [
+				BigInt(`0x${vector.clientPrivate}`),
+				fromHex(vector.serverKeyBlinded),
+				fromHex(vector.clientKey),
+				validator,
+			] as const;
+			expect(
+				toHex(
+					ecSrp5ServerPublicKey(
+						BigInt(`0x${vector.serverPrivate}`),
+						bytesToBigIntBE(validator),
+					),
+				),
+			).toBe(vector.serverKeyBlinded);
+			const client = ecSrp5ClientShared(...clientArgs);
+			const server = ecSrp5ServerShared(
+				BigInt(`0x${vector.serverPrivate}`),
+				bytesToBigIntBE(validator),
+				fromHex(vector.clientKey),
+				fromHex(vector.serverKeyBlinded),
+			);
+			for (const shared of [client, server]) {
+				expect(toHex(shared.j)).toBe(vector.j);
+				expect(toHex(shared.z)).toBe(vector.zMinimal);
+				const proof = ecSrp5ClientConfirm(shared);
+				expect(toHex(proof)).toBe(vector.clientConfirmMinimal);
+				expect(toHex(ecSrp5ServerConfirm(shared, proof))).toBe(
+					vector.serverConfirmMinimal,
+				);
+			}
+			expect(toHex(ecSrp5ClientProof(...clientArgs))).toBe(
+				vector.clientConfirmMinimal,
+			);
+			expect(toHex(mtweiDocrypto(...clientArgs))).toBe(
+				vector.clientConfirmMinimal,
+			);
+		});
+	}
+
+	for (const vector of vectors.redp1) {
+		test(`${vector.edge} preserves the fixed 32-byte input and both point parities`, () => {
+			const input = fromHex(vector.xGamma);
+			expect(input.length).toBe(32);
+			if (vector.edge === "redp1-loop") expect(sha256(input)[0]).toBe(0);
+			else expect(input[0]).toBe(0);
+			expect(toHex(encodePoint(redp1(input, 0)))).toBe(vector.gamma);
+			expect(toHex(encodePoint(redp1(input, 1)))).toBe(
+				`${vector.gamma.slice(0, -2)}01`,
+			);
+		});
+	}
+
+	test("short z differs from the old padded proof", () => {
+		const vector = vectors.shortZ;
+		expect(fromHex(vector.zMinimal).length).toBe(31);
+		expect(toHex(sha256(fromHex(vector.j), fromHex(vector.zPadded)))).toBe(
+			vector.clientConfirmPadded,
+		);
+		expect(vector.clientConfirmMinimal).not.toBe(vector.clientConfirmPadded);
+	});
+});
 
 const USERNAME = "testuser";
 const PASSWORD = "testpass";
