@@ -59,7 +59,8 @@ async function parseFails(
  * `bad command name` on the reject side — a narrower pattern would score a real
  * rejection as an acceptance and silently weaken every grounding assertion
  * below (#254 review). Same predicate as the #252 corpus audit (lab history
- * — see #252); the audit's verdicts are re-established live by the tests below.
+ * — see #252); the tests below re-establish representative escape behaviour
+ * live, not the audit's per-flag corpus verdicts.
  */
 const CONSOLE_REJECTION =
 	/^(syntax error|expected |missing |invalid |unknown |unexpected |no such |bad )/i;

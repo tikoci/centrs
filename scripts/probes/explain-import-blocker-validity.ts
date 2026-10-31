@@ -141,22 +141,21 @@ async function main(version: string) {
 			// as `type: "error"` or a quoted `"error"` — two earlier passes of
 			// this probe read it those ways and reported every control "clean",
 			// i.e. it discriminated nothing. Split it and look for the class.
-			let highlightOk: boolean;
-			let highlightNote: string;
-			try {
-				const res = (await chr.rest("/console/inspect", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ request: "highlight", input: c.stmt }),
-				})) as { highlight?: string }[];
-				const raw = JSON.stringify(res);
-				const classes = (res[0]?.highlight ?? "").split(",");
-				highlightOk = !classes.includes("error");
-				highlightNote = `${raw.length}B raw${DUMP ? `: ${raw.slice(0, 400)}` : ""}`;
-			} catch (e) {
-				highlightOk = false;
-				highlightNote = `THREW ${(e as Error).message.slice(0, 60)}`;
-			}
+			// A failed or shapeless request throws: folding it into a verdict would
+			// let a broken call match a `flagged` (or, empty, a `clean`) row.
+			const res = (await chr.rest("/console/inspect", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ request: "highlight", input: c.stmt }),
+			})) as { highlight?: string }[];
+			const raw = JSON.stringify(res);
+			const perByte = Array.isArray(res) ? res[0]?.highlight : undefined;
+			if (!perByte)
+				throw new Error(
+					`${c.label}: no per-byte highlight classes in ${raw.slice(0, 120)}`,
+				);
+			const highlightOk = !perByte.split(",").includes("error");
+			const highlightNote = `${raw.length}B raw${DUMP ? `: ${raw.slice(0, 400)}` : ""}`;
 
 			// Each validator is checked against its own expectation: a combined
 			// verdict lets one gate's rejection mask the other gate being broken.
