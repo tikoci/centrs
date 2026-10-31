@@ -94,6 +94,7 @@ cwd
 datagram
 davidanson
 DDNS
+dsv # `:serialize to=dsv` delimiter-separated-values format (RouterOS 7.x); the #374 comma-value control pins offline acceptance of a `delimiter=,` value
 dialable # an endpoint a client can actually connect to (advertised AND reachable)
 defconf
 demux
@@ -813,6 +814,7 @@ zzznotamenu # a menu name no RouterOS build has — `/ip { zzznotamenu { print }
 # #361 absent-menu controls. Deliberate NON-words: each names a path no RouterOS
 # build has, or quotes a published gate verbatim, so the spelling is load-bearing.
 nosuch # a top-level menu no RouterOS build has — `/nosuch` is `bad command name nosuch` on CHR 7.23.7, the `validation/unknown-path` control (#361)
+nosuchcmd # a root command no RouterOS build has — `:local varID [nosuchcmd where name=x]` is `bad command name nosuchcmd (line 1 column 15)` on CHR 7.25 and 7.23.8, the #374 unknown-command control
 nosuchmenu # a submenu no RouterOS build has — `/ip/nosuchmenu/print` is `syntax error (line 1 column 15)` on CHR 7.23.7, pointing at the `/` after it (#361)
 nosuchverb # a command no RouterOS build has under a real menu — `/ip/address/nosuchverb` is `bad command name nosuchverb` on CHR 7.23.7 (#361)
 qqq # the second segment of the parse-oracle row `/zzz qqq print`, captured on CHR 7.23.3 (GH#230)

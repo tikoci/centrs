@@ -18,6 +18,7 @@ that lands under `test/fixtures/` is durable.
 | Probe | Re-derives | Durable answer |
 | ----- | ---------- | -------------- |
 | `explain-brace-slot-sweep.ts` | which `(verb, slot)` pairs read `{…}` as an array (#225/#257) | `src/explain/brace-slots.ts` + `test/fixtures/explain/values.json` → `interiorGrounding.braceSlots` |
+| `explain-corrected-anchors.ts` | the device `:parse` answer for each #374 corrected core-syntax anchor, boundary and rejecting control | `test/fixtures/explain/corrected-anchors.json` → `test/unit/explain-corrected-anchors.test.ts` |
 | `explain-escape-sweep.ts` | the device-accepted `\<c>` set inside a string (#252) | `VALID_SINGLE` in `src/explain/quoted-string.ts` |
 | `explain-highlight-recapture.ts` | the per-character `highlight` stream for every corpus script (Q13), for a build the corpus has no session for | nothing durable since #498: the slice is cut from the corpus's own channel sessions |
 | `explain-operator-sweep.ts` | the operator set, arities, precedence and associativity, where each prefix operator sits against every binary, and the `(>…)`/`<%%` axis (#255) | `src/explain/operators.ts` + `test/fixtures/explain/operators.json` → `sweep`, cut by `bun run explain:operator-slice` |
