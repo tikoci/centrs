@@ -1,0 +1,141 @@
+{
+	"_source": "Recorded by `bun run explain:probe:corrected-anchors 7.25 7.23.8` (scripts/probes/explain-corrected-anchors.ts): one disposable quickchr CHR per version, one `:put [:parse \"<input>\"]` per row with the input escaped by `routerOsStringLiteral`. `parse` is the raw device return; the test classifies it with `classifyParseResult`. Roles: anchor = device accepts and offline must agree; boundary = device rejects on an argument name, which offline does not validate (decision 3); control = device rejects, proving the oracle discriminates on these shapes.",
+	"versions": {
+		"7.25": {
+			"arch": "x86_64",
+			"capturedAt": "2026-10-31T21:04:39.864Z"
+		},
+		"7.23.8": {
+			"arch": "x86_64",
+			"capturedAt": "2026-10-31T21:05:00.808Z"
+		}
+	},
+	"rows": [
+		{
+			"id": "apply-operator",
+			"role": "anchor",
+			"input": ":put ($a <%% $b)",
+			"parse": {
+				"7.25": "(evl /putmessage=(<%% $a $b))",
+				"7.23.8": "(evl /putmessage=(<%% $a $b))"
+			}
+		},
+		{
+			"id": "apply-operator-declared",
+			"role": "anchor",
+			"input": ":local a {1;2}; :local b 3; :put ($a <%% $b)",
+			"parse": {
+				"7.25": "(evl /localname=$a;value=1;2);(evl /localname=$b;value=3);(evl /putmessage=(<%% $a $b))",
+				"7.23.8": "(evl /localname=$a;value=1;2);(evl /localname=$b;value=3);(evl /putmessage=(<%% $a $b))"
+			}
+		},
+		{
+			"id": "nested-array",
+			"role": "anchor",
+			"input": ":local m {reset={0;0}; bold={1}}",
+			"parse": {
+				"7.25": "(evl /localname=$m;value=bold=1;reset=0;0)",
+				"7.23.8": "(evl /localname=$m;value=bold=1;reset=0;0)"
+			}
+		},
+		{
+			"id": "comma-value",
+			"role": "anchor",
+			"input": ":local x [:serialize to=dsv delimiter=, {1;2}]",
+			"parse": {
+				"7.25": "(evl /localname=$x;value=(evl (evl /serializedelimiter=,;to=dsv;value=1;2)))",
+				"7.23.8": "(evl /localname=$x;value=(evl (evl /serializedelimiter=,;to=dsv;value=1;2)))"
+			}
+		},
+		{
+			"id": "comma-value-typo",
+			"role": "boundary",
+			"input": ":local x [:serialize to=dsv decimator=, {1;2}]",
+			"parse": {
+				"7.25": "(evl /localname=$x;value=(evl (evl bad parameter decimator (line 1 column 40) /serializeto=dsv;value=1;2)))",
+				"7.23.8": "expected end of command (line 1 column 38)"
+			}
+		},
+		{
+			"id": "trailing-selector",
+			"role": "anchor",
+			"input": "/certificate sign ca=[$f] [find name=\"x\"]",
+			"parse": {
+				"7.25": "(evl /certificate/signca=(evl (<%% $f (> $f)));number=(evl (evl /certificate/findwhere=$name;$trust-store;$digest-algorithm;$trusted;$common-name;$organization;$unit;$locality;$state;$country;$subject-alt-name;$issuer;$key-type;$key-size;$key-usage;$days-valid;$invalid-before;$invalid-after;$serial-number;$akid;$skid;$ca-crl-host;$ca;$scep-url;$fingerprint;$req-fingerprint;$ca-fingerprint;$expires-after;$challenge-password;$domain-names;$directory-url;$acme-status;$revoked;$status;$private-key;$crl;$smart-card-key;$authority;$issued;$revoked;$expired;$trusted;$acme-managed;$dynamic;$.id;$.nextid;$.dead;$.about;(= $name x);5)))",
+				"7.23.8": "(evl /certificate/signca=(evl (<%% $f (> $f)));number=(evl (evl /certificate/findwhere=$name;$trust-store;$digest-algorithm;$trusted;$common-name;$organization;$unit;$locality;$state;$country;$subject-alt-name;$issuer;$key-type;$key-size;$key-usage;$days-valid;$invalid-before;$invalid-after;$serial-number;$akid;$skid;$ca-crl-host;$ca;$scep-url;$fingerprint;$req-fingerprint;$ca-fingerprint;$expires-after;$challenge-password;$domain-names;$directory-url;$acme-status;$revoked;$status;$private-key;$crl;$smart-card-key;$authority;$issued;$revoked;$expired;$trusted;$acme-managed;$dynamic;$.id;$.nextid;$.dead;$.about;(= $name x);5)))"
+			}
+		},
+		{
+			"id": "trailing-selector-declared",
+			"role": "anchor",
+			"input": ":local f; /certificate sign ca=[$f] [find name=\"x\"]",
+			"parse": {
+				"7.25": "(evl /localname=$f);(evl /certificate/signca=(evl (<%% $f (> $f)));number=(evl (evl /certificate/findwhere=$name;$trust-store;$digest-algorithm;$trusted;$common-name;$organization;$unit;$locality;$state;$country;$subject-alt-name;$issuer;$key-type;$key-size;$key-usage;$days-valid;$invalid-before;$invalid-after;$serial-number;$akid;$skid;$ca-crl-host;$ca;$scep-url;$fingerprint;$req-fingerprint;$ca-fingerprint;$expires-after;$challenge-password;$domain-names;$directory-url;$acme-status;$revoked;$status;$private-key;$crl;$smart-card-key;$authority;$issued;$revoked;$expired;$trusted;$acme-managed;$dynamic;$.id;$.nextid;$.dead;$.about;(= $name x);5)))",
+				"7.23.8": "(evl /localname=$f);(evl /certificate/signca=(evl (<%% $f (> $f)));number=(evl (evl /certificate/findwhere=$name;$trust-store;$digest-algorithm;$trusted;$common-name;$organization;$unit;$locality;$state;$country;$subject-alt-name;$issuer;$key-type;$key-size;$key-usage;$days-valid;$invalid-before;$invalid-after;$serial-number;$akid;$skid;$ca-crl-host;$ca;$scep-url;$fingerprint;$req-fingerprint;$ca-fingerprint;$expires-after;$challenge-password;$domain-names;$directory-url;$acme-status;$revoked;$status;$private-key;$crl;$smart-card-key;$authority;$issued;$revoked;$expired;$trusted;$acme-managed;$dynamic;$.id;$.nextid;$.dead;$.about;(= $name x);5)))"
+			}
+		},
+		{
+			"id": "contextual-find",
+			"role": "anchor",
+			"input": "/ip/address; :local varID [find where name=$varName]",
+			"parse": {
+				"7.25": "/ip/address/;(evl /localname=$varID;value=(evl (evl /ip/address/findwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;(= $name $varName);0)))",
+				"7.23.8": "/ip/address/;(evl /localname=$varID;value=(evl (evl /ip/address/findwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;(= $name $varName);0)))"
+			}
+		},
+		{
+			"id": "standalone-find",
+			"role": "boundary",
+			"input": ":local varID [find where name=$varName]",
+			"parse": {
+				"7.25": "(evl /localname=$varID;value=(evl (evl bad parameter name (line 1 column 31) /findin=where)))",
+				"7.23.8": "expected end of command (line 1 column 30)"
+			}
+		},
+		{
+			"id": "standalone-find-declared",
+			"role": "boundary",
+			"input": ":local varName x; :local varID [find where name=$varName]",
+			"parse": {
+				"7.25": "(evl /localname=$varName;value=x);(evl /localname=$varID;value=(evl (evl bad parameter name (line 1 column 49) /findin=where)))",
+				"7.23.8": "expected end of command (line 1 column 48)"
+			}
+		},
+		{
+			"id": "control-apply-no-rhs",
+			"role": "control",
+			"input": ":put ($a <%%)",
+			"parse": {
+				"7.25": "syntax error (line 1 column 14)",
+				"7.23.8": "syntax error (line 1 column 14)"
+			}
+		},
+		{
+			"id": "control-unclosed-array",
+			"role": "control",
+			"input": ":local m {reset={0;0}; bold={1}",
+			"parse": {
+				"7.25": "syntax error (line 1 column 32)",
+				"7.23.8": "syntax error (line 1 column 32)"
+			}
+		},
+		{
+			"id": "control-selector-extra",
+			"role": "control",
+			"input": "/certificate sign ca=[$f] [find name=\"x\"] extra",
+			"parse": {
+				"7.25": "(evl bad parameter extra (line 1 column 48) /certificate/signca=(evl (<%% $f (> $f)));number=(evl (evl /certificate/findwhere=$name;$trust-store;$digest-algorithm;$trusted;$common-name;$organization;$unit;$locality;$state;$country;$subject-alt-name;$issuer;$key-type;$key-size;$key-usage;$days-valid;$invalid-before;$invalid-after;$serial-number;$akid;$skid;$ca-crl-host;$ca;$scep-url;$fingerprint;$req-fingerprint;$ca-fingerprint;$expires-after;$challenge-password;$domain-names;$directory-url;$acme-status;$revoked;$status;$private-key;$crl;$smart-card-key;$authority;$issued;$revoked;$expired;$trusted;$acme-managed;$dynamic;$.id;$.nextid;$.dead;$.about;(= $name x);5)))",
+				"7.23.8": "(evl bad parameter extra (line 1 column 48) /certificate/signca=(evl (<%% $f (> $f)));number=(evl (evl /certificate/findwhere=$name;$trust-store;$digest-algorithm;$trusted;$common-name;$organization;$unit;$locality;$state;$country;$subject-alt-name;$issuer;$key-type;$key-size;$key-usage;$days-valid;$invalid-before;$invalid-after;$serial-number;$akid;$skid;$ca-crl-host;$ca;$scep-url;$fingerprint;$req-fingerprint;$ca-fingerprint;$expires-after;$challenge-password;$domain-names;$directory-url;$acme-status;$revoked;$status;$private-key;$crl;$smart-card-key;$authority;$issued;$revoked;$expired;$trusted;$acme-managed;$dynamic;$.id;$.nextid;$.dead;$.about;(= $name x);5)))"
+			}
+		},
+		{
+			"id": "control-unknown-command",
+			"role": "control",
+			"input": ":local varID [nosuchcmd where name=x]",
+			"parse": {
+				"7.25": "(evl /localname=$varID;value=(evl (<%% bad command name nosuchcmd (line 1 column 15) nosuchcmd;where;name=x)))",
+				"7.23.8": "(evl /localname=$varID;value=(evl (<%% bad command name nosuchcmd (line 1 column 15) nosuchcmd;where;name=x)))"
+			}
+		}
+	]
+}
