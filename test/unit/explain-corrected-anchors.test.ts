@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { CentrsError } from "../../src/errors.ts";
 import { explainCommand } from "../../src/explain.ts";
 import { classifyParseResult } from "../../src/protocols/mac-telnet-console.ts";
 import fixture from "../fixtures/explain/corrected-anchors.json" with {
@@ -121,35 +122,71 @@ describe("explain public entry — corrected core-syntax anchors (#374)", () => 
 
 type Row = (typeof fixture.rows)[number];
 
-function deviceAccepts(row: Row, version: string): boolean {
+/** `"accepted"`, or the `validation/*` code plus the rejected parameter. */
+function deviceAnswer(row: Row, version: string): string {
 	const output = (row.parse as Record<string, string>)[version];
 	if (output === undefined) throw new Error(`${row.id}: no ${version} row`);
 	try {
 		classifyParseResult(output, row.input, "rest-api");
-		return true;
-	} catch {
-		return false;
+		return "accepted";
+	} catch (error) {
+		if (!(error instanceof CentrsError)) throw error;
+		const parameter = error.context?.["parameter"];
+		return parameter === undefined ? error.code : `${error.code} ${parameter}`;
 	}
 }
 
-// Offline verdict per row. Anchors must pass; boundaries pass because the
-// fault is an argument name; controls split into syntax faults offline
-// catches and name/arity faults it does not.
-const OFFLINE_VERDICT: Record<string, "pass" | "fail"> = {
-	"apply-operator": "pass",
-	"apply-operator-declared": "pass",
-	"nested-array": "pass",
-	"comma-value": "pass",
-	"comma-value-typo": "pass",
-	"trailing-selector": "pass",
-	"trailing-selector-declared": "pass",
-	"contextual-find": "pass",
-	"standalone-find": "pass",
-	"standalone-find-declared": "pass",
-	"control-apply-no-rhs": "fail",
-	"control-unclosed-array": "fail",
-	"control-selector-extra": "pass",
-	"control-unknown-command": "pass",
+const ACCEPTED = { "7.25": "accepted", "7.23.8": "accepted" };
+const SYNTAX = { "7.25": "validation/syntax", "7.23.8": "validation/syntax" };
+
+// Per row: the device answer on each channel and the offline verdict.
+// Anchors are accepted and pass offline. The argument-name boundaries pass
+// offline by design, and the channels classify them differently: 7.25 names
+// the parameter (`bad parameter …`), 7.23.8 says `expected end of command`.
+// Controls split into syntax faults offline catches and name/arity faults it
+// does not.
+const EXPECTED: Record<
+	string,
+	{ device: Record<string, string>; offline: "pass" | "fail" }
+> = {
+	"apply-operator": { device: ACCEPTED, offline: "pass" },
+	"apply-operator-declared": { device: ACCEPTED, offline: "pass" },
+	"nested-array": { device: ACCEPTED, offline: "pass" },
+	"comma-value": { device: ACCEPTED, offline: "pass" },
+	"comma-value-typo": {
+		device: {
+			"7.25": "validation/unknown-attribute decimator",
+			"7.23.8": "validation/syntax",
+		},
+		offline: "pass",
+	},
+	"trailing-selector": { device: ACCEPTED, offline: "pass" },
+	"trailing-selector-declared": { device: ACCEPTED, offline: "pass" },
+	"contextual-find": { device: ACCEPTED, offline: "pass" },
+	"standalone-find": {
+		device: {
+			"7.25": "validation/unknown-attribute name",
+			"7.23.8": "validation/syntax",
+		},
+		offline: "pass",
+	},
+	"standalone-find-declared": {
+		device: {
+			"7.25": "validation/unknown-attribute name",
+			"7.23.8": "validation/syntax",
+		},
+		offline: "pass",
+	},
+	"control-apply-no-rhs": { device: SYNTAX, offline: "fail" },
+	"control-unclosed-array": { device: SYNTAX, offline: "fail" },
+	"control-selector-extra": {
+		device: {
+			"7.25": "validation/unknown-attribute extra",
+			"7.23.8": "validation/unknown-attribute extra",
+		},
+		offline: "pass",
+	},
+	"control-unknown-command": { device: SYNTAX, offline: "pass" },
 };
 
 describe("corrected anchors against recorded device :parse (#374)", () => {
@@ -158,20 +195,22 @@ describe("corrected anchors against recorded device :parse (#374)", () => {
 	test("the fixture covers stable and long-term for every row", () => {
 		expect(versions).toEqual(["7.25", "7.23.8"]);
 		expect(fixture.rows.map((r) => r.id).sort()).toEqual(
-			Object.keys(OFFLINE_VERDICT).sort(),
+			Object.keys(EXPECTED).sort(),
 		);
 	});
 
 	for (const row of fixture.rows) {
 		test(`${row.role} ${row.id}`, () => {
-			for (const version of versions)
-				expect([version, deviceAccepts(row, version)]).toEqual([
-					version,
-					row.role === "anchor",
-				]);
-			const offline = OFFLINE_VERDICT[row.id];
-			if (offline === undefined) throw new Error(`${row.id}: no verdict`);
-			expect(explainCommand(row.input).verdict).toBe(offline);
+			const expected = EXPECTED[row.id];
+			if (expected === undefined) throw new Error(`${row.id}: no expectation`);
+			const answers = Object.fromEntries(
+				versions.map((version) => [version, deviceAnswer(row, version)]),
+			);
+			expect(answers).toEqual(expected.device);
+			expect(Object.values(answers).every((a) => a === "accepted")).toBe(
+				row.role === "anchor",
+			);
+			expect(explainCommand(row.input).verdict).toBe(expected.offline);
 		});
 	}
 });
