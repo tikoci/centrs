@@ -1,0 +1,73 @@
+{
+	"source": "https://github.com/tikoci/centrs/issues/565",
+	"provenance": "Synthetic test scalars, not device credentials. Short-z vector from tikoci/m2ir work/2026-10-chr-extraction/srp5-minimal-vector.json; REDP1 vectors independently calculated with its ws3c/ec-srp5.ts minimal-length discriminator. RouterOS encoding grounded by libucrypto.so 6.49.23/7.25 and WS-3C live campaign; these deterministic transcripts are calculated, not captured live.",
+	"shortZ": {
+		"note": "EC-SRP5 minimal-vs-padded divergence vector (z edge). Minimal-length per libucrypto (redp1 loop bin(), z bin()); padded-32 per centrs/mtwei.c. Expected (RouterOS): minimal values.",
+		"username": "admin",
+		"password": "",
+		"salt": "e87aec79f28724caab60153c65ac69b3",
+		"serverPrivate": "ab03f9f4779b8583f62568faf1c5b90ae12d28b266ac8bd021163a7252d005d5",
+		"serverKeyBlinded": "5f184297b6344d7bf06b35ca4a0a13d846c5b4ca8d52e96e54e72caf25b633f001",
+		"clientSeedIndex": 88,
+		"clientPrivate": "8bbdaccccd7f76ae7f2e9fa5114775a9ea6169440743d22b7904659fc24dde7b",
+		"clientKey": "4978be93069c0d848294309ed945697b9e1e5fcef58691d12632be65da42d7bc01",
+		"validator": "5bc976da8a607b6b74101dd5437caee5cf6d167224ae35bc421bf3819dae940f",
+		"redp1ItersMinimal": 1,
+		"redp1ItersPadded": 1,
+		"j": "5db6f5f5fd7fdc2a5a26fa832233cbad195c9a23b35decf56a73a933455359f5",
+		"zMinimal": "c7b4305a7c6bfa8db96b3c5270d27a1cedd53ad9ccbc4876da345ad200988f",
+		"zPadded": "00c7b4305a7c6bfa8db96b3c5270d27a1cedd53ad9ccbc4876da345ad200988f",
+		"secretMinimal": "b66abd9a729df6833f31b7740f9e863fd3d4f9f740738d9b258d399a7fc23483",
+		"secretPadded": "750871e8b342f4817276f4f10e515bfc8a6879687c4dab8b19465b8d89515158",
+		"clientConfirmMinimal": "5c1d1843dfc9c40a4a852f882aecec2e51d9655b29cd97d2039fc0f48e549e83",
+		"clientConfirmPadded": "a6a07a4b3e4f0084164d9cecc0fe20b4324923e3c81231bbdfa4b675c6fadd59",
+		"serverConfirmMinimal": "a219db7dd741a6c60d4781117f79741cfa2bd10e10bba194e24aaf1a031001b0",
+		"serverConfirmPadded": "1700905944494b284d0ffdfa9b54e0f0ed871ba16fa626710227cda1b4fb9a77",
+		"centrsClientZ": "00c7b4305a7c6bfa8db96b3c5270d27a1cedd53ad9ccbc4876da345ad200988f",
+		"centrsClientConfirm": "a6a07a4b3e4f0084164d9cecc0fe20b4324923e3c81231bbdfa4b675c6fadd59",
+		"centrsServerZ": "00c7b4305a7c6bfa8db96b3c5270d27a1cedd53ad9ccbc4876da345ad200988f",
+		"centrsServerConfirm": "1700905944494b284d0ffdfa9b54e0f0ed871ba16fa626710227cda1b4fb9a77",
+		"checks": {
+			"serverKeyMatchesCentrs": true,
+			"centrsZEqualsPadded": true,
+			"centrsConfirmEqualsPadded": true,
+			"minimalDiffersPadded": true
+		}
+	},
+	"redp1": [
+		{
+			"edge": "redp1-loop",
+			"username": "testuser",
+			"password": "testpass",
+			"salt": "000000000000000000000000000000f2",
+			"clientPrivate": "8bbdaccccd7f76ae7f2e9fa5114775a9ea6169440743d22b7904659fc24dde7b",
+			"clientKey": "4978be93069c0d848294309ed945697b9e1e5fcef58691d12632be65da42d7bc01",
+			"serverPrivate": "ab03f9f4779b8583f62568faf1c5b90ae12d28b266ac8bd021163a7252d005d5",
+			"serverKeyBlinded": "0707e9e2ab1a890a62a7e92a5d45c0d7973de71aedab83b0f38fc5cc7bea589601",
+			"validator": "06f27c170f643c7f331d7bd595253ca4df102e7a7e5accef3e78c7e0b9c288c0",
+			"xGamma": "758e8f4b6435db3bb44b02d91291689e2281fb7d9da0e4e22d2717f37ff07cdc",
+			"gamma": "4c34d97f73cd85f132b9524d68c5fa4676cb6e3ae23a2663c85187441447dbd600",
+			"j": "1830f3e55808e14f0e533cc25c178a224629a62b09136facfbe15b98e68e0754",
+			"zMinimal": "30251b47f4741c0fe3a8b05b4a7d14c3d3e8e4058aeb7d87cf678008cbcc25e9",
+			"clientConfirmMinimal": "eec49c968036efca24a2fa9b8b1d8073e1e101dfeac817c958afff988acc40eb",
+			"serverConfirmMinimal": "13b60e36a20a3e3324a2ced0963cbdedf7ae9161942aca0b72033af02e2b29fe"
+		},
+		{
+			"edge": "redp1-input",
+			"username": "testuser",
+			"password": "testpass",
+			"salt": "000000000000000000000000000001a0",
+			"clientPrivate": "8bbdaccccd7f76ae7f2e9fa5114775a9ea6169440743d22b7904659fc24dde7b",
+			"clientKey": "4978be93069c0d848294309ed945697b9e1e5fcef58691d12632be65da42d7bc01",
+			"serverPrivate": "ab03f9f4779b8583f62568faf1c5b90ae12d28b266ac8bd021163a7252d005d5",
+			"serverKeyBlinded": "776992ad86e585e6997bed295b3769aaca7160bcaaf2d9ec5255602068ec7c3001",
+			"validator": "8d29d28fa61a4282c4c5e4fca32a4b9e2b867882f8da4d0fe9105a65a03e783a",
+			"xGamma": "008a67ea6da3a747dc83ff104362f61c24cb8e85a39c9b4eaccbac90c198dca7",
+			"gamma": "0ef9157c6f75952f58b4fc78a89aad3605a88ae9100b19b41aa70f8d8efa687000",
+			"j": "a50b3e8eab61c29a5e08c3f3bc84f9bd5c5ff2d43d129422020bbb752876d46e",
+			"zMinimal": "4bacacec13bc1b0e508c2dfa961964fe627f7bb3175ac59e1dec8645003b0097",
+			"clientConfirmMinimal": "7eaf6dc05826daed13b5bc02cf90d29f6a344119864c7722eecf45fec5e80443",
+			"serverConfirmMinimal": "f9f6cdb6786a0a4911aeebef72b539b7574ad28fe130008ef5e32e328ffa8e35"
+		}
+	]
+}
