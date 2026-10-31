@@ -1,8 +1,8 @@
 /**
  * Statement segmenter for `explain` (centrs canonicalizer).
  *
- * Ratified by the phase-0 lab, question Q1 (#185) and promoted from the
- * throwaway probe `.scratch/explain-lab-segmenter.ts`. This is the first walker
+ * Ratified by the phase-0 lab, question Q1 (#185); the lab probe it was
+ * promoted from is history (see #185), not a runnable method. This is the first walker
  * stage: a schema-free, device-free splitter of multi-statement RouterOS input
  * into top-level statements, matching `(evl …)` sibling adjacency in `:parse`
  * IL. It never throws; structural surprises are reported as located

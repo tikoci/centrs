@@ -1,8 +1,8 @@
 /**
  * Offline path resolution for `explain` (centrs canonicalizer).
  *
- * Ratified by the phase-0 lab, questions Q3 and Q4 (#185), promoted from the
- * throwaway probe `.scratch/explain-lab-pathresolve.ts`. Two surfaces:
+ * Ratified by the phase-0 lab, questions Q3 and Q4 (#185); the lab probe
+ * it was promoted from is history (see #185), not a runnable method. Two surfaces:
  *
  *   resolveStatements  (Q4) — the fully-qualified canonical path of every
  *                       statement in source order, tracking the persistent menu

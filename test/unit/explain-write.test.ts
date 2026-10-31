@@ -22,9 +22,9 @@ import * as centrs from "../../src/index.ts";
 /**
  * Q16 write-shape anchor tests (phase 0.5, #185/#186).
  *
- * Promoted from the throwaway lab probe `.scratch/explain-lab-q16-write.ts` (the
- * SUT) and its constructed corners `.scratch/explain-lab-q16-corners.ts`, scored
- * against IL cmd nodes at every depth as oracle. The production module is
+ * Promoted from the phase-0 lab for Q16 (#185) — the SUT probe and its
+ * constructed corners, scored against IL cmd nodes at every depth as oracle;
+ * the lab sources are history (see #185), not runnable methods. The production module is
  * `src/explain/write.ts`; only the ratified `failclosed` navigation arm is
  * promoted — the two arms that priced it stayed in the lab.
  *

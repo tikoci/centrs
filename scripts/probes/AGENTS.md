@@ -26,6 +26,7 @@ that lands under `test/fixtures/` is durable.
 | `explain-symbol-arms-score.ts` | the historical Q13 candidate arms and shipped resolver over a full highlight capture | the symbol decisions in `src/explain/symbols.ts` |
 | `explain-symbol-bad-sigil-replay.ts` | recorded K2 hard-error offsets | the F8 anchors in `test/unit/explain-symbols.test.ts` |
 | `explain-symbol-classes-replay.ts` | recorded K3 per-occurrence variable classes | the F7 anchors in `test/unit/explain-symbols.test.ts` |
+| `explain-import-blocker-validity.ts` | the #203 import blockers + controls through `:parse` and `highlight` | the q203 validity claim in `commands/explain/README.md` |
 | `explain-version-floors.ts` | the RouterOS version at which `:tobool` string coercion and the `.proplist` highlight offset change, and the `:parse` wording every channel produces (#296) | `TOBOOL_STRING_COERCED_SINCE` + `PROPLIST_HIGHLIGHT_SPLIT_SINCE` in `test/integration/chr.ts` |
 
 ## Rules a probe here must follow
@@ -50,11 +51,14 @@ that lands under `test/fixtures/` is durable.
   in-flight by design, so a replay whose recording is not committed must name
   the promoted capture probe that regenerates it and fail with that command.
   `explain-symbol-arms-score.ts` closes that loop ("run
-  `bun run explain:probe:highlight-recapture`"); the K2/K3 replays do **not** —
-  they name a `.scratch/` glob no clone can produce, and their capture probes
-  were never promoted (#272). Promoting a replay without a path back to its
-  input moves the unreachable citation into a committed source header, which
-  reads as a reproducible method and is not one.
+  `bun run explain:probe:highlight-recapture`"); the K2/K3 replays close it
+  the other way — they default to the committed
+  `test/fixtures/explain/symbol-probes/` recordings (pass files after `--`
+  for a fresh capture). Their capture probes were never promoted (#272), so
+  regenerating the K2/K3 inputs from scratch remains lab history. Promoting
+  a replay without a path back to its input moves the unreachable citation
+  into a committed source header, which reads as a reproducible method and
+  is not one.
 - **An abstention is not a disagreement.** Report decided agreements,
   deliberate abstentions, and wrong assertions separately; a scorer that
   turns the product's fail-closed answer red cannot measure the product.

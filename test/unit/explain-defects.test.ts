@@ -26,9 +26,9 @@ import * as centrs from "../../src/index.ts";
 /**
  * Q14 defect-REGION anchor tests.
  *
- * Promoted from the throwaway lab probe `.scratch/explain-lab-q14-recovery.ts`,
- * whose C2 contract was scored in two tiers because the gap between them was
- * the finding:
+ * Promoted from the phase-0 lab for Q14 (#185); the lab probe is history
+ * (see #185), not a runnable method. Its C2 contract was scored in two
+ * tiers because the gap between them was the finding:
  *
  *   C2a signalled — a note exists at all
  *   C2b LOCALIZED — a note carries a REGION overlapping the injected defect

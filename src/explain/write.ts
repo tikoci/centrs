@@ -1,8 +1,8 @@
 /**
  * Offline write-shape inference for `explain` — `structure.containsWrite`.
  *
- * Ratified by the phase-0 lab, question Q16 (#185) and promoted from the
- * throwaway probe `.scratch/explain-lab-q16-write.ts`. Q16 asked what shape the
+ * Ratified by the phase-0 lab, question Q16 (#185); the lab probe it was
+ * promoted from is history (see #185), not a runnable method. Q16 asked what shape the
  * field should have and answered that the spec's sketched **boolean is unsafe**:
  * a fail-closed `true | false | unknown` reaches 100% precision on what it
  * decides (226/226 holdout, 469/469 dev) with zero false negatives, abstaining
