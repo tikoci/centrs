@@ -87,8 +87,9 @@ stack-language access without centrs modelling the whole query grammar.
 
 ## CONFIRMED ON CHR (Phase 0 grounding spikes — CHR 7.23.1, 2026-06-29)
 
-Probes: scratchpad `api-grounding-spike.ts` (listen/CRUD/execute) and
-`api-grounding-spike2.ts` (duration/monitor + query forms + inspect path). Raw
+Probes (phase-0 lab history, not runnable methods): `api-grounding-spike.ts`
+(listen/CRUD/execute) and `api-grounding-spike2.ts` (duration/monitor + query
+forms + inspect path). Raw
 native codec for the listen probe; `fetch` for REST; `connectNativeApi().talk()`
 for native.
 

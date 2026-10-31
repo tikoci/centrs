@@ -1,8 +1,8 @@
 /**
  * Symbol scope resolution for `explain` (centrs canonicalizer).
  *
- * Ratified by the phase-0 lab, question Q13 (#185) and promoted from the
- * throwaway probe `.scratch/explain-lab-symbols.ts`. Q13 asks whether an
+ * Ratified by the phase-0 lab, question Q13 (#185); the lab probe it was
+ * promoted from is history (see #185), not a runnable method. Q13 asks whether an
  * offline, schema-free reader can reproduce the class the console assigns to
  * every variable occurrence — `variable-local` / `-global` / `-auto` /
  * `-parameter` / `-undefined` in `/console/inspect request=highlight`.

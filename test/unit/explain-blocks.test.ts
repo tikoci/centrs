@@ -19,9 +19,9 @@ import * as centrs from "../../src/index.ts";
 /**
  * Q2 block / scope-brace anchor tests (phase 0.5, #185/#186).
  *
- * Promoted from the throwaway lab probes `.scratch/explain-lab-blocktree.ts`
- * (the SUT) and `.scratch/explain-lab-q2-corners.ts` (the constructed corners,
- * two CHR-confirmed against `:parse` IL on 7.23.2). The production module is
+ * Promoted from the phase-0 lab for Q2 (#185) — the SUT probe and the
+ * constructed corners (two CHR-confirmed against `:parse` IL on 7.23.2).
+ * The lab sources are history (see #185), not runnable methods. The production module is
  * `src/explain/blocks.ts`; it ships only the non-recursive scope-classification
  * primitives (the recursive block-tree/topology surface stays in the lab until
  * it can be promoted with a bounded traversal of its own).

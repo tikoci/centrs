@@ -26,8 +26,8 @@ type FixtureEntry = {
 
 /**
  * Fixtures are REAL console responses captured from stock CHR 7.23.3 over
- * mac-telnet (`.scratch/mactelnet-*.ts` probes), plus the 7.23.3 parse-oracle
- * sweep in `.scratch/cliref-research/parse-oracle.json` (GH#230). `P` is the
+ * mac-telnet (lab probes, history — see GH#230), plus the 7.23.3 parse-oracle
+ * sweep (lab research capture, history — see GH#230). `P` is the
  * prompt; `TAIL` reproduces RouterOS's trailing prompt redraw (4×CR, prompt,
  * space padding, CR, prompt) so the extractor is pinned against the device's
  * actual line discipline.

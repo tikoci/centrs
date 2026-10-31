@@ -15,9 +15,10 @@ import * as centrs from "../../src/index.ts";
 /**
  * Q13 symbol-scope anchor tests (phase 0.5, #185/#186).
  *
- * Promoted from the throwaway lab probe `.scratch/explain-lab-symbols.ts` (the
- * SUT) and its 22 constructed corners, scored against the device's own
- * per-occurrence highlight streams as oracle. The production module is
+ * Promoted from the phase-0 lab for Q13 (#185) — the SUT probe and its 22
+ * constructed corners, scored against the device's own per-occurrence
+ * highlight streams as oracle; the lab sources are history (see #185), not
+ * runnable methods. The production module is
  * `src/explain/symbols.ts`.
  *
  * The ratified answer these tests pin is an ABSTENTION rule, so the strongest
@@ -610,8 +611,8 @@ describe("explain/symbols — invariants", () => {
  * known limit).
  *
  * Every expectation below is the device's own reading on CHR 7.23.2 (build
- * 2026-07-03), captured by `.scratch/explain-201-k1-chr-probe.ts` and its
- * round-2 companion. The claim carried on #201 was measured from a MID-statement
+ * 2026-07-03), captured by the #201 K1 CHR probes and their round-2 companion
+ * (lab sources, history — see #201). The claim carried on #201 was measured from a MID-statement
  * bracket and generalized to all of them; the device splits them:
  *
  *   - a statement-LEADING `[` is TRANSPARENT — the names declared inside escape;
@@ -1075,7 +1076,7 @@ describe("explain/symbols — F7 declaration claim (#201)", () => {
 		// The quoted branch used to call `bind` in the enclosing scope and set
 		// `declaredHere` unconditionally, which broke every F7 rule for this
 		// spelling. Found in review by CodeRabbit and Codex independently; each
-		// row below is CHR 7.23.2 (`.scratch/explain-201-review-chr-probe.ts`).
+		// row below is CHR 7.23.2 (review CHR probe, lab history — see #201).
 		//
 		// A quoted loop variable does not outlive its statement…
 		expect(classes(':foreach "i" in={1} do={:put 1}\n:put $"i"')).toEqual([

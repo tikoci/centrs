@@ -21,6 +21,10 @@ import {
 // cspell:ignore nosaved owne mygroup mycomment nopassword
 
 const fixtureRoot = new URL("../fixtures/winbox-cdb/", import.meta.url);
+// Workstation-local encrypted samples (saved from WinBox by hand, never
+// committed): the tests below gate on their presence with `test.if(present)`,
+// so a fresh clone skips them. They are supported in-flight output, not a
+// required fixture — no durable claim depends on them.
 const manualEncryptedRoot = new URL(
 	"../../.scratch/winbox-cdb-encrypted-manually/",
 	import.meta.url,

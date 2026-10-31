@@ -58,8 +58,8 @@ async function parseFails(
  * `expected .* value`) keeps forms like `expected end of command` and
  * `bad command name` on the reject side — a narrower pattern would score a real
  * rejection as an acceptance and silently weaken every grounding assertion
- * below (#254 review). Same predicate as the corpus audit in
- * `.scratch/explain-252-escape-corpus-audit.ts`.
+ * below (#254 review). Same predicate as the #252 corpus audit (lab history
+ * — see #252); the audit's verdicts are re-established live by the tests below.
  */
 const CONSOLE_REJECTION =
 	/^(syntax error|expected |missing |invalid |unknown |unexpected |no such |bad )/i;

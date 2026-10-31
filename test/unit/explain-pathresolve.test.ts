@@ -14,10 +14,10 @@ import * as centrs from "../../src/index.ts";
 /**
  * Q3/Q4 path-resolution anchor tests (phase 0.5, #185/#186).
  *
- * Promoted from the throwaway lab probe `.scratch/explain-lab-pathresolve.ts`
- * (the SUT) and the constructed corners `.scratch/explain-lab-q3-corners.ts` /
- * `-q4-corners.ts` (several CHR-confirmed against `:parse` IL on 7.23.2 and
- * 7.24rc2). The production module is `src/explain/pathresolve.ts`; only the
+ * Promoted from the phase-0 lab for Q3/Q4 (#185) — the SUT probe and the
+ * constructed Q3/Q4 corners (several CHR-confirmed against `:parse` IL on
+ * 7.23.2 and 7.24rc2); the lab sources are history (see #185), not runnable
+ * methods. The production module is `src/explain/pathresolve.ts`; only the
  * ratified `stateful` context model is promoted (the A/B arms stayed in the
  * lab). It sits on the Q1 segmenter (#189) and the Q2 scope classifier.
  *

@@ -16,9 +16,10 @@ import * as centrs from "../../src/index.ts";
 /**
  * Q6 verb/menu boundary anchor tests (phase 0.5, #185/#186).
  *
- * Promoted from the throwaway lab probe `.scratch/explain-lab-verbsplit.ts` (the
- * SUT) and its constructed corners `.scratch/explain-lab-q6-corners.ts` (each
- * cross-checked against the device command tree as oracle). The production
+ * Promoted from the phase-0 lab for Q6 (#185) — the SUT probe and its
+ * constructed corners (each cross-checked against the device command tree
+ * as oracle); the lab sources are history (see #185), not runnable methods.
+ * The production
  * module is `src/explain/verbsplit.ts`; only the ratified `proposed` boundary
  * arm is promoted — the six A/B arms that priced it stayed in the lab.
  *

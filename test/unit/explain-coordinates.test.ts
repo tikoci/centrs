@@ -13,7 +13,8 @@ import * as centrs from "../../src/index.ts";
 /**
  * Q15 coordinate-contract anchor + property tests (phase 0.5, #185/#186).
  *
- * Promoted from the throwaway lab probe `.scratch/explain-lab-q15-coords.ts`:
+ * Promoted from the phase-0 lab for Q15 (#185); the lab probe is history
+ * (see #185), not a runnable method:
  * the frozen fixture inputs and golden expectations live in
  * `test/fixtures/explain/coordinates.json`, and the production coordinate
  * mapper under test is `src/explain/coordinates.ts`. The six invariants

@@ -22,9 +22,9 @@ import * as centrs from "../../src/index.ts";
 /**
  * Q1 statement-segmentation anchor tests (phase 0.5, #185/#186).
  *
- * Promoted from the throwaway lab probes `.scratch/explain-lab-segmenter.ts`
- * (the SUT) and `.scratch/explain-lab-q1-corners.ts` (the constructed corners,
- * several CHR-confirmed against `:parse` IL on 7.23.2). The production
+ * Promoted from the phase-0 lab for Q1 (#185) — the SUT probe and the
+ * constructed corners (several CHR-confirmed against `:parse` IL on 7.23.2);
+ * the lab sources are history (see #185), not runnable methods. The production
  * segmenter is `src/explain/segment.ts`; it runs on the `analyzed` surface from
  * `src/explain/coordinates.ts`, so segment spans are analyzed-byte offsets that
  * line up with the coordinate contract shipped in #188.
@@ -618,7 +618,7 @@ describe("scanQuotedString — substitution frames inside a string", () => {
 	});
 
 	// #215 — every expectation below is a `/console/inspect request=highlight`
-	// reading from CHR 7.23.3 (`.scratch/explain-215-verify-probe{,2}.ts`). The
+	// reading from CHR 7.23.3 (lab probes, history — see #215). The
 	// device's comment class covers the line's newline as well; a `comments` span
 	// here stops before it, which is this module's own long-standing convention
 	// (an ordinary `# x\n` comment is recorded the same way).

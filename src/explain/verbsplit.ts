@@ -1,8 +1,8 @@
 /**
  * Verb / menu boundary resolution for `explain` (centrs canonicalizer).
  *
- * Ratified by the phase-0 lab, question Q6 (#185) and promoted from the
- * throwaway probe `.scratch/explain-lab-verbsplit.ts`. Q6 asks the residual the
+ * Ratified by the phase-0 lab, question Q6 (#185); the lab probe it was
+ * promoted from is history (see #185), not a runnable method. Q6 asks the residual the
  * path resolver (Q3/Q4) deliberately left open: within a statement's leading
  * path run, where does the MENU end and the VERB begin — and when must offline
  * refuse to guess? `pathresolve.ts` reports a greedy full-run `path` plus the

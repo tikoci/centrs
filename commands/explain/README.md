@@ -3294,8 +3294,12 @@ export styles in general: the captures come from one synthetic configuration on
 CHR, which has a single NIC and no switch or wireless hardware, so its defconf
 and its available menus differ from any real device's. Treat the provenance
 label as **L1-emitted, L2-refuted for these captures on CHR**. Harness and
-per-document results: `.scratch/explain-lab-q203-import-verify.ts`;
-validity check: `.scratch/q203-blocker-validity.ts`.
+per-document results: the q203 import-verify lab (history — see #203; its
+scripts and corpora were never promoted, so the counts above rest on those
+lab captures). Validity check: `bun run explain:probe:import-blocker-validity`
+(promoted from the q203 lab for #272; replays the four blockers plus the
+three rejecting controls through `:parse` and `highlight` on a disposable
+CHR per version).
 
 **Non-blocking / deferred (not ratification-gating):** Q5 expression depth, Q7
 tokenizer corners, Q9 potential-command taxonomy, Q12 span-vocabulary draft —

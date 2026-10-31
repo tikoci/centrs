@@ -1,8 +1,8 @@
 /**
  * Block / scope-brace classification for `explain` (centrs canonicalizer).
  *
- * Ratified by the phase-0 lab, question Q2 (#185) and promoted from the
- * throwaway probe `.scratch/explain-lab-blocktree.ts`. Q2 asks: can an offline,
+ * Ratified by the phase-0 lab, question Q2 (#185); the lab probe it was
+ * promoted from is history (see #185), not a runnable method. Q2 asks: can an offline,
  * schema-free brace tracker tell a `{…}` SCOPE (`do=`/`else=`/`on-error=`, which
  * IL lowers to `name=;(evl …)`) from a `name={…}` LITERAL value (braces
  * stripped, body kept as RAW text, never lowered)? Descending into a literal

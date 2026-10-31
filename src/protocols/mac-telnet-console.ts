@@ -6,8 +6,8 @@
  * layer drives the RouterOS console the way a terminal would and reconstructs
  * the "screen", then strips the echoed command and the trailing prompt.
  *
- * Everything here is grounded on stock CHR 7.23.1 (probes in `.scratch/`,
- * captured while wiring `execute / mac-telnet`):
+ * Everything here is grounded on stock CHR 7.23.1 (lab probes, history —
+ * captured while wiring `execute / mac-telnet`, see GH#230):
  *
  *   - **Terminal-size probe at login.** The console emits a multi-step ANSI
  *     cursor probe: `ESC[9999B`/`ESC[9999C` (move to find the edges), `ESC[H`,
