@@ -16,14 +16,14 @@
  * (`haakonnessjoen/MAC-Telnet`, © Yandex 2022), cross-checked against the WinBox
  * EC-SRP5 reference (`Lab/winbox-terminal-protocol`) and `tikoci/m2ir`'s
  * `winbox-ipc/ec-srp5-handshake.yaml` (derived from MarginResearch's PoC). The
- * curve constants, point encoding, identity hash, and proof derivation match all
- * three, and the proof is accepted by real RouterOS over the MAC-Telnet L2
- * harness.
+ * curve constants, point encoding and identity hash match all three.
  *
- * RouterOS `libucrypto.so` 6.49.23/7.25 and live CHR discriminators establish
- * minimal-length BigNum encodings for REDP1 loop hashes and shared `z` (#565).
- * Public-key X and the REDP1 input remain fixed at 32 bytes. Reference vectors
- * and provenance live in `test/fixtures/ec-srp5.json`.
+ * The hash inputs do not: `mtwei.c` pads the REDP1 loop seed and shared `z` to
+ * 32 bytes (`BN_bn2binpad`), but RouterOS hashes them minimal-length (#565).
+ * Grounded in `libucrypto.so` 6.49.23/7.25 and live CHR A/B runs over WinBox,
+ * btest and MAC-Telnet, where the padded proof is rejected whenever the two
+ * forms differ. Public-key X and the REDP1 input stay fixed at 32 bytes.
+ * Reference vectors and provenance live in `test/fixtures/ec-srp5.json`.
  */
 
 import { createHash, randomBytes } from "node:crypto";

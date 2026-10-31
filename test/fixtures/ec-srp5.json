@@ -2,7 +2,7 @@
 	"source": "https://github.com/tikoci/centrs/issues/565",
 	"provenance": "Synthetic test scalars, not device credentials. Short-z vector from tikoci/m2ir work/2026-10-chr-extraction/srp5-minimal-vector.json; REDP1 vectors independently calculated with its ws3c/ec-srp5.ts minimal-length discriminator. RouterOS encoding grounded by libucrypto.so 6.49.23/7.25 and WS-3C live campaign; these deterministic transcripts are calculated, not captured live.",
 	"shortZ": {
-		"note": "EC-SRP5 minimal-vs-padded divergence vector (z edge). Minimal-length per libucrypto (redp1 loop bin(), z bin()); padded-32 per centrs/mtwei.c. Expected (RouterOS): minimal values.",
+		"note": "EC-SRP5 minimal-vs-padded divergence vector (z edge). Minimal-length per libucrypto (redp1 loop bin(), z bin()); padded-32 per mtwei.c and centrs before #565. Expected (RouterOS): minimal values.",
 		"username": "admin",
 		"password": "",
 		"salt": "e87aec79f28724caab60153c65ac69b3",
@@ -22,17 +22,7 @@
 		"clientConfirmMinimal": "5c1d1843dfc9c40a4a852f882aecec2e51d9655b29cd97d2039fc0f48e549e83",
 		"clientConfirmPadded": "a6a07a4b3e4f0084164d9cecc0fe20b4324923e3c81231bbdfa4b675c6fadd59",
 		"serverConfirmMinimal": "a219db7dd741a6c60d4781117f79741cfa2bd10e10bba194e24aaf1a031001b0",
-		"serverConfirmPadded": "1700905944494b284d0ffdfa9b54e0f0ed871ba16fa626710227cda1b4fb9a77",
-		"centrsClientZ": "00c7b4305a7c6bfa8db96b3c5270d27a1cedd53ad9ccbc4876da345ad200988f",
-		"centrsClientConfirm": "a6a07a4b3e4f0084164d9cecc0fe20b4324923e3c81231bbdfa4b675c6fadd59",
-		"centrsServerZ": "00c7b4305a7c6bfa8db96b3c5270d27a1cedd53ad9ccbc4876da345ad200988f",
-		"centrsServerConfirm": "1700905944494b284d0ffdfa9b54e0f0ed871ba16fa626710227cda1b4fb9a77",
-		"checks": {
-			"serverKeyMatchesCentrs": true,
-			"centrsZEqualsPadded": true,
-			"centrsConfirmEqualsPadded": true,
-			"minimalDiffersPadded": true
-		}
+		"serverConfirmPadded": "1700905944494b284d0ffdfa9b54e0f0ed871ba16fa626710227cda1b4fb9a77"
 	},
 	"redp1": [
 		{

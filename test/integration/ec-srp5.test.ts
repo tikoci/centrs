@@ -45,7 +45,17 @@ describeFast("EC-SRP5 minimal-length RouterOS discriminators (#565)", () => {
 	test("RouterOS proofs use minimal REDP1/z and retain the REDP1 input's zero byte", async () => {
 		const started = await startIntegrationChr();
 		try {
-			for (const vector of vectors.redp1) {
+			// Each case isolates one edge: the two REDP1 vectors keep a random z,
+			// and the last case forces a short z on top of the redp1-input vector.
+			const cases = [
+				...vectors.redp1.map((vector) => ({ vector, shortZ: false })),
+				{
+					vector: vectors.redp1.find((v) => v.edge === "redp1-input"),
+					shortZ: true,
+				},
+			];
+			for (const { vector, shortZ } of cases) {
+				if (!vector) throw new Error("missing redp1-input vector");
 				let socket: Socket | undefined;
 				const peer = Promise.withResolvers<void>();
 				const deadline = setTimeout(
@@ -71,7 +81,7 @@ describeFast("EC-SRP5 minimal-length RouterOS discriminators (#565)", () => {
 						let publicKey = ecSrp5ServerPublicKey(privateKey, validator);
 						expect(publicKey).toEqual(fromHex(vector.serverKeyBlinded));
 
-						if (vector.edge === "redp1-input") {
+						if (shortZ) {
 							// Choose a short z after seeing the real client's ephemeral key.
 							// Cache gamma and advance sB*G to keep this bounded search fast.
 							const gamma = scalarMul(validator, ecSrp5Curve.G);
@@ -105,8 +115,7 @@ describeFast("EC-SRP5 minimal-length RouterOS discriminators (#565)", () => {
 							hello.publicKey,
 							publicKey,
 						);
-						if (vector.edge === "redp1-input")
-							expect(shared.z.length).toBeLessThan(32);
+						if (shortZ) expect(shared.z.length).toBeLessThan(32);
 						await channel.write(
 							encodeServerChallenge(publicKey, fromHex(vector.salt)),
 						);
@@ -121,7 +130,7 @@ describeFast("EC-SRP5 minimal-length RouterOS discriminators (#565)", () => {
 						// btest suites cover confirmation and throughput in both roles.
 						channel.close();
 						console.log(
-							`  ${vector.edge}: RouterOS proof verified, z=${shared.z.length}B`,
+							`  ${vector.edge}${shortZ ? "+short-z" : ""}: RouterOS proof verified, z=${shared.z.length}B`,
 						);
 					})().then(peer.resolve, peer.reject);
 				});
