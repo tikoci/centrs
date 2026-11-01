@@ -1,0 +1,262 @@
+{
+	"_source": "Recorded by `bun run explain:probe:import-dry-run 7.24.5` (scripts/probes/explain-import-dry-run.ts) on stock CHR 7.24.5 x86, 2026-10-31, replicated on a second full-matrix pass with identical outcomes. One disposable quickchr CHR per import run, destroyed after; uploads were verbatim bytes. Re-run that command to reproduce; per-run captures stay in `.scratch/`. Docs consulted first: RouterOS manual Scripting#import (verbose=yes dry-run, #line echo, error summary). No router is needed to read this file.",
+	"routerosVersion": "7.24.5",
+	"arch": "x86",
+	"files": [
+		{
+			"name": "good.rsc",
+			"intent": "two valid adds; plain/verbose must apply both, dry-run must apply neither",
+			"sha256": "24710072c7b4d43f46a00c8b6924a21faac358abbce0b0b37578bb4096bd8fe9",
+			"bytes": 175,
+			"input": "/ip firewall address-list add list=probe-520 address=192.0.2.1/32 comment=probe-520-a\n/ip firewall address-list add list=probe-520 address=198.51.100.7/32 comment=probe-520-b\n"
+		},
+		{
+			"name": "mixed.rsc",
+			"intent": "valid, bad command, valid; fail-fast shape, error multiplicity and coordinates",
+			"sha256": "1820f6b2c189ff5ddddb05fd2c19c2c0409d04365d79ab9fd7a48750124cc22c",
+			"bytes": 196,
+			"input": "/ip firewall address-list add list=probe-520 address=192.0.2.9/32 comment=probe-520-c\nthis is not a command\n/ip firewall address-list add list=probe-520 address=203.0.113.4/32 comment=probe-520-d\n"
+		},
+		{
+			"name": "side-fx.rsc",
+			"intent": "harmless observable controls for what dry-run executes vs skips: identity rename plus one add",
+			"sha256": "a87988ae5ff861a48d270c023eb0c51d70fb237f646c5eebac08d093b04938fd",
+			"bytes": 131,
+			"input": "/system identity set name=probe-520-side-fx\n/ip firewall address-list add list=probe-520 address=192.0.2.99/32 comment=probe-520-e\n"
+		}
+	],
+	"static": {
+		"good.rsc": {
+			"parseOutput": "(evl /ip/firewall/address-list/addaddress=192.0.2.1/32;comment=probe-520-a;list=probe-520);(evl /ip/firewall/address-list/addaddress=198.51.100.7/32;comment=probe-520-b;list=probe-520)",
+			"parseMs": 6,
+			"highlight": [
+				{
+					"input": "/ip firewall address-list add list=probe-520 address=192.0.2.1/32 comment=probe-520-a",
+					"errorClasses": 0,
+					"rawBytes": 438,
+					"ms": 8
+				},
+				{
+					"input": "/ip firewall address-list add list=probe-520 address=198.51.100.7/32 comment=probe-520-b",
+					"errorClasses": 0,
+					"rawBytes": 453,
+					"ms": 3
+				}
+			]
+		},
+		"mixed.rsc": {
+			"parseOutput": "(evl /ip/firewall/address-list/addaddress=192.0.2.9/32;comment=probe-520-c;list=probe-520);(<%% bad command name this (line 2 column 1) this;is;not;a;command);(evl /ip/firewall/address-list/addaddress=203.0.113.4/32;comment=probe-520-d;list=probe-520)",
+			"parseMs": 4,
+			"highlight": [
+				{
+					"input": "/ip firewall address-list add list=probe-520 address=192.0.2.9/32 comment=probe-520-c",
+					"errorClasses": 0,
+					"rawBytes": 438,
+					"ms": 3
+				},
+				{
+					"input": "this is not a command",
+					"errorClasses": 0,
+					"rawBytes": 173,
+					"ms": 2
+				},
+				{
+					"input": "/ip firewall address-list add list=probe-520 address=203.0.113.4/32 comment=probe-520-d",
+					"errorClasses": 0,
+					"rawBytes": 448,
+					"ms": 4
+				}
+			]
+		},
+		"side-fx.rsc": {
+			"parseOutput": "(evl /system/identity/setname=probe-520-side-fx);(evl /ip/firewall/address-list/addaddress=192.0.2.99/32;comment=probe-520-e;list=probe-520)",
+			"parseMs": 2,
+			"highlight": [
+				{
+					"input": "/system identity set name=probe-520-side-fx",
+					"errorClasses": 0,
+					"rawBytes": 236,
+					"ms": 2
+				},
+				{
+					"input": "/ip firewall address-list add list=probe-520 address=192.0.2.99/32 comment=probe-520-e",
+					"errorClasses": 0,
+					"rawBytes": 443,
+					"ms": 3
+				}
+			]
+		}
+	},
+	"findings": [
+		"dry-run executes nothing: good.rsc reports `No syntax errors found in the import file` with empty state; side-fx.rsc leaves identity `CHR` and creates no entries.",
+		"verbose=yes alone APPLIES the import (entries created, identity renamed) — verbose is output detail, not a dry run.",
+		"plain and verbose imports are fail-fast: mixed.rsc stops at `bad command name this (line 2 column 1)` having applied only line 1; line 3 never runs.",
+		"dry-run scans the whole file and counts: mixed.rsc echoes all three `#line` blocks then `Script Error: found 1 error(s) in import file`; plain/verbose stop at the first error with no count.",
+		"coordinates travel with the error in every mode: `bad command name this (line 2 column 1)`.",
+		"cost on this lab: uploads ~180-1600ms on first touch, probes 2-8ms, imports 14-22ms; captures are per-run JSON in `.scratch/`."
+	],
+	"runs": [
+		{
+			"file": "good.rsc",
+			"variant": "dry-run",
+			"command": "/import file-name=good.rsc verbose=yes dry-run",
+			"importMs": 20,
+			"importOutput": {
+				"output": "#line 1\r\n/ip firewall address-list add list=probe-520 address=192.0.2.1/32 comment=probe-520-a\r\n#line 2\r\n/ip firewall address-list add list=probe-520 address=198.51.100.7/32 comment=probe-520-b\r\nNo syntax errors found in the import file",
+				"via": "rest"
+			},
+			"stateOutput": {
+				"output": "",
+				"via": "rest"
+			},
+			"identityOutput": {
+				"output": "  name: CHR",
+				"via": "rest"
+			}
+		},
+		{
+			"file": "good.rsc",
+			"variant": "verbose",
+			"command": "/import file-name=good.rsc verbose=yes",
+			"importMs": 20,
+			"importOutput": {
+				"output": "#line 1\r\n/ip firewall address-list add list=probe-520 address=192.0.2.1/32 comment=probe-520-a\r\n#line 2\r\n/ip firewall address-list add list=probe-520 address=198.51.100.7/32 comment=probe-520-b",
+				"via": "rest"
+			},
+			"stateOutput": {
+				"output": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS       CREATION-TIME      \r\n;;; probe-520-a\r\n0 probe-520  192.0.2.1     2026-10-31 19:27:19\r\n;;; probe-520-b\r\n1 probe-520  198.51.100.7  2026-10-31 19:27:19",
+				"via": "rest"
+			},
+			"identityOutput": {
+				"output": "  name: CHR",
+				"via": "rest"
+			}
+		},
+		{
+			"file": "good.rsc",
+			"variant": "plain",
+			"command": "/import file-name=good.rsc",
+			"importMs": 17,
+			"importOutput": {
+				"output": "Script file loaded and executed successfully",
+				"via": "rest"
+			},
+			"stateOutput": {
+				"output": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS       CREATION-TIME      \r\n;;; probe-520-a\r\n0 probe-520  192.0.2.1     2026-10-31 19:27:42\r\n;;; probe-520-b\r\n1 probe-520  198.51.100.7  2026-10-31 19:27:42",
+				"via": "rest"
+			},
+			"identityOutput": {
+				"output": "  name: CHR",
+				"via": "rest"
+			}
+		},
+		{
+			"file": "mixed.rsc",
+			"variant": "dry-run",
+			"command": "/import file-name=mixed.rsc verbose=yes dry-run",
+			"importMs": 21,
+			"importOutput": {
+				"output": "#line 1\r\n/ip firewall address-list add list=probe-520 address=192.0.2.9/32 comment=probe-520-c\r\n#line 2\r\nthis is not a command\r\nbad command name this (line 2 column 1)\r\n#line 3\r\n/ip firewall address-list add list=probe-520 address=203.0.113.4/32 comment=probe-520-d\r\nScript Error: found 1 error(s) in import file",
+				"via": "rest"
+			},
+			"stateOutput": {
+				"output": "",
+				"via": "rest"
+			},
+			"identityOutput": {
+				"output": "  name: CHR",
+				"via": "rest"
+			}
+		},
+		{
+			"file": "mixed.rsc",
+			"variant": "verbose",
+			"command": "/import file-name=mixed.rsc verbose=yes",
+			"importMs": 22,
+			"importOutput": {
+				"output": "#line 1\r\n/ip firewall address-list add list=probe-520 address=192.0.2.9/32 comment=probe-520-c\r\n#line 2\r\nthis is not a command\r\nScript Error: bad command name this (line 2 column 1)",
+				"via": "rest"
+			},
+			"stateOutput": {
+				"output": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS    CREATION-TIME      \r\n;;; probe-520-c\r\n0 probe-520  192.0.2.9  2026-10-31 19:28:28",
+				"via": "rest"
+			},
+			"identityOutput": {
+				"output": "  name: CHR",
+				"via": "rest"
+			}
+		},
+		{
+			"file": "mixed.rsc",
+			"variant": "plain",
+			"command": "/import file-name=mixed.rsc",
+			"importMs": 15,
+			"importOutput": {
+				"output": "Script Error: bad command name this (line 2 column 1) (:import; line 1)",
+				"via": "rest"
+			},
+			"stateOutput": {
+				"output": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS    CREATION-TIME      \r\n;;; probe-520-c\r\n0 probe-520  192.0.2.9  2026-10-31 19:28:51",
+				"via": "rest"
+			},
+			"identityOutput": {
+				"output": "  name: CHR",
+				"via": "rest"
+			}
+		},
+		{
+			"file": "side-fx.rsc",
+			"variant": "dry-run",
+			"command": "/import file-name=side-fx.rsc verbose=yes dry-run",
+			"importMs": 18,
+			"importOutput": {
+				"output": "#line 1\r\n/system identity set name=probe-520-side-fx\r\n#line 2\r\n/ip firewall address-list add list=probe-520 address=192.0.2.99/32 comment=probe-520-e\r\nNo syntax errors found in the import file",
+				"via": "rest"
+			},
+			"stateOutput": {
+				"output": "",
+				"via": "rest"
+			},
+			"identityOutput": {
+				"output": "  name: CHR",
+				"via": "rest"
+			}
+		},
+		{
+			"file": "side-fx.rsc",
+			"variant": "verbose",
+			"command": "/import file-name=side-fx.rsc verbose=yes",
+			"importMs": 21,
+			"importOutput": {
+				"output": "#line 1\r\n/system identity set name=probe-520-side-fx\r\n#line 2\r\n/ip firewall address-list add list=probe-520 address=192.0.2.99/32 comment=probe-520-e",
+				"via": "rest"
+			},
+			"stateOutput": {
+				"output": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS     CREATION-TIME      \r\n;;; probe-520-e\r\n0 probe-520  192.0.2.99  2026-10-31 19:29:37",
+				"via": "rest"
+			},
+			"identityOutput": {
+				"output": "  name: probe-520-side-fx",
+				"via": "rest"
+			}
+		},
+		{
+			"file": "side-fx.rsc",
+			"variant": "plain",
+			"command": "/import file-name=side-fx.rsc",
+			"importMs": 14,
+			"importOutput": {
+				"output": "Script file loaded and executed successfully",
+				"via": "rest"
+			},
+			"stateOutput": {
+				"output": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS     CREATION-TIME      \r\n;;; probe-520-e\r\n0 probe-520  192.0.2.99  2026-10-31 19:30:00",
+				"via": "rest"
+			},
+			"identityOutput": {
+				"output": "  name: probe-520-side-fx",
+				"via": "rest"
+			}
+		}
+	]
+}
