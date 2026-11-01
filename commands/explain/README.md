@@ -3084,7 +3084,7 @@ and version scope it was decided from, and an actionable next step:
 {
   "finding": "topic/plaintext-management-service",
   "statement": "s0",
-  "span": { "start": 0, "end": 31 },
+  "span": { "start": 0, "end": 34 },
   "severity": "high",
   "certainty": "decided-from-source",
   "evidence": ["canonicalizer: resolved verb `set` at `/ip/service`"],
