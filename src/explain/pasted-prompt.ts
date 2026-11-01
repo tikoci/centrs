@@ -29,11 +29,13 @@ import { type Segment, segmentStatements } from "./segment.ts";
  * candidate is the literal text after `>` (it runs in that menu's context
  * on the device, not from the root).
  *
- * A pasted line may join statements with `;`, which the segmenter splits:
- * `[x@h] > :put 1; :put 2` is two segments, but the repair must keep both.
- * The candidate therefore extends along `;`-terminated followers (same
- * pasted line, re-joined with `; `), stopping at a newline boundary or at a
- * follower that starts with its own prompt — that one gets its own hit.
+ * The candidate is the prompt-stripped tail of the ORIGINAL input — separators,
+ * blocks and newlines preserved verbatim — bounded by the next pasted prompt
+ * or the end of input, so each prompt in a transcript gets its own repair.
+ * Reconstructing from segment texts would flatten `{ ... }` blocks and drop
+ * whatever follows them. The slice needs analyzed-byte offsets as JS indices,
+ * which hold only when the segmentation reports `ascii`; otherwise the
+ * per-segment candidate stands (narrow, never wrong).
  */
 const BRACKET_PROMPT_RE = /^\[[^[\]\r\n]*@[^[\]\r\n]*\]\s*>\s*([\s\S]*)$/;
 const MENU_PROMPT_RE = /^(\/[A-Za-z0-9_\-/]+)\s*>\s*([\s\S]*)$/;
@@ -44,48 +46,80 @@ export interface PastedPromptHit {
 	candidate: string;
 }
 
+interface StrippedPrompt {
+	shape: "bracket" | "menu";
+	menu?: string;
+	/** Length of the prompt prefix within the segment text. */
+	promptEnd: number;
+	candidate: string;
+}
+
 export function detectPastedPrompts(input: string): PastedPromptHit[] {
 	const hits: PastedPromptHit[] = [];
 	let segments: Segment[];
+	let ascii: boolean;
 	try {
-		segments = segmentStatements(input).segments;
+		const result = segmentStatements(input);
+		segments = result.segments;
+		ascii = result.ascii;
 	} catch {
 		return hits;
 	}
-	const stripped = segments.map((segment) => {
-		const text = segment.text;
-		if (text.length === 0) return null;
-		const bracket = BRACKET_PROMPT_RE.exec(text);
-		if (bracket !== null) {
-			const candidate = (bracket[1] ?? "").trim();
-			return candidate.length > 0
-				? { shape: "bracket" as const, candidate }
-				: null;
-		}
-		const menu = MENU_PROMPT_RE.exec(text);
-		if (menu !== null) {
-			const candidate = (menu[2] ?? "").trim();
-			return candidate.length > 0
-				? { shape: "menu" as const, menu: menu[1], candidate }
-				: null;
-		}
-		return null;
-	});
+	// Per-segment prompt match. A bare prompt with no command ("prompt-empty")
+	// earns no hit but still bounds the previous hit's region.
+	const stripped: (StrippedPrompt | "prompt-empty" | null)[] = segments.map(
+		(segment) => {
+			const text = segment.text;
+			if (text.length === 0) return null;
+			const bracket = BRACKET_PROMPT_RE.exec(text);
+			if (bracket !== null) {
+				const group = bracket[1] ?? "";
+				return group.trim().length > 0
+					? {
+							shape: "bracket",
+							promptEnd: text.length - group.length,
+							candidate: group.trim(),
+						}
+					: "prompt-empty";
+			}
+			const menu = MENU_PROMPT_RE.exec(text);
+			if (menu !== null) {
+				const group = menu[2] ?? "";
+				return group.trim().length > 0
+					? {
+							shape: "menu",
+							menu: menu[1],
+							promptEnd: text.length - group.length,
+							candidate: group.trim(),
+						}
+					: "prompt-empty";
+			}
+			return null;
+		},
+	);
 	for (let i = 0; i < segments.length; i++) {
 		const hit = stripped[i];
-		if (hit === null || hit === undefined) continue;
+		if (hit === null || hit === undefined || hit === "prompt-empty") continue;
 		let candidate = hit.candidate;
-		let j = i;
-		while (
-			segments[j]?.terminator === ";" &&
-			j + 1 < segments.length &&
-			stripped[j + 1] === null &&
-			(segments[j + 1]?.text.length ?? 0) > 0
-		) {
-			j += 1;
-			candidate += `; ${segments[j]?.text ?? ""}`;
+		if (ascii) {
+			const segment = segments[i];
+			let end = input.length;
+			for (let j = i + 1; j < segments.length; j++) {
+				if (stripped[j] !== null && stripped[j] !== undefined) {
+					end = segments[j]?.start ?? end;
+					break;
+				}
+			}
+			const sliced = input
+				.slice((segment?.start ?? 0) + hit.promptEnd, end)
+				.trim();
+			if (sliced.length > 0) candidate = sliced;
 		}
-		hits.push({ ...hit, candidate });
+		hits.push(
+			hit.shape === "bracket"
+				? { shape: hit.shape, candidate }
+				: { shape: hit.shape, menu: hit.menu, candidate },
+		);
 	}
 	return hits;
 }

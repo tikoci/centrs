@@ -61,4 +61,23 @@ describe("explain pasted-prompt repair (#370)", () => {
 		expect(tips[0]?.fix).not.toContain(":put 2");
 		expect(tips[1]?.fix).toContain(":put 2");
 	});
+
+	test("a block after the prompt keeps its braces and followers", () => {
+		const tips = pastedTips("[admin@x] > :put 1; { :put 2 }; :put 3");
+		expect(tips).toHaveLength(1);
+		expect(tips[0]?.fix).toContain(":put 1; { :put 2 }; :put 3");
+	});
+
+	test("a newline after the prompt is preserved, not ;-joined", () => {
+		const tips = pastedTips("[admin@x] > :put 1;\n:put 2");
+		expect(tips).toHaveLength(1);
+		expect(tips[0]?.fix).toContain(":put 1;\n:put 2");
+	});
+
+	test("non-ascii input falls back to the prompt's own segment", () => {
+		const tips = pastedTips('[admin@x] > :put "héllo"; :put 2');
+		expect(tips).toHaveLength(1);
+		expect(tips[0]?.fix).toContain(':put "héllo"');
+		expect(tips[0]?.fix).not.toContain(":put 2");
+	});
 });
