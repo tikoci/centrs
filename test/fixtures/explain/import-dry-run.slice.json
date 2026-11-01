@@ -1,5 +1,5 @@
 {
-	"_source": "Recorded by `bun run explain:probe:import-dry-run 7.24.5` (scripts/probes/explain-import-dry-run.ts) on stock CHR 7.24.5 x86, 2026-10-31, replicated on a second full-matrix pass with identical outcomes. One disposable quickchr CHR per import run, destroyed after; uploads were verbatim bytes. Re-run that command to reproduce; per-run captures stay in `.scratch/`. Docs consulted first: RouterOS manual Scripting#import (verbose=yes dry-run, #line echo, error summary). No router is needed to read this file.",
+	"_source": "Written by `bun run explain:probe:import-dry-run 7.24.5` (scripts/probes/explain-import-dry-run.ts) on stock CHR 7.24.5 x86, 2026-11-01, and copied here unedited. One disposable quickchr CHR per import run, destroyed after; uploads were verbatim bytes. No router is needed to read this file.",
 	"routerosVersion": "7.24.5",
 	"arch": "x86",
 	"files": [
@@ -7,255 +7,686 @@
 			"name": "good.rsc",
 			"intent": "two valid adds; plain/verbose must apply both, dry-run must apply neither",
 			"sha256": "24710072c7b4d43f46a00c8b6924a21faac358abbce0b0b37578bb4096bd8fe9",
-			"bytes": 175,
 			"input": "/ip firewall address-list add list=probe-520 address=192.0.2.1/32 comment=probe-520-a\n/ip firewall address-list add list=probe-520 address=198.51.100.7/32 comment=probe-520-b\n"
 		},
 		{
 			"name": "mixed.rsc",
 			"intent": "valid, bad command, valid; fail-fast shape, error multiplicity and coordinates",
 			"sha256": "1820f6b2c189ff5ddddb05fd2c19c2c0409d04365d79ab9fd7a48750124cc22c",
-			"bytes": 196,
 			"input": "/ip firewall address-list add list=probe-520 address=192.0.2.9/32 comment=probe-520-c\nthis is not a command\n/ip firewall address-list add list=probe-520 address=203.0.113.4/32 comment=probe-520-d\n"
 		},
 		{
 			"name": "side-fx.rsc",
 			"intent": "harmless observable controls for what dry-run executes vs skips: identity rename plus one add",
 			"sha256": "a87988ae5ff861a48d270c023eb0c51d70fb237f646c5eebac08d093b04938fd",
-			"bytes": 131,
 			"input": "/system identity set name=probe-520-side-fx\n/ip firewall address-list add list=probe-520 address=192.0.2.99/32 comment=probe-520-e\n"
+		},
+		{
+			"name": "duplicate.rsc",
+			"intent": "line 2 repeats line 1: a duplicate only exists once line 1 has applied (#203 blocker 1 class)",
+			"sha256": "591fbc62f59a419f67f1b005003cfe8b1a7e7fe695b2aad2185758f0e77557c1",
+			"input": "/ip firewall address-list add list=probe-520 address=192.0.2.20/32 comment=probe-520-f\n/ip firewall address-list add list=probe-520 address=192.0.2.20/32 comment=probe-520-f\n/ip firewall address-list add list=probe-520 address=192.0.2.21/32 comment=probe-520-g\n"
+		},
+		{
+			"name": "builtin.rsc",
+			"intent": "line 2 is #203 blocker 2 verbatim: set on the builtin `all` list",
+			"sha256": "ee513dc80984e1f4ad2ade771c65d4c294ccb5c712c2f028e7fa0bec689d5fc9",
+			"input": "/ip firewall address-list add list=probe-520 address=192.0.2.30/32 comment=probe-520-h\n/interface list set [ find name=all ] comment=\"contains all interfaces\" exclude=\"\" include=\"\" name=all\n/ip firewall address-list add list=probe-520 address=192.0.2.31/32 comment=probe-520-i\n"
+		},
+		{
+			"name": "missing-value.rsc",
+			"intent": "line 2 is #203 blocker 3 verbatim: security=private without its passwords",
+			"sha256": "5b4fda3db9685ff83ff12312ae22e628e617fc8bec7f23af6a529b56ddcce485",
+			"input": "/ip firewall address-list add list=probe-520 address=192.0.2.40/32 comment=probe-520-j\n/snmp community add addresses=0.0.0.0/0 name=canary-snmp-priv security=private\n/ip firewall address-list add list=probe-520 address=192.0.2.41/32 comment=probe-520-k\n"
+		},
+		{
+			"name": "missing-object.rsc",
+			"intent": "line 2 names an interface that does not exist on the device",
+			"sha256": "0ee21810015cee3ed3af0d75b2103acb3a71824a09a1b4b536f3e394e7fd9f04",
+			"input": "/ip firewall address-list add list=probe-520 address=192.0.2.50/32 comment=probe-520-l\n/interface ethernet set ether99 comment=probe-520\n/ip firewall address-list add list=probe-520 address=192.0.2.51/32 comment=probe-520-m\n"
+		},
+		{
+			"name": "invalid-value.rsc",
+			"intent": "line 2 gives an enum property a value outside its enum",
+			"sha256": "adce5045b094824fe9c26d71b10f85174c6f6e9e9d4295b03fb37cf11aa6c246",
+			"input": "/ip firewall address-list add list=probe-520 address=192.0.2.60/32 comment=probe-520-n\n/ip firewall filter add chain=forward action=probe-520-bogus\n/ip firewall address-list add list=probe-520 address=192.0.2.61/32 comment=probe-520-o\n"
 		}
 	],
 	"static": {
 		"good.rsc": {
-			"parseOutput": "(evl /ip/firewall/address-list/addaddress=192.0.2.1/32;comment=probe-520-a;list=probe-520);(evl /ip/firewall/address-list/addaddress=198.51.100.7/32;comment=probe-520-b;list=probe-520)",
-			"parseMs": 6,
+			"parse": {
+				"verdict": "accepted",
+				"output": "(evl /ip/firewall/address-list/addaddress=192.0.2.1/32;comment=probe-520-a;list=probe-520);(evl /ip/firewall/address-list/addaddress=198.51.100.7/32;comment=probe-520-b;list=probe-520)",
+				"ms": 4
+			},
 			"highlight": [
 				{
 					"input": "/ip firewall address-list add list=probe-520 address=192.0.2.1/32 comment=probe-520-a",
-					"errorClasses": 0,
-					"rawBytes": 438,
-					"ms": 8
+					"highlight": "clean",
+					"errorBytes": 0,
+					"classBytes": 85,
+					"ms": 9
 				},
 				{
 					"input": "/ip firewall address-list add list=probe-520 address=198.51.100.7/32 comment=probe-520-b",
-					"errorClasses": 0,
-					"rawBytes": 453,
-					"ms": 3
-				}
-			]
-		},
-		"mixed.rsc": {
-			"parseOutput": "(evl /ip/firewall/address-list/addaddress=192.0.2.9/32;comment=probe-520-c;list=probe-520);(<%% bad command name this (line 2 column 1) this;is;not;a;command);(evl /ip/firewall/address-list/addaddress=203.0.113.4/32;comment=probe-520-d;list=probe-520)",
-			"parseMs": 4,
-			"highlight": [
-				{
-					"input": "/ip firewall address-list add list=probe-520 address=192.0.2.9/32 comment=probe-520-c",
-					"errorClasses": 0,
-					"rawBytes": 438,
-					"ms": 3
-				},
-				{
-					"input": "this is not a command",
-					"errorClasses": 0,
-					"rawBytes": 173,
-					"ms": 2
-				},
-				{
-					"input": "/ip firewall address-list add list=probe-520 address=203.0.113.4/32 comment=probe-520-d",
-					"errorClasses": 0,
-					"rawBytes": 448,
+					"highlight": "clean",
+					"errorBytes": 0,
+					"classBytes": 88,
 					"ms": 4
 				}
 			]
 		},
+		"mixed.rsc": {
+			"parse": {
+				"verdict": "validation/syntax",
+				"output": "(evl /ip/firewall/address-list/addaddress=192.0.2.9/32;comment=probe-520-c;list=probe-520);(<%% bad command name this (line 2 column 1) this;is;not;a;command);(evl /ip/firewall/address-list/addaddress=203.0.113.4/32;comment=probe-520-d;list=probe-520)",
+				"ms": 3
+			},
+			"highlight": [
+				{
+					"input": "/ip firewall address-list add list=probe-520 address=192.0.2.9/32 comment=probe-520-c",
+					"highlight": "clean",
+					"errorBytes": 0,
+					"classBytes": 85,
+					"ms": 3
+				},
+				{
+					"input": "this is not a command",
+					"highlight": "clean",
+					"errorBytes": 0,
+					"classBytes": 21,
+					"ms": 3
+				},
+				{
+					"input": "/ip firewall address-list add list=probe-520 address=203.0.113.4/32 comment=probe-520-d",
+					"highlight": "clean",
+					"errorBytes": 0,
+					"classBytes": 87,
+					"ms": 3
+				}
+			]
+		},
 		"side-fx.rsc": {
-			"parseOutput": "(evl /system/identity/setname=probe-520-side-fx);(evl /ip/firewall/address-list/addaddress=192.0.2.99/32;comment=probe-520-e;list=probe-520)",
-			"parseMs": 2,
+			"parse": {
+				"verdict": "accepted",
+				"output": "(evl /system/identity/setname=probe-520-side-fx);(evl /ip/firewall/address-list/addaddress=192.0.2.99/32;comment=probe-520-e;list=probe-520)",
+				"ms": 3
+			},
 			"highlight": [
 				{
 					"input": "/system identity set name=probe-520-side-fx",
-					"errorClasses": 0,
-					"rawBytes": 236,
+					"highlight": "clean",
+					"errorBytes": 0,
+					"classBytes": 43,
 					"ms": 2
 				},
 				{
 					"input": "/ip firewall address-list add list=probe-520 address=192.0.2.99/32 comment=probe-520-e",
-					"errorClasses": 0,
-					"rawBytes": 443,
+					"highlight": "clean",
+					"errorBytes": 0,
+					"classBytes": 86,
 					"ms": 3
+				}
+			]
+		},
+		"duplicate.rsc": {
+			"parse": {
+				"verdict": "accepted",
+				"output": "(evl /ip/firewall/address-list/addaddress=192.0.2.20/32;comment=probe-520-f;list=probe-520);(evl /ip/firewall/address-list/addaddress=192.0.2.20/32;comment=probe-520-f;list=probe-520);(evl /ip/firewall/address-list/addaddress=192.0.2.21/32;comment=probe-520-g;list=probe-520)",
+				"ms": 2
+			},
+			"highlight": [
+				{
+					"input": "/ip firewall address-list add list=probe-520 address=192.0.2.20/32 comment=probe-520-f",
+					"highlight": "clean",
+					"errorBytes": 0,
+					"classBytes": 86,
+					"ms": 2
+				},
+				{
+					"input": "/ip firewall address-list add list=probe-520 address=192.0.2.20/32 comment=probe-520-f",
+					"highlight": "clean",
+					"errorBytes": 0,
+					"classBytes": 86,
+					"ms": 3
+				},
+				{
+					"input": "/ip firewall address-list add list=probe-520 address=192.0.2.21/32 comment=probe-520-g",
+					"highlight": "clean",
+					"errorBytes": 0,
+					"classBytes": 86,
+					"ms": 2
+				}
+			]
+		},
+		"builtin.rsc": {
+			"parse": {
+				"verdict": "accepted",
+				"output": "(evl /ip/firewall/address-list/addaddress=192.0.2.30/32;comment=probe-520-h;list=probe-520);(evl /interface/list/setcomment=contains all interfaces;exclude=;include=;name=all;numbers=(evl (evl /interface/list/findwhere=$name;$dynamic;$include;$exclude;$builtin;$dynamic;$comment;$.id;$.nextid;$.dead;$.about;(= $name all);5)));(evl /ip/firewall/address-list/addaddress=192.0.2.31/32;comment=probe-520-i;list=probe-520)",
+				"ms": 2
+			},
+			"highlight": [
+				{
+					"input": "/ip firewall address-list add list=probe-520 address=192.0.2.30/32 comment=probe-520-h",
+					"highlight": "clean",
+					"errorBytes": 0,
+					"classBytes": 86,
+					"ms": 3
+				},
+				{
+					"input": "/interface list set [ find name=all ] comment=\"contains all interfaces\" exclude=\"\" include=\"\" name=all",
+					"highlight": "clean",
+					"errorBytes": 0,
+					"classBytes": 102,
+					"ms": 2
+				},
+				{
+					"input": "/ip firewall address-list add list=probe-520 address=192.0.2.31/32 comment=probe-520-i",
+					"highlight": "clean",
+					"errorBytes": 0,
+					"classBytes": 86,
+					"ms": 3
+				}
+			]
+		},
+		"missing-value.rsc": {
+			"parse": {
+				"verdict": "accepted",
+				"output": "(evl /ip/firewall/address-list/addaddress=192.0.2.40/32;comment=probe-520-j;list=probe-520);(evl /snmp/community/addaddresses=0.0.0.0/0;name=canary-snmp-priv;security=private);(evl /ip/firewall/address-list/addaddress=192.0.2.41/32;comment=probe-520-k;list=probe-520)",
+				"ms": 2
+			},
+			"highlight": [
+				{
+					"input": "/ip firewall address-list add list=probe-520 address=192.0.2.40/32 comment=probe-520-j",
+					"highlight": "clean",
+					"errorBytes": 0,
+					"classBytes": 86,
+					"ms": 2
+				},
+				{
+					"input": "/snmp community add addresses=0.0.0.0/0 name=canary-snmp-priv security=private",
+					"highlight": "clean",
+					"errorBytes": 0,
+					"classBytes": 78,
+					"ms": 3
+				},
+				{
+					"input": "/ip firewall address-list add list=probe-520 address=192.0.2.41/32 comment=probe-520-k",
+					"highlight": "clean",
+					"errorBytes": 0,
+					"classBytes": 86,
+					"ms": 2
+				}
+			]
+		},
+		"missing-object.rsc": {
+			"parse": {
+				"verdict": "accepted",
+				"output": "(evl /ip/firewall/address-list/addaddress=192.0.2.50/32;comment=probe-520-l;list=probe-520);(evl /interface/ethernet/setcomment=probe-520;numbers=ether99);(evl /ip/firewall/address-list/addaddress=192.0.2.51/32;comment=probe-520-m;list=probe-520)",
+				"ms": 2
+			},
+			"highlight": [
+				{
+					"input": "/ip firewall address-list add list=probe-520 address=192.0.2.50/32 comment=probe-520-l",
+					"highlight": "clean",
+					"errorBytes": 0,
+					"classBytes": 86,
+					"ms": 2
+				},
+				{
+					"input": "/interface ethernet set ether99 comment=probe-520",
+					"highlight": "clean",
+					"errorBytes": 0,
+					"classBytes": 49,
+					"ms": 2
+				},
+				{
+					"input": "/ip firewall address-list add list=probe-520 address=192.0.2.51/32 comment=probe-520-m",
+					"highlight": "clean",
+					"errorBytes": 0,
+					"classBytes": 86,
+					"ms": 2
+				}
+			]
+		},
+		"invalid-value.rsc": {
+			"parse": {
+				"verdict": "validation/syntax",
+				"output": "syntax error (line 2 column 46)",
+				"ms": 2
+			},
+			"highlight": [
+				{
+					"input": "/ip firewall address-list add list=probe-520 address=192.0.2.60/32 comment=probe-520-n",
+					"highlight": "clean",
+					"errorBytes": 0,
+					"classBytes": 86,
+					"ms": 3
+				},
+				{
+					"input": "/ip firewall filter add chain=forward action=probe-520-bogus",
+					"highlight": "flagged",
+					"errorBytes": 1,
+					"classBytes": 60,
+					"ms": 2
+				},
+				{
+					"input": "/ip firewall address-list add list=probe-520 address=192.0.2.61/32 comment=probe-520-o",
+					"highlight": "clean",
+					"errorBytes": 0,
+					"classBytes": 86,
+					"ms": 2
 				}
 			]
 		}
 	},
-	"findings": [
-		"dry-run executes nothing: good.rsc reports `No syntax errors found in the import file` with empty state; side-fx.rsc leaves identity `CHR` and creates no entries.",
-		"verbose=yes alone APPLIES the import (entries created, identity renamed) — verbose is output detail, not a dry run.",
-		"plain and verbose imports are fail-fast: mixed.rsc stops at `bad command name this (line 2 column 1)` having applied only line 1; line 3 never runs.",
-		"dry-run scans the whole file and counts: mixed.rsc echoes all three `#line` blocks then `Script Error: found 1 error(s) in import file`; plain/verbose stop at the first error with no count.",
-		"coordinates travel with the error in every mode: `bad command name this (line 2 column 1)`.",
-		"cost on this lab: uploads ~180-1600ms on first touch, probes 2-8ms, imports 14-22ms; captures are per-run JSON in `.scratch/`."
-	],
 	"runs": [
 		{
 			"file": "good.rsc",
 			"variant": "dry-run",
 			"command": "/import file-name=good.rsc verbose=yes dry-run",
-			"importMs": 20,
-			"importOutput": {
-				"output": "#line 1\r\n/ip firewall address-list add list=probe-520 address=192.0.2.1/32 comment=probe-520-a\r\n#line 2\r\n/ip firewall address-list add list=probe-520 address=198.51.100.7/32 comment=probe-520-b\r\nNo syntax errors found in the import file",
-				"via": "rest"
-			},
-			"stateOutput": {
-				"output": "",
-				"via": "rest"
-			},
-			"identityOutput": {
-				"output": "  name: CHR",
-				"via": "rest"
+			"via": "rest",
+			"uploadMs": 2095,
+			"importMs": 18,
+			"importOutput": "#line 1\r\n/ip firewall address-list add list=probe-520 address=192.0.2.1/32 comment=probe-520-a\r\n#line 2\r\n/ip firewall address-list add list=probe-520 address=198.51.100.7/32 comment=probe-520-b\r\nNo syntax errors found in the import file",
+			"state": {
+				"addressList": "",
+				"identity": "  name: CHR",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
 			}
 		},
 		{
 			"file": "good.rsc",
 			"variant": "verbose",
 			"command": "/import file-name=good.rsc verbose=yes",
-			"importMs": 20,
-			"importOutput": {
-				"output": "#line 1\r\n/ip firewall address-list add list=probe-520 address=192.0.2.1/32 comment=probe-520-a\r\n#line 2\r\n/ip firewall address-list add list=probe-520 address=198.51.100.7/32 comment=probe-520-b",
-				"via": "rest"
-			},
-			"stateOutput": {
-				"output": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS       CREATION-TIME      \r\n;;; probe-520-a\r\n0 probe-520  192.0.2.1     2026-10-31 19:27:19\r\n;;; probe-520-b\r\n1 probe-520  198.51.100.7  2026-10-31 19:27:19",
-				"via": "rest"
-			},
-			"identityOutput": {
-				"output": "  name: CHR",
-				"via": "rest"
+			"via": "rest",
+			"uploadMs": 2368,
+			"importMs": 21,
+			"importOutput": "#line 1\r\n/ip firewall address-list add list=probe-520 address=192.0.2.1/32 comment=probe-520-a\r\n#line 2\r\n/ip firewall address-list add list=probe-520 address=198.51.100.7/32 comment=probe-520-b",
+			"state": {
+				"addressList": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS       CREATION-TIME      \r\n;;; probe-520-a\r\n0 probe-520  192.0.2.1     2026-11-01 07:06:05\r\n;;; probe-520-b\r\n1 probe-520  198.51.100.7  2026-11-01 07:06:05",
+				"identity": "  name: CHR",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
 			}
 		},
 		{
 			"file": "good.rsc",
 			"variant": "plain",
 			"command": "/import file-name=good.rsc",
-			"importMs": 17,
-			"importOutput": {
-				"output": "Script file loaded and executed successfully",
-				"via": "rest"
-			},
-			"stateOutput": {
-				"output": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS       CREATION-TIME      \r\n;;; probe-520-a\r\n0 probe-520  192.0.2.1     2026-10-31 19:27:42\r\n;;; probe-520-b\r\n1 probe-520  198.51.100.7  2026-10-31 19:27:42",
-				"via": "rest"
-			},
-			"identityOutput": {
-				"output": "  name: CHR",
-				"via": "rest"
+			"via": "rest",
+			"uploadMs": 1730,
+			"importMs": 13,
+			"importOutput": "Script file loaded and executed successfully",
+			"state": {
+				"addressList": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS       CREATION-TIME      \r\n;;; probe-520-a\r\n0 probe-520  192.0.2.1     2026-11-01 07:06:29\r\n;;; probe-520-b\r\n1 probe-520  198.51.100.7  2026-11-01 07:06:29",
+				"identity": "  name: CHR",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
 			}
 		},
 		{
 			"file": "mixed.rsc",
 			"variant": "dry-run",
 			"command": "/import file-name=mixed.rsc verbose=yes dry-run",
-			"importMs": 21,
-			"importOutput": {
-				"output": "#line 1\r\n/ip firewall address-list add list=probe-520 address=192.0.2.9/32 comment=probe-520-c\r\n#line 2\r\nthis is not a command\r\nbad command name this (line 2 column 1)\r\n#line 3\r\n/ip firewall address-list add list=probe-520 address=203.0.113.4/32 comment=probe-520-d\r\nScript Error: found 1 error(s) in import file",
-				"via": "rest"
-			},
-			"stateOutput": {
-				"output": "",
-				"via": "rest"
-			},
-			"identityOutput": {
-				"output": "  name: CHR",
-				"via": "rest"
+			"via": "rest",
+			"uploadMs": 1576,
+			"importMs": 15,
+			"importOutput": "#line 1\r\n/ip firewall address-list add list=probe-520 address=192.0.2.9/32 comment=probe-520-c\r\n#line 2\r\nthis is not a command\r\nbad command name this (line 2 column 1)\r\n#line 3\r\n/ip firewall address-list add list=probe-520 address=203.0.113.4/32 comment=probe-520-d\r\nScript Error: found 1 error(s) in import file",
+			"state": {
+				"addressList": "",
+				"identity": "  name: CHR",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
 			}
 		},
 		{
 			"file": "mixed.rsc",
 			"variant": "verbose",
 			"command": "/import file-name=mixed.rsc verbose=yes",
-			"importMs": 22,
-			"importOutput": {
-				"output": "#line 1\r\n/ip firewall address-list add list=probe-520 address=192.0.2.9/32 comment=probe-520-c\r\n#line 2\r\nthis is not a command\r\nScript Error: bad command name this (line 2 column 1)",
-				"via": "rest"
-			},
-			"stateOutput": {
-				"output": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS    CREATION-TIME      \r\n;;; probe-520-c\r\n0 probe-520  192.0.2.9  2026-10-31 19:28:28",
-				"via": "rest"
-			},
-			"identityOutput": {
-				"output": "  name: CHR",
-				"via": "rest"
+			"via": "rest",
+			"uploadMs": 1820,
+			"importMs": 18,
+			"importOutput": "#line 1\r\n/ip firewall address-list add list=probe-520 address=192.0.2.9/32 comment=probe-520-c\r\n#line 2\r\nthis is not a command\r\nScript Error: bad command name this (line 2 column 1)",
+			"state": {
+				"addressList": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS    CREATION-TIME      \r\n;;; probe-520-c\r\n0 probe-520  192.0.2.9  2026-11-01 07:07:14",
+				"identity": "  name: CHR",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
 			}
 		},
 		{
 			"file": "mixed.rsc",
 			"variant": "plain",
 			"command": "/import file-name=mixed.rsc",
-			"importMs": 15,
-			"importOutput": {
-				"output": "Script Error: bad command name this (line 2 column 1) (:import; line 1)",
-				"via": "rest"
-			},
-			"stateOutput": {
-				"output": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS    CREATION-TIME      \r\n;;; probe-520-c\r\n0 probe-520  192.0.2.9  2026-10-31 19:28:51",
-				"via": "rest"
-			},
-			"identityOutput": {
-				"output": "  name: CHR",
-				"via": "rest"
+			"via": "rest",
+			"uploadMs": 2633,
+			"importMs": 12,
+			"importOutput": "Script Error: bad command name this (line 2 column 1) (:import; line 1)",
+			"state": {
+				"addressList": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS    CREATION-TIME      \r\n;;; probe-520-c\r\n0 probe-520  192.0.2.9  2026-11-01 07:07:38",
+				"identity": "  name: CHR",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
 			}
 		},
 		{
 			"file": "side-fx.rsc",
 			"variant": "dry-run",
 			"command": "/import file-name=side-fx.rsc verbose=yes dry-run",
-			"importMs": 18,
-			"importOutput": {
-				"output": "#line 1\r\n/system identity set name=probe-520-side-fx\r\n#line 2\r\n/ip firewall address-list add list=probe-520 address=192.0.2.99/32 comment=probe-520-e\r\nNo syntax errors found in the import file",
-				"via": "rest"
-			},
-			"stateOutput": {
-				"output": "",
-				"via": "rest"
-			},
-			"identityOutput": {
-				"output": "  name: CHR",
-				"via": "rest"
+			"via": "rest",
+			"uploadMs": 190,
+			"importMs": 16,
+			"importOutput": "#line 1\r\n/system identity set name=probe-520-side-fx\r\n#line 2\r\n/ip firewall address-list add list=probe-520 address=192.0.2.99/32 comment=probe-520-e\r\nNo syntax errors found in the import file",
+			"state": {
+				"addressList": "",
+				"identity": "  name: CHR",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
 			}
 		},
 		{
 			"file": "side-fx.rsc",
 			"variant": "verbose",
 			"command": "/import file-name=side-fx.rsc verbose=yes",
-			"importMs": 21,
-			"importOutput": {
-				"output": "#line 1\r\n/system identity set name=probe-520-side-fx\r\n#line 2\r\n/ip firewall address-list add list=probe-520 address=192.0.2.99/32 comment=probe-520-e",
-				"via": "rest"
-			},
-			"stateOutput": {
-				"output": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS     CREATION-TIME      \r\n;;; probe-520-e\r\n0 probe-520  192.0.2.99  2026-10-31 19:29:37",
-				"via": "rest"
-			},
-			"identityOutput": {
-				"output": "  name: probe-520-side-fx",
-				"via": "rest"
+			"via": "rest",
+			"uploadMs": 311,
+			"importMs": 18,
+			"importOutput": "#line 1\r\n/system identity set name=probe-520-side-fx\r\n#line 2\r\n/ip firewall address-list add list=probe-520 address=192.0.2.99/32 comment=probe-520-e",
+			"state": {
+				"addressList": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS     CREATION-TIME      \r\n;;; probe-520-e\r\n0 probe-520  192.0.2.99  2026-11-01 07:08:22",
+				"identity": "  name: probe-520-side-fx",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
 			}
 		},
 		{
 			"file": "side-fx.rsc",
 			"variant": "plain",
 			"command": "/import file-name=side-fx.rsc",
-			"importMs": 14,
-			"importOutput": {
-				"output": "Script file loaded and executed successfully",
-				"via": "rest"
-			},
-			"stateOutput": {
-				"output": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS     CREATION-TIME      \r\n;;; probe-520-e\r\n0 probe-520  192.0.2.99  2026-10-31 19:30:00",
-				"via": "rest"
-			},
-			"identityOutput": {
-				"output": "  name: probe-520-side-fx",
-				"via": "rest"
+			"via": "rest",
+			"uploadMs": 1906,
+			"importMs": 11,
+			"importOutput": "Script file loaded and executed successfully",
+			"state": {
+				"addressList": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS     CREATION-TIME      \r\n;;; probe-520-e\r\n0 probe-520  192.0.2.99  2026-11-01 07:08:45",
+				"identity": "  name: probe-520-side-fx",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
+			}
+		},
+		{
+			"file": "duplicate.rsc",
+			"variant": "dry-run",
+			"command": "/import file-name=duplicate.rsc verbose=yes dry-run",
+			"via": "rest",
+			"uploadMs": 2096,
+			"importMs": 22,
+			"importOutput": "#line 1\r\n/ip firewall address-list add list=probe-520 address=192.0.2.20/32 comment=probe-520-f\r\n#line 2\r\n/ip firewall address-list add list=probe-520 address=192.0.2.20/32 comment=probe-520-f\r\n#line 3\r\n/ip firewall address-list add list=probe-520 address=192.0.2.21/32 comment=probe-520-g\r\nNo syntax errors found in the import file",
+			"state": {
+				"addressList": "",
+				"identity": "  name: CHR",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
+			}
+		},
+		{
+			"file": "duplicate.rsc",
+			"variant": "verbose",
+			"command": "/import file-name=duplicate.rsc verbose=yes",
+			"via": "rest",
+			"uploadMs": 2066,
+			"importMs": 23,
+			"importOutput": "#line 1\r\n/ip firewall address-list add list=probe-520 address=192.0.2.20/32 comment=probe-520-f\r\n#line 2\r\n/ip firewall address-list add list=probe-520 address=192.0.2.20/32 comment=probe-520-f\r\nScript Error: failure: already have such entry",
+			"state": {
+				"addressList": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS     CREATION-TIME      \r\n;;; probe-520-f\r\n0 probe-520  192.0.2.20  2026-11-01 07:09:31",
+				"identity": "  name: CHR",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
+			}
+		},
+		{
+			"file": "duplicate.rsc",
+			"variant": "plain",
+			"command": "/import file-name=duplicate.rsc",
+			"via": "rest",
+			"uploadMs": 1827,
+			"importMs": 16,
+			"importOutput": "Script Error: failure: already have such entry (/ip/firewall/address-list/add; line 2) (:import; line 1)",
+			"state": {
+				"addressList": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS     CREATION-TIME      \r\n;;; probe-520-f\r\n0 probe-520  192.0.2.20  2026-11-01 07:09:54",
+				"identity": "  name: CHR",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
+			}
+		},
+		{
+			"file": "builtin.rsc",
+			"variant": "dry-run",
+			"command": "/import file-name=builtin.rsc verbose=yes dry-run",
+			"via": "rest",
+			"uploadMs": 1904,
+			"importMs": 21,
+			"importOutput": "#line 1\r\n/ip firewall address-list add list=probe-520 address=192.0.2.30/32 comment=probe-520-h\r\n#line 2\r\n/interface list set [ find name=all ] comment=\"contains all interfaces\" exclude=\"\" include=\"\" name=all\r\n#line 3\r\n/ip firewall address-list add list=probe-520 address=192.0.2.31/32 comment=probe-520-i\r\nNo syntax errors found in the import file",
+			"state": {
+				"addressList": "",
+				"identity": "  name: CHR",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
+			}
+		},
+		{
+			"file": "builtin.rsc",
+			"variant": "verbose",
+			"command": "/import file-name=builtin.rsc verbose=yes",
+			"via": "rest",
+			"uploadMs": 1551,
+			"importMs": 22,
+			"importOutput": "#line 1\r\n/ip firewall address-list add list=probe-520 address=192.0.2.30/32 comment=probe-520-h\r\n#line 2\r\n/interface list set [ find name=all ] comment=\"contains all interfaces\" exclude=\"\" include=\"\" name=all\r\nScript Error: failure: cannot change builtin (/interface/list/set *0 = *0)",
+			"state": {
+				"addressList": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS     CREATION-TIME      \r\n;;; probe-520-h\r\n0 probe-520  192.0.2.30  2026-11-01 07:10:40",
+				"identity": "  name: CHR",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
+			}
+		},
+		{
+			"file": "builtin.rsc",
+			"variant": "plain",
+			"command": "/import file-name=builtin.rsc",
+			"via": "rest",
+			"uploadMs": 1828,
+			"importMs": 19,
+			"importOutput": "Script Error: failure: cannot change builtin (/interface/list/set *0 = *0) (/interface/list/set; line 2) (:import; line 1)",
+			"state": {
+				"addressList": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS     CREATION-TIME      \r\n;;; probe-520-h\r\n0 probe-520  192.0.2.30  2026-11-01 07:11:01",
+				"identity": "  name: CHR",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
+			}
+		},
+		{
+			"file": "missing-value.rsc",
+			"variant": "dry-run",
+			"command": "/import file-name=missing-value.rsc verbose=yes dry-run",
+			"via": "rest",
+			"uploadMs": 1847,
+			"importMs": 21,
+			"importOutput": "#line 1\r\n/ip firewall address-list add list=probe-520 address=192.0.2.40/32 comment=probe-520-j\r\n#line 2\r\n/snmp community add addresses=0.0.0.0/0 name=canary-snmp-priv security=private\r\n#line 3\r\n/ip firewall address-list add list=probe-520 address=192.0.2.41/32 comment=probe-520-k\r\nNo syntax errors found in the import file",
+			"state": {
+				"addressList": "",
+				"identity": "  name: CHR",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
+			}
+		},
+		{
+			"file": "missing-value.rsc",
+			"variant": "verbose",
+			"command": "/import file-name=missing-value.rsc verbose=yes",
+			"via": "rest",
+			"uploadMs": 1798,
+			"importMs": 43,
+			"importOutput": "#line 1\r\n/ip firewall address-list add list=probe-520 address=192.0.2.40/32 comment=probe-520-j\r\n#line 2\r\n/snmp community add addresses=0.0.0.0/0 name=canary-snmp-priv security=private\r\nScript Error: failure: authentication password minimum length is 8 symbols",
+			"state": {
+				"addressList": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS     CREATION-TIME      \r\n;;; probe-520-j\r\n0 probe-520  192.0.2.40  2026-11-01 07:11:47",
+				"identity": "  name: CHR",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
+			}
+		},
+		{
+			"file": "missing-value.rsc",
+			"variant": "plain",
+			"command": "/import file-name=missing-value.rsc",
+			"via": "rest",
+			"uploadMs": 2466,
+			"importMs": 40,
+			"importOutput": "Script Error: failure: authentication password minimum length is 8 symbols (/snmp/community/add; line 2) (:import; line 1)",
+			"state": {
+				"addressList": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS     CREATION-TIME      \r\n;;; probe-520-j\r\n0 probe-520  192.0.2.40  2026-11-01 07:12:09",
+				"identity": "  name: CHR",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
+			}
+		},
+		{
+			"file": "missing-object.rsc",
+			"variant": "dry-run",
+			"command": "/import file-name=missing-object.rsc verbose=yes dry-run",
+			"via": "rest",
+			"uploadMs": 1312,
+			"importMs": 23,
+			"importOutput": "#line 1\r\n/ip firewall address-list add list=probe-520 address=192.0.2.50/32 comment=probe-520-l\r\n#line 2\r\n/interface ethernet set ether99 comment=probe-520\r\n#line 3\r\n/ip firewall address-list add list=probe-520 address=192.0.2.51/32 comment=probe-520-m\r\nNo syntax errors found in the import file",
+			"state": {
+				"addressList": "",
+				"identity": "  name: CHR",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
+			}
+		},
+		{
+			"file": "missing-object.rsc",
+			"variant": "verbose",
+			"command": "/import file-name=missing-object.rsc verbose=yes",
+			"via": "rest",
+			"uploadMs": 2051,
+			"importMs": 17,
+			"importOutput": "#line 1\r\n/ip firewall address-list add list=probe-520 address=192.0.2.50/32 comment=probe-520-l\r\n#line 2\r\n/interface ethernet set ether99 comment=probe-520\r\nScript Error: no such item",
+			"state": {
+				"addressList": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS     CREATION-TIME      \r\n;;; probe-520-l\r\n0 probe-520  192.0.2.50  2026-11-01 07:12:55",
+				"identity": "  name: CHR",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
+			}
+		},
+		{
+			"file": "missing-object.rsc",
+			"variant": "plain",
+			"command": "/import file-name=missing-object.rsc",
+			"via": "rest",
+			"uploadMs": 1586,
+			"importMs": 16,
+			"importOutput": "Script Error: no such item (/interface/ethernet/set; line 2) (:import; line 1)",
+			"state": {
+				"addressList": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS     CREATION-TIME      \r\n;;; probe-520-l\r\n0 probe-520  192.0.2.50  2026-11-01 07:13:19",
+				"identity": "  name: CHR",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
+			}
+		},
+		{
+			"file": "invalid-value.rsc",
+			"variant": "dry-run",
+			"command": "/import file-name=invalid-value.rsc verbose=yes dry-run",
+			"via": "rest",
+			"uploadMs": 2307,
+			"importMs": 19,
+			"importOutput": "#line 1\r\n/ip firewall address-list add list=probe-520 address=192.0.2.60/32 comment=probe-520-n\r\n#line 2\r\n/ip firewall filter add chain=forward action=probe-520-bogus\r\nsyntax error (line 2 column 46)\r\n#line 3\r\n/ip firewall address-list add list=probe-520 address=192.0.2.61/32 comment=probe-520-o\r\nScript Error: found 1 error(s) in import file",
+			"state": {
+				"addressList": "",
+				"identity": "  name: CHR",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
+			}
+		},
+		{
+			"file": "invalid-value.rsc",
+			"variant": "verbose",
+			"command": "/import file-name=invalid-value.rsc verbose=yes",
+			"via": "rest",
+			"uploadMs": 2020,
+			"importMs": 22,
+			"importOutput": "#line 1\r\n/ip firewall address-list add list=probe-520 address=192.0.2.60/32 comment=probe-520-n\r\n#line 2\r\n/ip firewall filter add chain=forward action=probe-520-bogus\r\nScript Error: syntax error (line 2 column 46)",
+			"state": {
+				"addressList": "Columns: LIST, ADDRESS, CREATION-TIME\r\n# LIST       ADDRESS     CREATION-TIME      \r\n;;; probe-520-n\r\n0 probe-520  192.0.2.60  2026-11-01 07:14:03",
+				"identity": "  name: CHR",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
+			}
+		},
+		{
+			"file": "invalid-value.rsc",
+			"variant": "plain",
+			"command": "/import file-name=invalid-value.rsc",
+			"via": "rest",
+			"uploadMs": 2099,
+			"importMs": 17,
+			"importOutput": "Script Error: syntax error (line 2 column 46) (:import; line 1)",
+			"state": {
+				"addressList": "",
+				"identity": "  name: CHR",
+				"interfaceListAll": "Flags: * - BUILTIN\r\n0  * ;;; contains all interfaces\r\n     name=\"all\" dynamic=no include=\"\" exclude=\"\"",
+				"snmpCommunity": "",
+				"ether1Comment": "",
+				"forwardFilter": ""
 			}
 		}
 	]
