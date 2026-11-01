@@ -3092,7 +3092,8 @@ Input `SYNTHETIC-1` (illustrative only):
 `/ip service set telnet disabled=no` — a statement the analyzer resolves with
 id `s0`, span 0–34. A management-plane topic check (definition owned beside
 the analyzer, evaluated against `s0`) adds one diagnostic, the evidence entry
-it cites, and a tip; the ids and the check's `probe` name are invented:
+it cites, and a tip; the ids and the check's `probe` name are invented. A
+partial envelope — only the fields the finding adds or reads are shown:
 
 ```json
 {
@@ -3157,7 +3158,8 @@ Input (illustrative): `/ip address add address=198.51.100.1/32 interface=ether1`
 with an explicit `--with-print`-style opt-in. The read follows the live
 argument-name precedent (`data.live.arguments[]` cites a `live-inspect`
 evidence entry): one evidence entry per read, and the rows in `data.live`
-citing it, independent of the analysis verdict:
+citing it, independent of the analysis verdict. A partial `data` object —
+`evidence` is `data.evidence`, `live` is `data.live`:
 
 ```json
 {
@@ -3178,7 +3180,16 @@ citing it, independent of the analysis verdict:
   ],
   "live": {
     "reads": [
-      { "ev": "e12", "path": "/ip/address", "statementIds": ["s0"], "rows": [] }
+      {
+        "ev": "e12",
+        "path": "/ip/address",
+        "statementIds": ["s0"],
+        "rows": [
+          { "address": "192.0.2.1/24", "interface": "ether1", "disabled": "false" },
+          { "address": "198.51.100.2/24", "interface": "ether2", "disabled": "false" },
+          { "address": "203.0.113.1/24", "interface": "bridge", "disabled": "true" }
+        ]
+      }
     ]
   }
 }
