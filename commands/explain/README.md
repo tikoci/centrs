@@ -3023,6 +3023,141 @@ a process boundary. A B5 rename is therefore a visible break here rather than a
 silent one — which is the point of settling the vocabulary before an external
 consumer commits to it.
 
+## Topic checks and related live reads (#493, design — no implementation)
+
+This section is the bounded design #493 asks for. It proposes shapes, ownership,
+and acceptance gates; **no topic check, special-command rule, or contextual
+read ships with it**. Each check needs its own accepted/rejected CHR controls
+and committed evidence before an implementation slice lands, and every new
+RouterOS semantic claim is grounded then — not here. The three examples below
+are **SYNTHETIC shape illustrations, not device claims**: they show the envelope
+a check would produce, with invented content, so reviewers can judge the
+contract without mistaking illustration for evidence.
+
+**Ownership: one rule table, three consumers.** Fact and check definitions live
+in one module beside the analyzer (sibling of `src/explain/write.ts`, which is
+the precedent: an explain-only inference over the shipped structure). The
+CLI renders it, the library returns it, and the MCP adapter reshapes the same
+object — no copies of rule logic per surface. Checks evaluate against the
+**statement tree** (`structure.statements[]` ids plus `parent`/`owner` links),
+never against byte containment: a finding anchors to a statement id and its
+span, so a reordered document moves the finding with its statement.
+
+**What is decided where.** Source-only: structural facts the canonicalizer
+already proves (unresolved statements, write-shape, symbol bindings). Live
+schema: what a menu accepts (argument names, enums) — only `--schema` /
+`--complete` against a named router, never a bundled snapshot (decision 3).
+Device observations: current state (`print` rows) — only through an explicitly
+requested contextual read (below). Partial script input is never treated as
+final device state, and a finding never grants execution permission: advice
+and the execution gate are separate answers, and a lost read response is
+reported as a failed read, never as a successful execution.
+
+**Contextual reads are opt-in and bounded.** The default offline entry stays
+network-free; naming a router does not authorize reads. A contextual read
+fires only under an explicit flag (name TBD, e.g. `--with-print`), one bounded
+`print` per confidently resolved menu, projected and truncated, each reported
+independently with its own target, read command, time, projection, and
+truncation — so an agent can distinguish current observed state from the
+proposed script. Deduplication is by (statement id, resolved path): two
+statements in one menu share one read, and a failed read fails alone. The
+read is a validated centrs `retrieve` on the resolved path — never the user's
+`[find]`, expression, or analyzed script executed to get context.
+
+**Secrets follow the existing redaction contract.** Related reads ride the
+redaction paths from #359: secret-bearing menus and verbose file output are
+high-risk surfaces, so a contextual read defaults to a non-sensitive
+projection, names its projection explicitly, and never exports key material
+into advice artifacts or logs. A check whose finding would need a sensitive
+field states that need in its definition and is refused without an explicit
+sensitivity opt-in — no automatic sensitive exports.
+
+**Shape 1 — a grounded topic finding (synthetic illustration).**
+Input `SYNTHETIC-1` (illustrative only):
+`/ip service set telnet disabled=no` — a statement the analyzer resolves with
+id `s0`. A management-plane topic check (definition owned beside the
+analyzer, evaluated against `s0`) would emit a finding with a stable id, the
+statement anchor, a severity that is separate from its certainty, the evidence
+and version scope it was decided from, and an actionable next step:
+
+```json
+{
+  "finding": "topic/plaintext-management-service",
+  "statement": "s0",
+  "span": { "start": 0, "end": 34 },
+  "severity": "high",
+  "certainty": "decided-from-source",
+  "evidence": ["canonicalizer: resolved verb `set` at `/ip/service`"],
+  "fix": "Disable the plaintext service or restrict it to a management address list."
+}
+```
+
+Severity (how bad) and certainty (how sure, and from what probe) stay distinct
+fields; probe outcome and `runtimeAcceptance` are untouched — the finding does
+not claim the router accepted anything.
+
+**Shape 2 — a special-command fact (synthetic illustration).** #363 records
+the real cases (deferred there, not duplicated here); the shape is the same
+finding envelope with a `kind: "special-command"` marker and a consequence,
+not a configuration judgement. Illustrative only:
+
+```json
+{
+  "finding": "special-command/connection-loss",
+  "statement": "s2",
+  "span": { "start": 64, "end": 79 },
+  "severity": "medium",
+  "certainty": "decided-from-source",
+  "evidence": ["canonicalizer: resolved verb at a loss-of-access path (see #363)"],
+  "fix": "This command can drop the session that runs it; run it from a path that survives the change."
+}
+```
+
+No isolated device-mode table ships first (the #363 deferral stands); a
+special-command fact names its consequence and its evidence, nothing more.
+
+**Shape 3 — an explicitly requested contextual read (synthetic illustration).**
+Input (illustrative): `/ip address add address=198.51.100.1/32 interface=ether1`
+with an explicit `--with-print`-style opt-in. The response carries the read as
+its own result, independent of the analysis verdict:
+
+```json
+{
+  "contextReads": [
+    {
+      "statement": "s0",
+      "path": "/ip/address",
+      "read": "/ip/address/print",
+      "target": "<router>",
+      "at": "SYNTHETIC-timestamp",
+      "projection": ".proplist=address,interface,disabled",
+      "truncation": "3 of 12 rows",
+      "outcome": "ok"
+    }
+  ]
+}
+```
+
+Originating statement and path, target, time, projection, and truncation are
+all present, so observed state cannot be mistaken for the proposed script.
+A failed read reports `outcome` plus the error and fails alone.
+
+**Acceptance controls and dependencies before implementation slices.**
+
+- Each check ships with accepted/rejected CHR controls and committed evidence;
+  synthetic shapes above are replaced by measured rows, never promoted as-is.
+- Controls assert statement-id anchoring (finding moves with its statement),
+  severity/certainty separation, and read independence (one failed read does
+  not fail the analysis or sibling reads).
+- A check that needs a sensitive field is refused without the sensitivity
+  opt-in; the redaction contract is asserted, not assumed.
+- Dependencies: published offline readings stay honest (#211, #350, #351,
+  #358, #371); live path/argument/probe facts come from #236; live value
+  types are distinct evidence (#225); the MCP result migration is separate
+  (#223); text stdout/stderr routing is unchanged (#477); device-mode
+  provisioning stays in #95. No new plugin DSL or framework is preselected —
+  existing `warnings`/`tips` and explain diagnostics are reused where they fit.
+
 ## Non-goals
 
 - No LSP server in centrs — the LSP is a consumer the library must support,
