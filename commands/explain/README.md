@@ -3072,9 +3072,9 @@ reported as a failed read, never as a successful execution.
 network-free; naming a router does not authorize reads. A contextual read
 fires only under an explicit flag (name TBD, e.g. `--with-print`), one bounded
 `print` per confidently resolved menu, projected and truncated, each reported
-independently with its own target, read command, time, projection, and
-truncation — so an agent can distinguish current observed state from the
-proposed script. Deduplication is by (statement id, resolved path): two
+independently with its read command, time, projection, and truncation — so an
+agent can distinguish current observed state from the proposed script. The
+target is the envelope's `meta.target`, not a per-read field. Deduplication is by (statement id, resolved path): two
 statements in one menu share one read, and a failed read fails alone. The
 read is a validated centrs `retrieve` on the resolved path — never the user's
 `[find]`, expression, or analyzed script executed to get context.
