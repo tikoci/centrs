@@ -29,7 +29,7 @@
  * establishes the submission matrix only — no `--context` modes, fields, or
  * binding behavior ship from it.
  */
-// cspell:ignore cmx héllo nohome UNREVIEWED
+// cspell:ignore cmx héllo nohome UNREVIEWED archs
 import { createHash } from "node:crypto";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
