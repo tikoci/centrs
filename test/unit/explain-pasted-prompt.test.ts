@@ -79,6 +79,21 @@ describe("explain pasted-prompt repair (#370)", () => {
 		expect(tips[0]?.fix).toContain(":put 1;\n:put 2");
 	});
 
+	test("a multi-line candidate renders as a block that keeps its newlines", () => {
+		const tips = pastedTips("[admin@x] > :put 1\n:put 2");
+		expect(tips[0]?.fix).toBe(
+			"Drop the pasted prompt and try this instead — this input was not executed:\n\n```\n:put 1\n:put 2\n```",
+		);
+		// A code span would render as `:put 1 :put 2`, one command with an extra argument.
+		expect(Bun.markdown.html(tips[0]?.fix ?? "")).toContain(
+			"<pre><code>:put 1\n:put 2\n</code></pre>",
+		);
+		const fenced = pastedTips('[admin@x] > :put "```"\n:put 2');
+		expect(Bun.markdown.html(fenced[0]?.fix ?? "")).toContain(
+			"<pre><code>:put &quot;```&quot;\n:put 2\n</code></pre>",
+		);
+	});
+
 	test("non-ascii input falls back to the prompt's own segment", () => {
 		const tips = pastedTips('[admin@x] > :put "héllo"; :put 2');
 		expect(tips).toHaveLength(1);

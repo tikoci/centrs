@@ -155,18 +155,33 @@ export function detectPastedPrompts(input: string): PastedPromptHit[] {
  * ends with one (CommonMark code spans).
  */
 function codeSpan(text: string): string {
+	const fence = "`".repeat(longestBacktickRun(text) + 1);
+	const pad = text.startsWith("`") || text.endsWith("`") ? " " : "";
+	return `${fence}${pad}${text}${pad}${fence}`;
+}
+
+/**
+ * A fenced code block for multi-line text: a code span would render its
+ * newlines as spaces, and `:put 1` NEWLINE `:put 2` is not `:put 1 :put 2`.
+ */
+function codeBlock(text: string): string {
+	const fence = "`".repeat(Math.max(3, longestBacktickRun(text) + 1));
+	return `${fence}\n${text}\n${fence}`;
+}
+
+function longestBacktickRun(text: string): number {
 	let longest = 0;
 	for (const run of text.match(/`+/g) ?? [])
 		longest = Math.max(longest, run.length);
-	const fence = "`".repeat(longest + 1);
-	const pad = text.startsWith("`") || text.endsWith("`") ? " " : "";
-	return `${fence}${pad}${text}${pad}${fence}`;
+	return longest;
 }
 
 export function pastedPromptTips(input: string): Tip[] {
 	return detectPastedPrompts(input).map((hit) => {
 		const where = hit.menu ? ` (typed at ${codeSpan(hit.menu)})` : "";
-		const fix = `Drop the pasted prompt and try ${codeSpan(hit.candidate)}${where} instead — this input was not executed.`;
+		const fix = /[\r\n]/.test(hit.candidate)
+			? `Drop the pasted prompt and try this${where} instead — this input was not executed:\n\n${codeBlock(hit.candidate)}`
+			: `Drop the pasted prompt and try ${codeSpan(hit.candidate)}${where} instead — this input was not executed.`;
 		if (hit.shape === "menu")
 			return buildTip(
 				"tip/explain-pasted-prompt",
