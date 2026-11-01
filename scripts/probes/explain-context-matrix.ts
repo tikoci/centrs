@@ -50,6 +50,8 @@ import {
 import { probeOutputPath } from "./chr.ts";
 
 const VERSION = Bun.argv[2] ?? "7.24.5";
+/** Pinned guest arch: host arch, never a contributor's CENTRS_CHR_ARCH. */
+const GUEST_ARCH: "arm64" | "x86" = process.arch === "arm64" ? "arm64" : "x86";
 const MT_USER = "cmx";
 const MT_PASSWORD = "cmx-secret";
 const MENU_LIST = "probe-574";
@@ -113,6 +115,19 @@ async function actualVersion(chr: Chr): Promise<string> {
 	return resource["version"] ?? "unknown";
 }
 
+/** Best-effort guest arch cross-check; never fails the probe. */
+async function actualArch(chr: Chr): Promise<string> {
+	try {
+		const resource = (await chr.rest("/system/resource")) as Record<
+			string,
+			string
+		>;
+		return resource["architecture-name"] ?? "unknown";
+	} catch {
+		return "unknown";
+	}
+}
+
 /** Non-centrs device-semantics fallback for validation-gated submissions. */
 async function directCall(chr: Chr, command: string): Promise<RecordedCall> {
 	const started = Date.now();
@@ -164,7 +179,11 @@ async function setupMenuEntry(chr: Chr): Promise<void> {
 		throw new Error(`menu setup entry missing .id: ${JSON.stringify(res)}`);
 }
 
-/** One product-path cell: each submission is an executeEnvelope call. */
+/**
+ * One product-path cell: each submission is an executeEnvelope call. The
+ * record lands in `sink` in a finally, so an abort (infra streak, setup
+ * throw) still preserves the submissions already recorded.
+ */
 async function runProductCell(
 	cell: string,
 	input: string,
@@ -173,25 +192,30 @@ async function runProductCell(
 	base: ProductBase,
 	env: Record<string, string | undefined>,
 	chr: Chr,
+	sink: CellRecord[],
 	bootRetry = false,
 ): Promise<CellRecord> {
 	const record: CellRecord = { cell, input, route, submissions: [] };
-	for (const bytes of submissions) {
-		const call = await productCall(base, bytes, env, bootRetry);
-		record.submissions.push(call);
-		noteInfra(call, cell);
-		if (!call.ok && call.error?.code.startsWith("validation/")) {
-			const fb = await directCall(chr, bytes);
-			record.fallbacks = [
-				...(record.fallbacks ?? []),
-				{ ...fb, reason: `product validation rejected: ${call.error.code}` },
-			];
+	try {
+		for (const bytes of submissions) {
+			const call = await productCall(base, bytes, env, bootRetry);
+			record.submissions.push(call);
+			noteInfra(call, cell);
+			if (!call.ok && call.error?.code.startsWith("validation/")) {
+				const fb = await directCall(chr, bytes);
+				record.fallbacks = [
+					...(record.fallbacks ?? []),
+					{ ...fb, reason: `product validation rejected: ${call.error.code}` },
+				];
+			}
 		}
+		console.log(
+			`OK ${cell}: ${record.submissions.map((s) => (s.ok ? "ok" : (s.error?.code ?? "err"))).join(",")}`,
+		);
+		return record;
+	} finally {
+		sink.push(record);
 	}
-	console.log(
-		`OK ${cell}: ${record.submissions.map((s) => (s.ok ? "ok" : (s.error?.code ?? "err"))).join(",")}`,
-	);
-	return record;
 }
 
 /**
@@ -481,6 +505,7 @@ interface StoredCtx {
 	chr: Chr;
 	restBase: ProductBase;
 	env: Record<string, string | undefined>;
+	sink: CellRecord[];
 }
 
 /** One stored-route cell: REST-created script(s), product-REST run each. */
@@ -491,38 +516,43 @@ async function runStoredCell(
 	ctx: StoredCtx,
 ): Promise<CellRecord> {
 	const record: CellRecord = { cell, input, route: "stored", submissions: [] };
-	let i = 0;
-	for (const source of sources) {
-		i++;
-		const name = `cmx-${cell}-${i}`;
-		const created = (await ctx.chr.rest("/system/script", {
-			method: "PUT",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ name, source }),
-		})) as Record<string, unknown>;
-		if (typeof created[".id"] !== "string")
-			throw new Error(
-				`stored setup ${name} missing .id: ${JSON.stringify(created)}`,
+	try {
+		let i = 0;
+		for (const source of sources) {
+			i++;
+			const name = `cmx-${cell}-${i}`;
+			const created = (await ctx.chr.rest("/system/script", {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ name, source }),
+			})) as Record<string, unknown>;
+			if (typeof created[".id"] !== "string")
+				throw new Error(
+					`stored setup ${name} missing .id: ${JSON.stringify(created)}`,
+				);
+			const call = await productCall(
+				ctx.restBase,
+				`/system/script/run ${name}`,
+				ctx.env,
 			);
-		const call = await productCall(
-			ctx.restBase,
-			`/system/script/run ${name}`,
-			ctx.env,
-		);
-		call.note = `script ${name} source-sha256 ${sha256(source)}`;
-		record.submissions.push(call);
-		if (!call.ok && call.error?.code.startsWith("validation/")) {
-			const fb = await directCall(ctx.chr, `/system/script/run ${name}`);
-			record.fallbacks = [
-				...(record.fallbacks ?? []),
-				{ ...fb, reason: `product validation rejected: ${call.error.code}` },
-			];
+			call.note = `script ${name} source-sha256 ${sha256(source)}`;
+			record.submissions.push(call);
+			noteInfra(call, cell);
+			if (!call.ok && call.error?.code.startsWith("validation/")) {
+				const fb = await directCall(ctx.chr, `/system/script/run ${name}`);
+				record.fallbacks = [
+					...(record.fallbacks ?? []),
+					{ ...fb, reason: `product validation rejected: ${call.error.code}` },
+				];
+			}
 		}
+		console.log(
+			`OK ${cell}: ${record.submissions.map((s) => (s.ok ? "ok" : (s.error?.code ?? "err"))).join(",")}`,
+		);
+		return record;
+	} finally {
+		ctx.sink.push(record);
 	}
-	console.log(
-		`OK ${cell}: ${record.submissions.map((s) => (s.ok ? "ok" : (s.error?.code ?? "err"))).join(",")}`,
-	);
-	return record;
 }
 
 async function main(): Promise<void> {
@@ -531,6 +561,7 @@ async function main(): Promise<void> {
 	const gateTable: { shape: string; ok: boolean; code: string }[] = [];
 	const cells: CellRecord[] = [];
 	const versions: Record<string, string> = {};
+	const archs: Record<string, string> = {};
 	const writePartial = async (tag: string, error: unknown): Promise<void> => {
 		await Bun.write(
 			await probeOutputPath(
@@ -543,6 +574,8 @@ async function main(): Promise<void> {
 	// ---- CHR 1: IP routes (rest, native, ssh, stored) ----
 	const ip = await startIntegrationChr({
 		version: VERSION,
+		arch: GUEST_ARCH,
+		packages: [],
 		name: `cmx-ip-${Date.now()}`,
 	});
 	try {
@@ -550,6 +583,7 @@ async function main(): Promise<void> {
 		if (!(await chr.waitForBoot(180_000)))
 			throw new Error("ip CHR never booted");
 		versions["ip"] = await actualVersion(chr);
+		archs["ip"] = await actualArch(chr);
 		const auth = splitQuickChrAuth(
 			readEnv(ip.env, "QUICKCHR_AUTH") ?? "admin:",
 		);
@@ -650,32 +684,30 @@ async function main(): Promise<void> {
 				const wholeId = `${input.id}-${route}`;
 				const wholeSubs = input.whole(tagFor(wholeId, false));
 				if (wholeSubs.length > 0)
-					cells.push(
-						await runProductCell(
-							wholeId,
-							input.id,
-							route,
-							wholeSubs,
-							base,
-							env,
-							chr,
-							bootRetry,
-						),
+					await runProductCell(
+						wholeId,
+						input.id,
+						route,
+						wholeSubs,
+						base,
+						env,
+						chr,
+						cells,
+						bootRetry,
 					);
 				if (input.split) {
 					const splitId = `${wholeId}-split`;
 					const tag = tagFor(splitId, input.id === "I5-global");
-					cells.push(
-						await runProductCell(
-							splitId,
-							input.id,
-							route,
-							input.split(tag),
-							base,
-							env,
-							chr,
-							bootRetry,
-						),
+					await runProductCell(
+						splitId,
+						input.id,
+						route,
+						input.split(tag),
+						base,
+						env,
+						chr,
+						cells,
+						bootRetry,
 					);
 				}
 			}
@@ -684,24 +716,22 @@ async function main(): Promise<void> {
 		// Stored leg (shares the IP CHR; unique script names per cell). I1 has
 		// no stored split: spreading one input's lines across stored scripts
 		// is meaningless. I5/I6 splits are genuine two-script questions.
-		const storedCtx: StoredCtx = { chr, restBase, env };
+		const storedCtx: StoredCtx = { chr, restBase, env, sink: cells };
 		for (const input of INPUTS) {
 			const cell = `${input.id}-stored`;
 			const wholeSubs = input.whole(tagFor(cell, false));
 			if (wholeSubs.length > 0)
-				cells.push(await runStoredCell(cell, input.id, wholeSubs, storedCtx));
+				await runStoredCell(cell, input.id, wholeSubs, storedCtx);
 			if (input.split && input.id !== "I1-nl-scope") {
 				const splitId = `${cell}-split`;
 				const tag = tagFor(splitId, input.id === "I5-global");
-				cells.push(
-					await runStoredCell(splitId, input.id, input.split(tag), storedCtx),
-				);
+				await runStoredCell(splitId, input.id, input.split(tag), storedCtx);
 			}
 		}
 
 		await Bun.write(
 			await probeOutputPath(`explain-context-matrix.v${VERSION}.ip.json`),
-			`${JSON.stringify({ requestedVersion: VERSION, actualVersion: versions["ip"], gateTable, cells: cells.filter((c) => c.route !== "mactelnet" && c.route !== "session") }, null, 2)}\n`,
+			`${JSON.stringify({ requestedVersion: VERSION, actualVersion: versions["ip"], actualArch: archs["ip"], gateTable, cells: cells.filter((c) => c.route !== "mactelnet" && c.route !== "session") }, null, 2)}\n`,
 		);
 	} catch (error) {
 		await writePartial("ip", error);
@@ -715,6 +745,8 @@ async function main(): Promise<void> {
 	try {
 		const mac = await startIntegrationChr({
 			version: VERSION,
+			arch: GUEST_ARCH,
+			packages: [],
 			name: `cmx-mac-${Date.now()}`,
 			networks: ["user", { type: "socket-connect", port: bridge.tcpPort }],
 		});
@@ -725,6 +757,7 @@ async function main(): Promise<void> {
 			if (!(await bridge.waitForConnection(10_000)))
 				throw new Error("L2 bridge never connected");
 			versions["mac"] = await actualVersion(chr);
+			archs["mac"] = await actualArch(chr);
 			await setupMenuEntry(chr);
 			await chr.exec("/tool/mac-server set allowed-interface-list=all");
 			await chr.exec(
@@ -752,30 +785,28 @@ async function main(): Promise<void> {
 				const wholeId = `${input.id}-mactelnet`;
 				const wholeSubs = input.whole(tagFor(wholeId, false));
 				if (wholeSubs.length > 0)
-					cells.push(
-						await runProductCell(
-							wholeId,
-							input.id,
-							"mactelnet",
-							wholeSubs,
-							macBase,
-							env,
-							chr,
-						),
+					await runProductCell(
+						wholeId,
+						input.id,
+						"mactelnet",
+						wholeSubs,
+						macBase,
+						env,
+						chr,
+						cells,
 					);
 				if (input.split) {
 					const splitId = `${wholeId}-split`;
 					const tag = tagFor(splitId, input.id === "I5-global");
-					cells.push(
-						await runProductCell(
-							splitId,
-							input.id,
-							"mactelnet",
-							input.split(tag),
-							macBase,
-							env,
-							chr,
-						),
+					await runProductCell(
+						splitId,
+						input.id,
+						"mactelnet",
+						input.split(tag),
+						macBase,
+						env,
+						chr,
+						cells,
 					);
 				}
 			}
@@ -809,7 +840,7 @@ async function main(): Promise<void> {
 
 			await Bun.write(
 				await probeOutputPath(`explain-context-matrix.v${VERSION}.mac.json`),
-				`${JSON.stringify({ requestedVersion: VERSION, actualVersion: versions["mac"], targetMac, cells: cells.filter((c) => c.route === "mactelnet" || c.route === "session") }, null, 2)}\n`,
+				`${JSON.stringify({ requestedVersion: VERSION, actualVersion: versions["mac"], actualArch: archs["mac"], targetMac, cells: cells.filter((c) => c.route === "mactelnet" || c.route === "session") }, null, 2)}\n`,
 			);
 		} catch (error) {
 			await writePartial("mac", error);
@@ -827,6 +858,7 @@ async function main(): Promise<void> {
 			{
 				requestedVersion: VERSION,
 				versions,
+				archs,
 				elapsedMs: Date.now() - t0,
 				gateTable,
 				inputs: INPUTS.map((i) => ({ id: i.id, intent: i.intent })),
@@ -844,6 +876,7 @@ const SLICE_PATH = "test/fixtures/explain/context-matrix.slice.json";
 interface MatrixCapture {
 	requestedVersion: string;
 	versions: Record<string, string>;
+	archs?: Record<string, string>;
 	elapsedMs: number;
 	gateTable: unknown;
 	inputs: unknown;
@@ -954,7 +987,7 @@ async function sliceMode(capturePath: string, outPath: string): Promise<void> {
 			prev["_source"] ??
 			"UNREVIEWED — curate provenance, then re-run the replay test",
 		routerosVersion: matrix.versions["ip"],
-		arch: "x86",
+		arch: matrix.archs?.["ip"] ?? "unknown",
 		routes: prev["routes"] ?? {},
 		gateTable: matrix.gateTable,
 		inputs: matrix.inputs,
