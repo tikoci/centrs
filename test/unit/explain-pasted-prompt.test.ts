@@ -1,3 +1,4 @@
+// cspell:ignore héllo
 import { describe, expect, test } from "bun:test";
 import { explainCommand, explainEnvelope } from "../../src/explain.ts";
 
