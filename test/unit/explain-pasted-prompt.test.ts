@@ -88,4 +88,37 @@ describe("explain pasted-prompt repair (#370)", () => {
 		expect(tips[0]?.fix).toContain("monitor lte1");
 		expect(tips[0]?.fix).not.toContain("}");
 	});
+
+	test("a bracket prompt inside a menu offers the command in that menu", () => {
+		// The manual's Console page shape: the menu sits between `]` and `>`.
+		const input =
+			"[admin@MikroTik] /ip/address> add address=192.0.2.1/24 interface=ether1";
+		expect(explainCommand(input).verdict).toBe("fail");
+		const tips = pastedTips(input);
+		expect(tips).toHaveLength(1);
+		expect(tips[0]?.message).toContain("`[user@host] /ip/address>`");
+		expect(tips[0]?.fix).toBe(
+			"Drop the pasted prompt and try `add address=192.0.2.1/24 interface=ether1` (typed at `/ip/address`) instead — this input was not executed.",
+		);
+	});
+
+	test("a HotLock prompt's doubled > is part of the prompt", () => {
+		for (const input of [
+			"[admin@MikroTik] /ip/address>> print",
+			"[admin@MikroTik] >> /ip/address print",
+		]) {
+			const tips = pastedTips(input);
+			expect(tips).toHaveLength(1);
+			expect(tips[0]?.fix).not.toContain(">");
+		}
+	});
+
+	test("a backtick in the candidate keeps the tip's code span intact", () => {
+		const tips = pastedTips('[admin@x] > :put "a`b"');
+		expect(tips[0]?.fix).toBe(
+			'Drop the pasted prompt and try ``:put "a`b"`` instead — this input was not executed.',
+		);
+		const edge = pastedTips("[admin@x] > :put `");
+		expect(edge[0]?.fix).toContain("`` :put ` ``");
+	});
 });

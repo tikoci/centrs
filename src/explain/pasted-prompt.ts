@@ -7,7 +7,9 @@ import { type Segment, segmentStatements } from "./segment.ts";
  * Recognizes two grounded prompt shapes at the start of a *statement* (not a
  * raw line, so prompt-looking text inside strings and comments stays legal):
  *
- * - `[user@host] > <command>` — e.g. `[admin@MikroTik] > /ip/address print`
+ * - `[user@host] <menu>> <command>` — e.g. `[admin@MikroTik] > /ip/address print`
+ *   at the root, or `[admin@MikroTik] /ip/address> add …` inside a menu, the
+ *   shape the manual's Console page shows; a HotLock prompt doubles the `>`
  * - `/menu/path> <command>` — e.g. `/interface/lte> monitor lte1`
  *
  * Segmentation already split the document on real statement boundaries with
@@ -37,8 +39,9 @@ import { type Segment, segmentStatements } from "./segment.ts";
  * which hold only when the segmentation reports `ascii`; otherwise the
  * per-segment candidate stands (narrow, never wrong).
  */
-const BRACKET_PROMPT_RE = /^\[[^[\]\r\n]*@[^[\]\r\n]*\]\s*>\s*([\s\S]*)$/;
-const MENU_PROMPT_RE = /^(\/[A-Za-z0-9_\-/]+)\s*>\s*([\s\S]*)$/;
+const BRACKET_PROMPT_RE =
+	/^\[[^[\]\r\n]*@[^[\]\r\n]*\]\s*(\/[A-Za-z0-9_\-/]*)?\s*>>?\s*([\s\S]*)$/;
+const MENU_PROMPT_RE = /^(\/[A-Za-z0-9_\-/]+)\s*>>?\s*([\s\S]*)$/;
 
 export interface PastedPromptHit {
 	shape: "bracket" | "menu";
@@ -84,10 +87,12 @@ export function detectPastedPrompts(input: string): PastedPromptHit[] {
 			if (text.length === 0) return null;
 			const bracket = BRACKET_PROMPT_RE.exec(text);
 			if (bracket !== null) {
-				const group = bracket[1] ?? "";
+				const menu = bracket[1];
+				const group = bracket[2] ?? "";
 				return group.trim().length > 0
 					? {
 							shape: "bracket",
+							...(menu && menu !== "/" ? { menu } : {}),
 							promptEnd: text.length - group.length,
 							candidate: group.trim(),
 						}
@@ -131,27 +136,45 @@ export function detectPastedPrompts(input: string): PastedPromptHit[] {
 			if (sliced.length > 0 && !hasUnbalancedDelimiters(sliced))
 				candidate = sliced;
 		}
-		hits.push(
-			hit.shape === "bracket"
-				? { shape: hit.shape, candidate }
-				: { shape: hit.shape, menu: hit.menu, candidate },
-		);
+		hits.push({
+			shape: hit.shape,
+			...(hit.menu ? { menu: hit.menu } : {}),
+			candidate,
+		});
 	}
 	return hits;
 }
 
-export function pastedPromptTips(input: string): Tip[] {
-	return detectPastedPrompts(input).map((hit) =>
-		hit.shape === "bracket"
-			? buildTip(
-					"tip/explain-pasted-prompt",
-					"This looks like a pasted console transcript (`[user@host] >`), not a command to run.",
-					`Drop the pasted prompt and try \`${hit.candidate}\` instead — this input was not executed.`,
-				)
-			: buildTip(
-					"tip/explain-pasted-prompt",
-					`This looks like a pasted \`${hit.menu}\` menu prompt, not a command to run from the root.`,
-					`Drop the pasted prompt and try \`${hit.candidate}\` (typed at \`${hit.menu}\`) instead — this input was not executed.`,
-				),
+/**
+ * A markdown code span that survives backticks in `text`: the fence is one
+ * longer than the longest backtick run inside, padded when `text` starts or
+ * ends with one (CommonMark code spans).
+ */
+function codeSpan(text: string): string {
+	const longest = Math.max(
+		0,
+		...(text.match(/`+/g) ?? []).map((run) => run.length),
 	);
+	const fence = "`".repeat(longest + 1);
+	const pad = text.startsWith("`") || text.endsWith("`") ? " " : "";
+	return `${fence}${pad}${text}${pad}${fence}`;
+}
+
+export function pastedPromptTips(input: string): Tip[] {
+	return detectPastedPrompts(input).map((hit) => {
+		const where = hit.menu ? ` (typed at ${codeSpan(hit.menu)})` : "";
+		const fix = `Drop the pasted prompt and try ${codeSpan(hit.candidate)}${where} instead — this input was not executed.`;
+		if (hit.shape === "menu")
+			return buildTip(
+				"tip/explain-pasted-prompt",
+				`This looks like a pasted ${codeSpan(hit.menu ?? "")} menu prompt, not a command to run from the root.`,
+				fix,
+			);
+		const prompt = hit.menu ? `[user@host] ${hit.menu}>` : "[user@host] >";
+		return buildTip(
+			"tip/explain-pasted-prompt",
+			`This looks like a pasted console transcript (${codeSpan(prompt)}), not a command to run.`,
+			fix,
+		);
+	});
 }
