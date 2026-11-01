@@ -28,7 +28,7 @@ that lands under `test/fixtures/` is durable.
 | `explain-symbol-bad-sigil-replay.ts` | recorded K2 hard-error offsets | the F8 anchors in `test/unit/explain-symbols.test.ts` |
 | `explain-symbol-classes-replay.ts` | recorded K3 per-occurrence variable classes | the F7 anchors in `test/unit/explain-symbols.test.ts` |
 | `explain-import-blocker-validity.ts` | the #203 import blockers + controls through `:parse` and `highlight` | the q203 validity claim in `commands/explain/README.md` |
-| `explain-import-dry-run.ts` | identical bytes across `:parse`, `highlight`, plain/verbose/dry-run imports | the #520 evidence slice in `test/fixtures/explain/import-dry-run.slice.json` |
+| `explain-import-dry-run.ts` | identical bytes — syntax faults and the #203 apply-time blockers — across `:parse`, `highlight`, plain/verbose/dry-run imports | the #520 evidence slice in `test/fixtures/explain/import-dry-run.slice.json`, written by the probe and copied unedited |
 | `explain-version-floors.ts` | the RouterOS version at which `:tobool` string coercion and the `.proplist` highlight offset change, and the `:parse` wording every channel produces (#296) | `TOBOOL_STRING_COERCED_SINCE` + `PROPLIST_HIGHLIGHT_SPLIT_SINCE` in `test/integration/chr.ts` |
 
 ## Rules a probe here must follow
