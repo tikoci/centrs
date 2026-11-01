@@ -118,6 +118,7 @@
 		"explain:operator-readme:check": "bun run scripts/explain-operator-slice.ts --readme --check",
 		"explain:operator-slice": "bun run scripts/explain-operator-slice.ts",
 		"explain:probe:brace-slots": "bun run scripts/probes/explain-brace-slot-sweep.ts",
+		"explain:probe:context-matrix": "bun run scripts/probes/explain-context-matrix.ts",
 		"explain:probe:corrected-anchors": "bun run scripts/probes/explain-corrected-anchors.ts",
 		"explain:probe:escapes": "bun run scripts/probes/explain-escape-sweep.ts",
 		"explain:probe:highlight-recapture": "bun run scripts/probes/explain-highlight-recapture.ts",

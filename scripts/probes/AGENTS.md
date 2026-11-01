@@ -18,6 +18,7 @@ that lands under `test/fixtures/` is durable.
 | Probe | Re-derives | Durable answer |
 | ----- | ---------- | -------------- |
 | `explain-brace-slot-sweep.ts` | which `(verb, slot)` pairs read `{…}` as an array (#225/#257) | `src/explain/brace-slots.ts` + `test/fixtures/explain/values.json` → `interiorGrounding.braceSlots` |
+| `explain-context-matrix.ts` | scope/menu/encoding probes across centrs' delivery routes (#574) | the #574 evidence slice in `test/fixtures/explain/context-matrix.slice.json` |
 | `explain-corrected-anchors.ts` | the device `:parse` answer for each #374 corrected core-syntax anchor, boundary and rejecting control | `test/fixtures/explain/corrected-anchors.json` → `test/unit/explain-corrected-anchors.test.ts` |
 | `explain-escape-sweep.ts` | the device-accepted `\<c>` set inside a string (#252) | `VALID_SINGLE` in `src/explain/quoted-string.ts` |
 | `explain-highlight-recapture.ts` | the per-character `highlight` stream for every corpus script (Q13), for a build the corpus has no session for | nothing durable since #498: the slice is cut from the corpus's own channel sessions |

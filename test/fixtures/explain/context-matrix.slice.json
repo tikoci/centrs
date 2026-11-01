@@ -1,0 +1,1370 @@
+{
+	"_source": "Recorded by `bun run explain:probe:context-matrix 7.24.5` (scripts/probes/explain-context-matrix.ts) on stock CHR 7.24.5 x86, 2026-11-01 — two disposable CHRs (IP routes, MAC routes), 59 cells, every product cell through centrs executeEnvelope with pinned --via. Replicated on a second full-matrix pass with identical cell outcomes and gate table. Re-run that command to reproduce; per-run captures stay in `.scratch/`. Findings read per #507's dimensions; unknowns stay unknown. No router is needed to read this file.",
+	"routerosVersion": "7.24.5 (stable)",
+	"arch": "x86",
+	"routes": {
+		"rest": {
+			"via": "rest-api",
+			"product": true,
+			"sessions": "one /execute call per submission; fresh scope each call"
+		},
+		"native": {
+			"via": "native-api",
+			"product": true,
+			"sessions": "one /execute call per submission; fresh scope each call"
+		},
+		"ssh": {
+			"via": "ssh",
+			"product": true,
+			"sessions": "one ssh exec channel per submission"
+		},
+		"mactelnet": {
+			"via": "mac-telnet",
+			"product": true,
+			"sessions": "fresh console login per call"
+		},
+		"session": {
+			"via": "mac-telnet-session",
+			"product": false,
+			"sessions": "one held MacTelnetConsole per cell (login once, one run() per submission); no validation"
+		},
+		"stored": {
+			"via": "rest-api",
+			"product": true,
+			"sessions": "REST-created /system/script, one script per submission, run via product REST"
+		}
+	},
+	"gateTable": [
+		{
+			"shape": "I1",
+			"ok": false,
+			"code": "usage/confirmation-required"
+		},
+		{
+			"shape": "I2",
+			"ok": false,
+			"code": "usage/confirmation-required"
+		},
+		{
+			"shape": "I3",
+			"ok": false,
+			"code": "usage/confirmation-required"
+		},
+		{
+			"shape": "I4",
+			"ok": false,
+			"code": "usage/confirmation-required"
+		},
+		{
+			"shape": "I5-set",
+			"ok": false,
+			"code": "usage/confirmation-required"
+		},
+		{
+			"shape": "I5-read",
+			"ok": true,
+			"code": "ran"
+		},
+		{
+			"shape": "I6-nav",
+			"ok": false,
+			"code": "routeros/request-failed"
+		},
+		{
+			"shape": "I6-print",
+			"ok": false,
+			"code": "validation/unknown-path"
+		},
+		{
+			"shape": "I7",
+			"ok": true,
+			"code": "ran"
+		},
+		{
+			"shape": "I8",
+			"ok": false,
+			"code": "validation/syntax"
+		},
+		{
+			"shape": "script-run",
+			"ok": false,
+			"code": "usage/confirmation-required"
+		}
+	],
+	"inputs": [
+		{
+			"id": "I1-nl-scope",
+			"intent": "local/set/put across newlines: one scope or per-line scopes"
+		},
+		{
+			"id": "I2-semi-scope",
+			"intent": "same three statements joined by semicolons on one line"
+		},
+		{
+			"id": "I3-braces-1line",
+			"intent": "explicit braces around the three statements, one line"
+		},
+		{
+			"id": "I4-braces-multi",
+			"intent": "explicit braces with physical newlines inside (continuation)"
+		},
+		{
+			"id": "I5-global",
+			"intent": "global set in one submission, read in the next"
+		},
+		{
+			"id": "I6-menu",
+			"intent": "menu navigation then print: context within vs across calls"
+		},
+		{
+			"id": "I7-unicode",
+			"intent": "non-ascii output bytes per route"
+		},
+		{
+			"id": "I8-bom",
+			"intent": "leading BOM before a trivial command per route"
+		}
+	],
+	"findings": [
+		"SUBMISSION-1: /execute over REST and native runs multiline input as ONE scope (I1/I4 whole -> a=2; I6 menu+print in one call shows the table). Stored scripts agree (a=2).",
+		"SUBMISSION-2: SSH command execution runs multiline input PER LINE: I1 whole over ssh answers `syntax error (line 1 column 6)` + `a=` (line 2 :set rejected in its own scope, line 3 :put sees nothing); I4 whole answers `missing closing brace (line 1 column 2)` + the same tail. Coordinates are per-line (line 1), not whole-input.",
+		"SUBMISSION-3: mac-telnet console runs multiline sends per line too: I1 whole shows the last line's echo plus `a=`. Braced multiline (I4) is absorbed as one submission on the console (`{... }` fold, a=2).",
+		"SUBMISSION-4: `;`-joined statements are one scope on EVERY route incl. the console: I2 answers a=2 on rest/native/ssh/stored, and the session raw screen shows the device printing a=2 (the product mac-telnet ret is empty — reader extraction loss, see DELIVERY-2).",
+		"SUBMISSION-5: a bare menu path is not executable over /execute (rest: routeros/request-failed `no such command`; native: routeros/api-trap) but navigates fine on console routes (ssh/mac/session/stored nav all ok). A bare `print` is validation/unknown-path on every product route (device stage; direct fallback confirms `bad command name print`) and routeros/unknown-path when run inside a stored script.",
+		"SUBMISSION-6: menu context holds WITHIN one submission on every route it runs on (I6 whole shows the 192.0.2.44 entry on rest/native/stored/mac/session). ACROSS submissions it holds only on a held console (I6 session split shows the table; stored split answers `bad command name print`).",
+		"SUBMISSION-7: ssh cannot carry multiline menu navigation: I6 whole over ssh exits 1 with no output (transport/network), reproduced 3/3 runs on separate CHRs while validation passed. Single-line nav over ssh is fine. Mechanism unknown; the transport/network code mislabels a device-side refusal — follow-up filed.",
+		"BODY-1: each stored-script run is one scope (I1-I4 whole -> a=2) and scripts share device-global state: a global set in one script reads g=11 in the next.",
+		"BODY-2: partial script input is never final state, but globals cross every submission boundary measured: g=11 reads back on rest/native/ssh/stored product calls and (raw screen) on the held console.",
+		"BODY-3: locals never leak across submissions anywhere: every split read shows empty (`a=`) or the middle :set is rejected (`syntax error (line 1 column 6)` — the validation/syntax on split middles matches device truth on all four product routes).",
+		"ENV-1 (unicode/BOM note from #507): rest/native/stored preserve non-ASCII end to end (ret `héllo→574`). The RouterOS console strips non-ASCII input bytes: the mac raw echo/output shows `hllo574`, and ssh ret is `hllo574` — one console-input mechanism, two routes.",
+		"ENV-2 (BOM): a leading BOM splits by device path, not by centrs: the offline stage passes (abstains) on every route; REST/native device :parse rejects (validation/syntax; direct fallback `expected command name (line 1 column 1)`); console :parse accepts and runs (ssh/mac ret `bom574`); a stored script carrying a BOM fails at run (`expected command name (line 1 column 1)`).",
+		"GATE-1 (identity/permissions dimension): every scope-bearing shape is write-shaped in centrs — I1..I4, I5-set and script-run all need --yes (usage/confirmation-required); pure reads (I5-read, I7) run without. Valid syntax never implies executability: I6-nav passes validation and fails at the device.",
+		"DELIVERY-1: ssh multiline menu navigation is refused by the device channel (exit 1, silent) while the identical bytes work over the interactive console — a route delivery difference with its own follow-up.",
+		"DELIVERY-2: the mac-telnet console reader drops :put output for single-line sends with trailing newline and non-trivial content (I2/I3/I5-read/I7 ret/product-output empty while the committed raw screens show the device printing a=2, g=11, hllo574). Multiline sends leak echo artifacts into ret (a `[cmx@CHR] > :put ...` line; a `{... }` fold). Same reader, same follow-up — the product mac-telnet cells for I2/I3/I5/I7 are extraction artifacts, not device answers.",
+		"UNKNOWN-1: ssh multiline-nav exit-1 mechanism; console echo-shape switch behind DELIVERY-2; BOM-strip location in the console input path — recorded as unknown, not guessed.",
+		"UNKNOWN-2: cross-cell leakage on a long-held console (fresh console per cell by design); any RouterOS version other than 7.24.5 x86; SSH-interactive-shell (PTY) submission, which RouterOS does not grant over SSH."
+	],
+	"cells": [
+		{
+			"cell": "I1-nl-scope-rest",
+			"input": "I1-nl-scope",
+			"route": "rest",
+			"submissions": [
+				{
+					"bytes": ":local a574I1nlscoperest 1\n:set a574I1nlscoperest 2\n:put \"a=$a574I1nlscoperest\"\n",
+					"sha256": "19f56351bb7f23d0363bfdc862ed008755a0d4358df745233322c570b7cb27fd",
+					"ms": 7,
+					"ok": true,
+					"out": "{\"ret\":\"a=2\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I1-nl-scope-rest-split",
+			"input": "I1-nl-scope",
+			"route": "rest",
+			"submissions": [
+				{
+					"bytes": ":local a574I1nlscoperestsplit 1",
+					"sha256": "aaefbd81771d758681c2cb62648319ba7e05175d1f441fc215a964eb63eb3805",
+					"ms": 5,
+					"ok": true,
+					"out": "{\"ret\":\"\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				},
+				{
+					"bytes": ":set a574I1nlscoperestsplit 2",
+					"sha256": "a596dc9f3d7ff8bc098cecfbe21b41f7f04695c1ad3cd4a8e81d37bbb5b8aafb",
+					"ms": 3,
+					"ok": false,
+					"error": {
+						"code": "validation/syntax",
+						"summary": "RouterOS rejected the command syntax while parsing it.",
+						"cause": "null"
+					},
+					"stages": [["offline", "passed"], ["device", "failed"]]
+				},
+				{
+					"bytes": ":put \"a=$a574I1nlscoperestsplit\"",
+					"sha256": "33e5fdace6d3a31a9f0344ce9a70f581f55adfdffffeb48d7185dd61353df262",
+					"ms": 5,
+					"ok": true,
+					"out": "{\"ret\":\"a=\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			],
+			"fallbacks": [
+				{
+					"bytes": ":set a574I1nlscoperestsplit 2",
+					"ok": true,
+					"out": "{\"output\":\"syntax error (line 1 column 6)\",\"via\":\"rest\"}",
+					"reason": "product validation rejected: validation/syntax"
+				}
+			]
+		},
+		{
+			"cell": "I1-nl-scope-native",
+			"input": "I1-nl-scope",
+			"route": "native",
+			"submissions": [
+				{
+					"bytes": ":local a574I1nlscopenative 1\n:set a574I1nlscopenative 2\n:put \"a=$a574I1nlscopenative\"\n",
+					"sha256": "6ac72490d88b5f4d1a9f33cdb1bdcb19c1873f37451ea2c8f4cc88bebbb0af64",
+					"ms": 130,
+					"ok": true,
+					"out": "{\"ret\":\"a=2\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I1-nl-scope-native-split",
+			"input": "I1-nl-scope",
+			"route": "native",
+			"submissions": [
+				{
+					"bytes": ":local a574I1nlscopenativesplit 1",
+					"sha256": "80cba5d3c6219783f6d25417851cf0c95c149c465e3760324deb9d9bf8d953f4",
+					"ms": 129,
+					"ok": true,
+					"out": "{\"ret\":\"\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				},
+				{
+					"bytes": ":set a574I1nlscopenativesplit 2",
+					"sha256": "c01dbf50b0507474f45315e2dc55fc3763f1c8a9ca81b7935a7e441865538a65",
+					"ms": 128,
+					"ok": false,
+					"error": {
+						"code": "validation/syntax",
+						"summary": "RouterOS rejected the command syntax while parsing it.",
+						"cause": "null"
+					},
+					"stages": [["offline", "passed"], ["device", "failed"]]
+				},
+				{
+					"bytes": ":put \"a=$a574I1nlscopenativesplit\"",
+					"sha256": "b23d65a158eefb607e6b3ee217eeae4beeede4b13986b763a605cc65d003a7f5",
+					"ms": 323,
+					"ok": true,
+					"out": "{\"ret\":\"a=\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			],
+			"fallbacks": [
+				{
+					"bytes": ":set a574I1nlscopenativesplit 2",
+					"ok": true,
+					"out": "{\"output\":\"syntax error (line 1 column 6)\",\"via\":\"rest\"}",
+					"reason": "product validation rejected: validation/syntax"
+				}
+			]
+		},
+		{
+			"cell": "I1-nl-scope-ssh",
+			"input": "I1-nl-scope",
+			"route": "ssh",
+			"submissions": [
+				{
+					"bytes": ":local a574I1nlscopessh 1\n:set a574I1nlscopessh 2\n:put \"a=$a574I1nlscopessh\"\n",
+					"sha256": "00799d94a9620028633ea34fd4e2fc5762129df587bf3ff4e86d84968e3b4acf",
+					"ms": 480,
+					"ok": true,
+					"out": "{\"ret\":\"syntax error (line 1 column 6)\\na=\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I1-nl-scope-ssh-split",
+			"input": "I1-nl-scope",
+			"route": "ssh",
+			"submissions": [
+				{
+					"bytes": ":local a574I1nlscopesshsplit 1",
+					"sha256": "2336c2510a07a873c17cb55c18661707cbf10e8d52d1d823ccb9e8aae2ca6d7e",
+					"ms": 497,
+					"ok": true,
+					"out": "{\"ret\":\"\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				},
+				{
+					"bytes": ":set a574I1nlscopesshsplit 2",
+					"sha256": "df32fd6d76e019ca26c067e120f4b94422b340e83594159bd0c07e7c7daab857",
+					"ms": 237,
+					"ok": false,
+					"error": {
+						"code": "validation/syntax",
+						"summary": "RouterOS rejected the command syntax while parsing it.",
+						"cause": "null"
+					},
+					"stages": [["offline", "passed"], ["device", "failed"]]
+				},
+				{
+					"bytes": ":put \"a=$a574I1nlscopesshsplit\"",
+					"sha256": "c536b28fca2346263bc562f7529c45d91b1b894f17fd57a6066d94163e30b0f2",
+					"ms": 500,
+					"ok": true,
+					"out": "{\"ret\":\"a=\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			],
+			"fallbacks": [
+				{
+					"bytes": ":set a574I1nlscopesshsplit 2",
+					"ok": true,
+					"out": "{\"output\":\"syntax error (line 1 column 6)\",\"via\":\"rest\"}",
+					"reason": "product validation rejected: validation/syntax"
+				}
+			]
+		},
+		{
+			"cell": "I1-nl-scope-mactelnet",
+			"input": "I1-nl-scope",
+			"route": "mactelnet",
+			"submissions": [
+				{
+					"bytes": ":local a574I1nlscopemactelnet 1\n:set a574I1nlscopemactelnet 2\n:put \"a=$a574I1nlscopemactelnet\"\n",
+					"sha256": "118087c7043b4b890fa0a4b1c2a62941cda5b9dca4a3ea2cdbf03a1cb8d5c9ff",
+					"ms": 11296,
+					"ok": true,
+					"out": "{\"ret\":\"[cmx@CHR] > :put \\\"a=$a574I1nlscopemactelnet\\\"\\na=\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I1-nl-scope-mactelnet-split",
+			"input": "I1-nl-scope",
+			"route": "mactelnet",
+			"submissions": [
+				{
+					"bytes": ":local a574I1nlscopemactelnetsp 1",
+					"sha256": "d505773fe884e9aa133cb712f69e2143fd6872878b6eed4c15fd4060209f57c1",
+					"ms": 11108,
+					"ok": true,
+					"out": "{\"ret\":\"\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				},
+				{
+					"bytes": ":set a574I1nlscopemactelnetsp 2",
+					"sha256": "73f13c8d36163a1c161a1daf53ee82cf8257358c909bd1eab7aa9ee67fd6447a",
+					"ms": 10953,
+					"ok": false,
+					"error": {
+						"code": "validation/syntax",
+						"summary": "RouterOS rejected the command syntax while parsing it.",
+						"cause": "null"
+					},
+					"stages": [["offline", "passed"], ["device", "failed"]]
+				},
+				{
+					"bytes": ":put \"a=$a574I1nlscopemactelnetsp\"",
+					"sha256": "d4980466a0751ed25e7a1968f77b9a61e6d48503e3439ccc3d0ba3757858116f",
+					"ms": 11103,
+					"ok": true,
+					"out": "{\"ret\":\"a=\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			],
+			"fallbacks": [
+				{
+					"bytes": ":set a574I1nlscopemactelnetsp 2",
+					"ok": true,
+					"out": "{\"output\":\"syntax error (line 1 column 6)\",\"via\":\"rest\"}",
+					"reason": "product validation rejected: validation/syntax"
+				}
+			]
+		},
+		{
+			"cell": "I1-nl-scope-session",
+			"input": "I1-nl-scope",
+			"route": "session",
+			"submissions": [
+				{
+					"bytes": ":local a574I1nlscopesession 1\n:set a574I1nlscopesession 2\n:put \"a=$a574I1nlscopesession\"\n",
+					"sha256": "2a8482861591c242c794b45bdaac86322cd83a6fce521feaf1333d65ee23b8ea",
+					"ms": 153,
+					"ok": true,
+					"out": "{\"output\":\"[cmx@CHR] > :put \\\"a=$a574I1nlscopesession\\\"\\na=\"}",
+					"note": "held console, one run() per submission"
+				}
+			]
+		},
+		{
+			"cell": "I1-nl-scope-session-split",
+			"input": "I1-nl-scope",
+			"route": "session",
+			"submissions": [
+				{
+					"bytes": ":local a574I1nlscopesessionspli 1",
+					"sha256": "9cdc9a4a5d057db844fa46a12f29987f1c7dedd8309b00c0062251957009543f",
+					"ms": 152,
+					"ok": true,
+					"out": "{\"output\":\"\"}",
+					"note": "held console, one run() per submission",
+					"raw": "{\"raw\":\":local a574I1nlscopesessionspli 1\\r[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mlocal\\u001b[m \\u001b[m\\u001b[32;1ma574I1nlscopesessionspli\\u001b[m 1\\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \"}"
+				},
+				{
+					"bytes": ":set a574I1nlscopesessionspli 2",
+					"sha256": "f4c98961a971f54d77e79e8d34b11ccbfeba402514f0a842479e12f74ceaee77",
+					"ms": 151,
+					"ok": true,
+					"out": "{\"output\":\"syntax error (line 1 column 6)\"}",
+					"note": "held console, one run() per submission",
+					"raw": "{\"raw\":\":set a574I1nlscopesessionspli 2\\r[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mset\\u001b[m \\u001b[37;41;1ma\\u001b[m\\u001b[31m574I1nlscopesessionspli\\u001b[m 2\\r\\n\\rsyntax error (line 1 column 6)\\r\\n\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \"}"
+				},
+				{
+					"bytes": ":put \"a=$a574I1nlscopesessionspli\"",
+					"sha256": "3ad567d5299924fea1fb1ad0679d91756fa5b87e58dff4dca71b2a01caa6e754",
+					"ms": 151,
+					"ok": true,
+					"out": "{\"output\":\"a=\"}",
+					"note": "held console, one run() per submission",
+					"raw": "{\"raw\":\":put \\\"a=$a574I1nlscopesessionspli\\\"\\r[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mput\\u001b[m \\u001b[m\\u001b[33m\\\"\\u001b[ma=\\u001b[m\\u001b[33m$\\u001b[m\\u001b[31ma574I1nlscopesessionspli\\u001b[m\\u001b[33m\\\"\\u001b[m\\r\\n\\ra=\\r\\n\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \"}"
+				}
+			]
+		},
+		{
+			"cell": "I1-nl-scope-stored",
+			"input": "I1-nl-scope",
+			"route": "stored",
+			"submissions": [
+				{
+					"bytes": "/system/script/run cmx-I1-nl-scope-stored-1",
+					"sha256": "1b74fdfbc4e50094efbda09c44f3f87894af2478a1d2ca2a265a7c480843fd79",
+					"ms": 4,
+					"ok": true,
+					"out": "{\"ret\":\"a=2\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]],
+					"note": "script cmx-I1-nl-scope-stored-1 source-sha256 eca9c058968b0016346baa64283a4c15fe440dfa20ab694bab3a9d5e0b9decac"
+				}
+			]
+		},
+		{
+			"cell": "I2-semi-scope-rest",
+			"input": "I2-semi-scope",
+			"route": "rest",
+			"submissions": [
+				{
+					"bytes": ":local a574I2semiscoperest 1; :set a574I2semiscoperest 2; :put \"a=$a574I2semiscoperest\"\n",
+					"sha256": "28bc3316908b979cc888419c8367a57d912618e7edd47fcdad0bd545154a949c",
+					"ms": 6,
+					"ok": true,
+					"out": "{\"ret\":\"a=2\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I2-semi-scope-native",
+			"input": "I2-semi-scope",
+			"route": "native",
+			"submissions": [
+				{
+					"bytes": ":local a574I2semiscopenative 1; :set a574I2semiscopenative 2; :put \"a=$a574I2semiscopenative\"\n",
+					"sha256": "9c3f2da95ad0fcd2bd5c24fff4727d49ffac61ced69cd3d4a9d063dc5584f4bd",
+					"ms": 119,
+					"ok": true,
+					"out": "{\"ret\":\"a=2\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I2-semi-scope-ssh",
+			"input": "I2-semi-scope",
+			"route": "ssh",
+			"submissions": [
+				{
+					"bytes": ":local a574I2semiscopessh 1; :set a574I2semiscopessh 2; :put \"a=$a574I2semiscopessh\"\n",
+					"sha256": "40d93188d059ddb6c4531a9111cb36f4073b1dea79453da01bacd903ba45292f",
+					"ms": 480,
+					"ok": true,
+					"out": "{\"ret\":\"a=2\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I2-semi-scope-mactelnet",
+			"input": "I2-semi-scope",
+			"route": "mactelnet",
+			"submissions": [
+				{
+					"bytes": ":local a574I2semiscopemactelnet 1; :set a574I2semiscopemactelnet 2; :put \"a=$a574I2semiscopemactelnet\"\n",
+					"sha256": "5807c313106a7f54301ea75d3289d4e1ffb170d645f69399e5be85c23c6c99a8",
+					"ms": 11102,
+					"ok": true,
+					"out": "{\"ret\":\"\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I2-semi-scope-session",
+			"input": "I2-semi-scope",
+			"route": "session",
+			"submissions": [
+				{
+					"bytes": ":local a574I2semiscopesession 1; :set a574I2semiscopesession 2; :put \"a=$a574I2semiscopesession\"\n",
+					"sha256": "559ef5815d67b40812bb4d5806408b97296fe564826ab0b43eebef0372e0f8dd",
+					"ms": 152,
+					"ok": true,
+					"out": "{\"output\":\"\"}",
+					"note": "held console, one run() per submission",
+					"raw": "{\"raw\":\":local a574I2semiscopesession 1; :set a574I2semiscopesession 2; :put \\\"a=$a574I2semiscopesession\\\"\\r[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mlocal\\u001b[m \\u001b[m\\u001b[32;1ma574I2semiscopesession\\u001b[m 1\\u001b[m\\u001b[33m;\\u001b[m \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mset\\u001b[m \\u001b[m\\u001b[32;1ma574I2semiscopesession\\u001b[m 2\\u001b[m\\u001b[33m;\\u001b[m \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mput\\u001b[m \\u001b[m\\u001b[33m\\\"\\u001b[ma=\\u001b[m\\u001b[33m$\\u001b[m\\u001b[32;1ma574I2semiscopesession\\u001b[m\\u001b[33m\\\"\\u001b[m\\r\\n\\ra=2\\r\\n\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \"}"
+				}
+			]
+		},
+		{
+			"cell": "I2-semi-scope-stored",
+			"input": "I2-semi-scope",
+			"route": "stored",
+			"submissions": [
+				{
+					"bytes": "/system/script/run cmx-I2-semi-scope-stored-1",
+					"sha256": "e687f4dbb3d5c70855ea723869e6420d7ff4580e07cf482fa94a5eeabfb7ec6d",
+					"ms": 3,
+					"ok": true,
+					"out": "{\"ret\":\"a=2\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]],
+					"note": "script cmx-I2-semi-scope-stored-1 source-sha256 52dfa46818b64c221257cabd9b53ff47bb682ab931151733e204731389290e26"
+				}
+			]
+		},
+		{
+			"cell": "I3-braces-1line-rest",
+			"input": "I3-braces-1line",
+			"route": "rest",
+			"submissions": [
+				{
+					"bytes": "{ :local a574I3braces1linerest 1; :set a574I3braces1linerest 2; :put \"a=$a574I3braces1linerest\" }\n",
+					"sha256": "f698638485f823e9cc4c2bef3733e3016d9a3e5ff721a35331fa64d81d4e0e40",
+					"ms": 7,
+					"ok": true,
+					"out": "{\"ret\":\"a=2\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I3-braces-1line-native",
+			"input": "I3-braces-1line",
+			"route": "native",
+			"submissions": [
+				{
+					"bytes": "{ :local a574I3braces1linenative 1; :set a574I3braces1linenative 2; :put \"a=$a574I3braces1linenative\" }\n",
+					"sha256": "8d426f73e92c640b05524d88696975b6012e623c8923265d1d483f8d409339c4",
+					"ms": 337,
+					"ok": true,
+					"out": "{\"ret\":\"a=2\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I3-braces-1line-ssh",
+			"input": "I3-braces-1line",
+			"route": "ssh",
+			"submissions": [
+				{
+					"bytes": "{ :local a574I3braces1linessh 1; :set a574I3braces1linessh 2; :put \"a=$a574I3braces1linessh\" }\n",
+					"sha256": "9021321e4872345a82dcd6384a79a194b609602f751353d4d156e000ddadc30c",
+					"ms": 484,
+					"ok": true,
+					"out": "{\"ret\":\"a=2\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I3-braces-1line-mactelnet",
+			"input": "I3-braces-1line",
+			"route": "mactelnet",
+			"submissions": [
+				{
+					"bytes": "{ :local a574I3braces1linemacteln 1; :set a574I3braces1linemacteln 2; :put \"a=$a574I3braces1linemacteln\" }\n",
+					"sha256": "f4a48ee12fd2de40abbb969b0295216c33fd2dd1c553d1b3e8bca20b65b62d79",
+					"ms": 11102,
+					"ok": true,
+					"out": "{\"ret\":\"\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I3-braces-1line-session",
+			"input": "I3-braces-1line",
+			"route": "session",
+			"submissions": [
+				{
+					"bytes": "{ :local a574I3braces1linesession 1; :set a574I3braces1linesession 2; :put \"a=$a574I3braces1linesession\" }\n",
+					"sha256": "5cb1a49306818d4b136d764677b65eccc2598b058242cf1ce4d10ced00e6932e",
+					"ms": 152,
+					"ok": true,
+					"out": "{\"output\":\"\"}",
+					"note": "held console, one run() per submission",
+					"raw": "{\"raw\":\"{ :local a574I3braces1linesession 1; :set a574I3braces1linesession 2; :put \\\"a=$a574I3braces1linesession\\\" }\\r[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\u001b[m\\u001b[33m{\\u001b[m \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mlocal\\u001b[m \\u001b[m\\u001b[32;1ma574I3braces1linesession\\u001b[m 1\\u001b[m\\u001b[33m;\\u001b[m \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mset\\u001b[m \\u001b[m\\u001b[32;1ma574I3braces1linesession\\u001b[m 2\\u001b[m\\u001b[33m;\\u001b[m \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mput\\u001b[m \\u001b[m\\u001b[33m\\\"\\u001b[ma=\\u001b[m\\u001b[33m$\\u001b[m\\u001b[32;1ma574I3braces1linesession\\u001b[m\\u001b[33m\\\"\\u001b[m \\u001b[m\\u001b[33m}\\u001b[m\\r\\n\\ra=2\\r\\n\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \"}"
+				}
+			]
+		},
+		{
+			"cell": "I3-braces-1line-stored",
+			"input": "I3-braces-1line",
+			"route": "stored",
+			"submissions": [
+				{
+					"bytes": "/system/script/run cmx-I3-braces-1line-stored-1",
+					"sha256": "6b42848393391c3bbde380818b3a81c0d0374f1a0a64829059b64bab130a6e20",
+					"ms": 3,
+					"ok": true,
+					"out": "{\"ret\":\"a=2\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]],
+					"note": "script cmx-I3-braces-1line-stored-1 source-sha256 6dd12f2411ac88ddf657bb6eab9303c4860e4110806efaf2bd56e62d11b7d748"
+				}
+			]
+		},
+		{
+			"cell": "I4-braces-multi-rest",
+			"input": "I4-braces-multi",
+			"route": "rest",
+			"submissions": [
+				{
+					"bytes": "{\n:local a574I4bracesmultirest 1\n:set a574I4bracesmultirest 2\n:put \"a=$a574I4bracesmultirest\"\n}\n",
+					"sha256": "c18e9edebe54248f92e16c74ec1da308b45dd13be40d21b28faf11009f2d43f9",
+					"ms": 6,
+					"ok": true,
+					"out": "{\"ret\":\"a=2\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I4-braces-multi-native",
+			"input": "I4-braces-multi",
+			"route": "native",
+			"submissions": [
+				{
+					"bytes": "{\n:local a574I4bracesmultinative 1\n:set a574I4bracesmultinative 2\n:put \"a=$a574I4bracesmultinative\"\n}\n",
+					"sha256": "5da380c8e6df1516a02969b35b2f79c987d67604beabd5922d2bdde80078e53d",
+					"ms": 283,
+					"ok": true,
+					"out": "{\"ret\":\"a=2\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I4-braces-multi-ssh",
+			"input": "I4-braces-multi",
+			"route": "ssh",
+			"submissions": [
+				{
+					"bytes": "{\n:local a574I4bracesmultissh 1\n:set a574I4bracesmultissh 2\n:put \"a=$a574I4bracesmultissh\"\n}\n",
+					"sha256": "5346513cdeac1c4a8132e50905d28c182fe54ef074c7fd22d79c5e452398beb4",
+					"ms": 490,
+					"ok": true,
+					"out": "{\"ret\":\"missing closing brace (line 1 column 2)\\nsyntax error (line 1 column 6)\\na=\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I4-braces-multi-mactelnet",
+			"input": "I4-braces-multi",
+			"route": "mactelnet",
+			"submissions": [
+				{
+					"bytes": "{\n:local a574I4bracesmultimacteln 1\n:set a574I4bracesmultimacteln 2\n:put \"a=$a574I4bracesmultimacteln\"\n}\n",
+					"sha256": "03c68fea9ad21a7fd0996560856909483e87b551fc713f41ebec2f541931ae17",
+					"ms": 11102,
+					"ok": true,
+					"out": "{\"ret\":\"{... }\\na=2\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I4-braces-multi-session",
+			"input": "I4-braces-multi",
+			"route": "session",
+			"submissions": [
+				{
+					"bytes": "{\n:local a574I4bracesmultisession 1\n:set a574I4bracesmultisession 2\n:put \"a=$a574I4bracesmultisession\"\n}\n",
+					"sha256": "301da003e0d67dce3351622f39dac263db0ccfc9709c5a3bc05122c6ff10247c",
+					"ms": 156,
+					"ok": true,
+					"out": "{\"output\":\"{... }\\na=2\"}",
+					"note": "held console, one run() per submission"
+				}
+			]
+		},
+		{
+			"cell": "I4-braces-multi-stored",
+			"input": "I4-braces-multi",
+			"route": "stored",
+			"submissions": [
+				{
+					"bytes": "/system/script/run cmx-I4-braces-multi-stored-1",
+					"sha256": "1fcab2560b1ffd52c16bb37083f7e08a0d2311d3c251c9b3ea11abd271876402",
+					"ms": 3,
+					"ok": true,
+					"out": "{\"ret\":\"a=2\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]],
+					"note": "script cmx-I4-braces-multi-stored-1 source-sha256 c917f66aa02bed03fee528da6f4a4303bd7e5ca018ef3397bad0ccf3a9217e27"
+				}
+			]
+		},
+		{
+			"cell": "I5-global-rest-split",
+			"input": "I5-global",
+			"route": "rest",
+			"submissions": [
+				{
+					"bytes": ":global g574I5globalrestsplit 11\n",
+					"sha256": "638edf866ed0f65d32033f3874882468d1c17b9fc7f5bfa77c1cfd595cbe3e5c",
+					"ms": 5,
+					"ok": true,
+					"out": "{\"ret\":\"\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				},
+				{
+					"bytes": ":put \"g=$g574I5globalrestsplit\"\n",
+					"sha256": "84902a89211a12b216f60936ecf21128e181fb4afde74ad3230208c4f3db360f",
+					"ms": 4,
+					"ok": true,
+					"out": "{\"ret\":\"g=11\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I5-global-native-split",
+			"input": "I5-global",
+			"route": "native",
+			"submissions": [
+				{
+					"bytes": ":global g574I5globalnativesplit 11\n",
+					"sha256": "22ea62bf8afaec4b0a3fc9d945f0be12411b1b8e330b6a0aa5f9a6fe0c07c88f",
+					"ms": 129,
+					"ok": true,
+					"out": "{\"ret\":\"\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				},
+				{
+					"bytes": ":put \"g=$g574I5globalnativesplit\"\n",
+					"sha256": "9bf10af07e7f896b428f369add4f502366ed6bf1036cf6e35974693f58087330",
+					"ms": 129,
+					"ok": true,
+					"out": "{\"ret\":\"g=11\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I5-global-ssh-split",
+			"input": "I5-global",
+			"route": "ssh",
+			"submissions": [
+				{
+					"bytes": ":global g574I5globalsshsplit 11\n",
+					"sha256": "0ba2640d18e71680e5f5a62f0787ed262e36d44e2ea1622e08d45a8882289679",
+					"ms": 488,
+					"ok": true,
+					"out": "{\"ret\":\"\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				},
+				{
+					"bytes": ":put \"g=$g574I5globalsshsplit\"\n",
+					"sha256": "354d2b651d87c23d3179556a5b0914d1348834e589e21d934f8b496d8190fc51",
+					"ms": 478,
+					"ok": true,
+					"out": "{\"ret\":\"g=11\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I5-global-mactelnet-split",
+			"input": "I5-global",
+			"route": "mactelnet",
+			"submissions": [
+				{
+					"bytes": ":global g574I5globalmactelnetspl 11\n",
+					"sha256": "669a0b7e85b0cbcf9abb715807ce7c1a791c706497aeb2d0f20ac39f4b70f7aa",
+					"ms": 11101,
+					"ok": true,
+					"out": "{\"ret\":\"\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				},
+				{
+					"bytes": ":put \"g=$g574I5globalmactelnetspl\"\n",
+					"sha256": "e4f69c5d07c2e86d2eaf1e923e1795a0a7f850085f99e5cf6846327d27713c6c",
+					"ms": 11102,
+					"ok": true,
+					"out": "{\"ret\":\"\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I5-global-session-split",
+			"input": "I5-global",
+			"route": "session",
+			"submissions": [
+				{
+					"bytes": ":global g574I5globalsessionsplit 11\n",
+					"sha256": "03c8ff93b9c2f34a4f9594a56ff8fa648b265fe35a0ac0be47e33207615f0a34",
+					"ms": 152,
+					"ok": true,
+					"out": "{\"output\":\"\"}",
+					"note": "held console, one run() per submission",
+					"raw": "{\"raw\":\":global g574I5globalsessionsplit 11\\r[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mglobal\\u001b[m \\u001b[m\\u001b[36;1mg574I5globalsessionsplit\\u001b[m 11\\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \"}"
+				},
+				{
+					"bytes": ":put \"g=$g574I5globalsessionsplit\"\n",
+					"sha256": "315aa1ac9e361ebb1b1ab8176e66c9a9a1480cb881a10f4b56c0205ce40d17ba",
+					"ms": 151,
+					"ok": true,
+					"out": "{\"output\":\"\"}",
+					"note": "held console, one run() per submission",
+					"raw": "{\"raw\":\":put \\\"g=$g574I5globalsessionsplit\\\"\\r[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mput\\u001b[m \\u001b[m\\u001b[33m\\\"\\u001b[mg=\\u001b[m\\u001b[33m$\\u001b[m\\u001b[36;1mg574I5globalsessionsplit\\u001b[m\\u001b[33m\\\"\\u001b[m\\r\\n\\rg=11\\r\\n\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \"}"
+				}
+			]
+		},
+		{
+			"cell": "I5-global-stored-split",
+			"input": "I5-global",
+			"route": "stored",
+			"submissions": [
+				{
+					"bytes": "/system/script/run cmx-I5-global-stored-split-1",
+					"sha256": "3c78608cd9b4e67623be73f7f08d84c7e66e8e8ae7c163a12508cf525c6c97a7",
+					"ms": 2,
+					"ok": true,
+					"out": "{\"ret\":\"\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]],
+					"note": "script cmx-I5-global-stored-split-1 source-sha256 a7efee377c64b2e21fed6276a7270f9fca984592fbafcf1a6f9c6bbf8091ab4a"
+				},
+				{
+					"bytes": "/system/script/run cmx-I5-global-stored-split-2",
+					"sha256": "9ec9a2b9f552ee3aa8286e20b98ceddb864f666355c01b686988f466eae0d657",
+					"ms": 3,
+					"ok": true,
+					"out": "{\"ret\":\"g=11\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]],
+					"note": "script cmx-I5-global-stored-split-2 source-sha256 6702eb82ace36afdd83832bfd05afd42eb38ed728b594866de91f18ed5488848"
+				}
+			]
+		},
+		{
+			"cell": "I6-menu-rest",
+			"input": "I6-menu",
+			"route": "rest",
+			"submissions": [
+				{
+					"bytes": "/ip/firewall/address-list\nprint\n",
+					"sha256": "1247e7cbd2d7d83b4fd00812b1fc63c3c96b0eb18eb6d325640c68a4be87df01",
+					"ms": 5,
+					"ok": true,
+					"out": "{\"ret\":\"Columns: LIST, ADDRESS, CREATION-TIME\\r\\n# LIST       ADDRESS     CREATION-TIME      \\r\\n;;; probe-574-menu\\r\\n0 probe-574  192.0.2.44  2026-11-01 02:38:27\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I6-menu-rest-split",
+			"input": "I6-menu",
+			"route": "rest",
+			"submissions": [
+				{
+					"bytes": "/ip/firewall/address-list",
+					"sha256": "9ce25c08588a6274516100ed1e51f37a3d6d89e9d1f017055f1369775f6503d8",
+					"ms": 6,
+					"ok": false,
+					"error": {
+						"code": "routeros/request-failed",
+						"summary": "RouterOS reported an error: no such command",
+						"cause": "\"no such command\""
+					},
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				},
+				{
+					"bytes": "print",
+					"sha256": "ce953a0eb08246617b7f849486c4b26a7af37e9d2e8f0e13b3ae1bf0da8a70a2",
+					"ms": 6,
+					"ok": false,
+					"error": {
+						"code": "validation/unknown-path",
+						"summary": "RouterOS has no `/print` menu or command, and centrs's path catalog has none.",
+						"cause": "null"
+					},
+					"stages": [["offline", "passed"], ["device", "failed"]]
+				}
+			],
+			"fallbacks": [
+				{
+					"bytes": "print",
+					"ok": true,
+					"out": "{\"output\":\"bad command name print (line 1 column 1)\",\"via\":\"rest\"}",
+					"reason": "product validation rejected: validation/unknown-path"
+				}
+			]
+		},
+		{
+			"cell": "I6-menu-native",
+			"input": "I6-menu",
+			"route": "native",
+			"submissions": [
+				{
+					"bytes": "/ip/firewall/address-list\nprint\n",
+					"sha256": "1247e7cbd2d7d83b4fd00812b1fc63c3c96b0eb18eb6d325640c68a4be87df01",
+					"ms": 132,
+					"ok": true,
+					"out": "{\"ret\":\"Columns: LIST, ADDRESS, CREATION-TIME\\r\\n# LIST       ADDRESS     CREATION-TIME      \\r\\n;;; probe-574-menu\\r\\n0 probe-574  192.0.2.44  2026-11-01 02:38:27\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I6-menu-native-split",
+			"input": "I6-menu",
+			"route": "native",
+			"submissions": [
+				{
+					"bytes": "/ip/firewall/address-list",
+					"sha256": "9ce25c08588a6274516100ed1e51f37a3d6d89e9d1f017055f1369775f6503d8",
+					"ms": 129,
+					"ok": false,
+					"error": {
+						"code": "routeros/api-trap",
+						"summary": "RouterOS reported an error: no such command",
+						"cause": "\"no such command\""
+					},
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				},
+				{
+					"bytes": "print",
+					"sha256": "ce953a0eb08246617b7f849486c4b26a7af37e9d2e8f0e13b3ae1bf0da8a70a2",
+					"ms": 128,
+					"ok": false,
+					"error": {
+						"code": "validation/unknown-path",
+						"summary": "RouterOS has no `/print` menu or command, and centrs's path catalog has none.",
+						"cause": "null"
+					},
+					"stages": [["offline", "passed"], ["device", "failed"]]
+				}
+			],
+			"fallbacks": [
+				{
+					"bytes": "print",
+					"ok": true,
+					"out": "{\"output\":\"bad command name print (line 1 column 1)\",\"via\":\"rest\"}",
+					"reason": "product validation rejected: validation/unknown-path"
+				}
+			]
+		},
+		{
+			"cell": "I6-menu-ssh",
+			"input": "I6-menu",
+			"route": "ssh",
+			"submissions": [
+				{
+					"bytes": "/ip/firewall/address-list\nprint\n",
+					"sha256": "1247e7cbd2d7d83b4fd00812b1fc63c3c96b0eb18eb6d325640c68a4be87df01",
+					"ms": 477,
+					"ok": false,
+					"error": {
+						"code": "transport/network",
+						"summary": "SSH execute failed against 127.0.0.1:9202 (exit 1).",
+						"cause": "\"Warning: Permanently added '[127.0.0.1]:9202' (RSA) to the list of known hosts.\""
+					},
+					"stages": [["offline", "passed"], ["device", "passed"]],
+					"infraSuspect": true
+				}
+			]
+		},
+		{
+			"cell": "I6-menu-ssh-split",
+			"input": "I6-menu",
+			"route": "ssh",
+			"submissions": [
+				{
+					"bytes": "/ip/firewall/address-list",
+					"sha256": "9ce25c08588a6274516100ed1e51f37a3d6d89e9d1f017055f1369775f6503d8",
+					"ms": 485,
+					"ok": true,
+					"out": "{\"ret\":\"\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				},
+				{
+					"bytes": "print",
+					"sha256": "ce953a0eb08246617b7f849486c4b26a7af37e9d2e8f0e13b3ae1bf0da8a70a2",
+					"ms": 249,
+					"ok": false,
+					"error": {
+						"code": "validation/unknown-path",
+						"summary": "RouterOS has no `/print` menu or command, and centrs's path catalog has none.",
+						"cause": "null"
+					},
+					"stages": [["offline", "passed"], ["device", "failed"]]
+				}
+			],
+			"fallbacks": [
+				{
+					"bytes": "print",
+					"ok": true,
+					"out": "{\"output\":\"bad command name print (line 1 column 1)\",\"via\":\"rest\"}",
+					"reason": "product validation rejected: validation/unknown-path"
+				}
+			]
+		},
+		{
+			"cell": "I6-menu-mactelnet",
+			"input": "I6-menu",
+			"route": "mactelnet",
+			"submissions": [
+				{
+					"bytes": "/ip/firewall/address-list\nprint\n",
+					"sha256": "1247e7cbd2d7d83b4fd00812b1fc63c3c96b0eb18eb6d325640c68a4be87df01",
+					"ms": 11108,
+					"ok": true,
+					"out": "{\"ret\":\"Columns: LIST, ADDRESS, CREATION-TIME\\n# LIST       ADDRESS     CREATION-TIME\\n;;; probe-574-menu\\n0 probe-574  192.0.2.44  2026-11-01 02:39:04\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I6-menu-mactelnet-split",
+			"input": "I6-menu",
+			"route": "mactelnet",
+			"submissions": [
+				{
+					"bytes": "/ip/firewall/address-list",
+					"sha256": "9ce25c08588a6274516100ed1e51f37a3d6d89e9d1f017055f1369775f6503d8",
+					"ms": 11120,
+					"ok": true,
+					"out": "{\"ret\":\"\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				},
+				{
+					"bytes": "print",
+					"sha256": "ce953a0eb08246617b7f849486c4b26a7af37e9d2e8f0e13b3ae1bf0da8a70a2",
+					"ms": 10963,
+					"ok": false,
+					"error": {
+						"code": "validation/unknown-path",
+						"summary": "RouterOS has no `/print` menu or command, and centrs's path catalog has none.",
+						"cause": "null"
+					},
+					"stages": [["offline", "passed"], ["device", "failed"]]
+				}
+			],
+			"fallbacks": [
+				{
+					"bytes": "print",
+					"ok": true,
+					"out": "{\"output\":\"bad command name print (line 1 column 1)\",\"via\":\"rest\"}",
+					"reason": "product validation rejected: validation/unknown-path"
+				}
+			]
+		},
+		{
+			"cell": "I6-menu-session",
+			"input": "I6-menu",
+			"route": "session",
+			"submissions": [
+				{
+					"bytes": "/ip/firewall/address-list\nprint\n",
+					"sha256": "1247e7cbd2d7d83b4fd00812b1fc63c3c96b0eb18eb6d325640c68a4be87df01",
+					"ms": 153,
+					"ok": true,
+					"out": "{\"output\":\"Columns: LIST, ADDRESS, CREATION-TIME\\n# LIST       ADDRESS     CREATION-TIME\\n;;; probe-574-menu\\n0 probe-574  192.0.2.44  2026-11-01 02:39:04\"}",
+					"note": "held console, one run() per submission"
+				}
+			]
+		},
+		{
+			"cell": "I6-menu-session-split",
+			"input": "I6-menu",
+			"route": "session",
+			"submissions": [
+				{
+					"bytes": "/ip/firewall/address-list",
+					"sha256": "9ce25c08588a6274516100ed1e51f37a3d6d89e9d1f017055f1369775f6503d8",
+					"ms": 151,
+					"ok": true,
+					"out": "{\"output\":\"\"}",
+					"note": "held console, one run() per submission"
+				},
+				{
+					"bytes": "print",
+					"sha256": "ce953a0eb08246617b7f849486c4b26a7af37e9d2e8f0e13b3ae1bf0da8a70a2",
+					"ms": 152,
+					"ok": true,
+					"out": "{\"output\":\"Columns: LIST, ADDRESS, CREATION-TIME\\n# LIST       ADDRESS     CREATION-TIME\\n;;; probe-574-menu\\n0 probe-574  192.0.2.44  2026-11-01 02:39:04\"}",
+					"note": "held console, one run() per submission"
+				}
+			]
+		},
+		{
+			"cell": "I6-menu-stored",
+			"input": "I6-menu",
+			"route": "stored",
+			"submissions": [
+				{
+					"bytes": "/system/script/run cmx-I6-menu-stored-1",
+					"sha256": "1e4832bec6fd56bb92d02916faab1696ad6ee3081375078a7a4b1e0d54105777",
+					"ms": 3,
+					"ok": true,
+					"out": "{\"ret\":\"Columns: LIST, ADDRESS, CREATION-TIME\\r\\n# LIST       ADDRESS     CREATION-TIME      \\r\\n;;; probe-574-menu\\r\\n0 probe-574  192.0.2.44  2026-11-01 02:38:27\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]],
+					"note": "script cmx-I6-menu-stored-1 source-sha256 1247e7cbd2d7d83b4fd00812b1fc63c3c96b0eb18eb6d325640c68a4be87df01"
+				}
+			]
+		},
+		{
+			"cell": "I6-menu-stored-split",
+			"input": "I6-menu",
+			"route": "stored",
+			"submissions": [
+				{
+					"bytes": "/system/script/run cmx-I6-menu-stored-split-1",
+					"sha256": "1a60618e720f0609572fbd7d9f8fb5cb0479b394ad1c395616d6491cc926708a",
+					"ms": 2,
+					"ok": true,
+					"out": "{\"ret\":\"\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]],
+					"note": "script cmx-I6-menu-stored-split-1 source-sha256 9ce25c08588a6274516100ed1e51f37a3d6d89e9d1f017055f1369775f6503d8"
+				},
+				{
+					"bytes": "/system/script/run cmx-I6-menu-stored-split-2",
+					"sha256": "bb3152d466d9e0fc4fe993ec080be2f1aa436fa2305bfc3290f1e0c84382a9e7",
+					"ms": 3,
+					"ok": false,
+					"error": {
+						"code": "routeros/unknown-path",
+						"summary": "RouterOS does not recognize the command: bad command name print (line 1 column 1)",
+						"cause": "\"bad command name print (line 1 column 1)\""
+					},
+					"stages": [["offline", "passed"], ["device", "passed"]],
+					"note": "script cmx-I6-menu-stored-split-2 source-sha256 ce953a0eb08246617b7f849486c4b26a7af37e9d2e8f0e13b3ae1bf0da8a70a2"
+				}
+			]
+		},
+		{
+			"cell": "I7-unicode-rest",
+			"input": "I7-unicode",
+			"route": "rest",
+			"submissions": [
+				{
+					"bytes": ":put \"héllo→574\"\n",
+					"sha256": "faa4cb664e7dabb2d4e557456edbba855d08c257ba9b5e8116868f226fba6563",
+					"ms": 4,
+					"ok": true,
+					"out": "{\"ret\":\"héllo→574\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I7-unicode-native",
+			"input": "I7-unicode",
+			"route": "native",
+			"submissions": [
+				{
+					"bytes": ":put \"héllo→574\"\n",
+					"sha256": "faa4cb664e7dabb2d4e557456edbba855d08c257ba9b5e8116868f226fba6563",
+					"ms": 118,
+					"ok": true,
+					"out": "{\"ret\":\"héllo→574\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I7-unicode-ssh",
+			"input": "I7-unicode",
+			"route": "ssh",
+			"submissions": [
+				{
+					"bytes": ":put \"héllo→574\"\n",
+					"sha256": "faa4cb664e7dabb2d4e557456edbba855d08c257ba9b5e8116868f226fba6563",
+					"ms": 481,
+					"ok": true,
+					"out": "{\"ret\":\"hllo574\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I7-unicode-mactelnet",
+			"input": "I7-unicode",
+			"route": "mactelnet",
+			"submissions": [
+				{
+					"bytes": ":put \"héllo→574\"\n",
+					"sha256": "faa4cb664e7dabb2d4e557456edbba855d08c257ba9b5e8116868f226fba6563",
+					"ms": 11117,
+					"ok": true,
+					"out": "{\"ret\":\"\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I7-unicode-session",
+			"input": "I7-unicode",
+			"route": "session",
+			"submissions": [
+				{
+					"bytes": ":put \"héllo→574\"\n",
+					"sha256": "faa4cb664e7dabb2d4e557456edbba855d08c257ba9b5e8116868f226fba6563",
+					"ms": 152,
+					"ok": true,
+					"out": "{\"output\":\"\"}",
+					"note": "held console, one run() per submission",
+					"raw": "{\"raw\":\":put \\\"hllo574\\\"\\r[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mput\\u001b[m \\u001b[m\\u001b[33m\\\"\\u001b[mhllo574\\u001b[m\\u001b[33m\\\"\\u001b[m\\r\\n\\rhllo574\\r\\n\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \"}"
+				}
+			]
+		},
+		{
+			"cell": "I7-unicode-stored",
+			"input": "I7-unicode",
+			"route": "stored",
+			"submissions": [
+				{
+					"bytes": "/system/script/run cmx-I7-unicode-stored-1",
+					"sha256": "fa8274386ee45a9e3f8c1ba7e366152d94b536f3465eda0febc348a311cc0a4c",
+					"ms": 3,
+					"ok": true,
+					"out": "{\"ret\":\"héllo→574\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]],
+					"note": "script cmx-I7-unicode-stored-1 source-sha256 faa4cb664e7dabb2d4e557456edbba855d08c257ba9b5e8116868f226fba6563"
+				}
+			]
+		},
+		{
+			"cell": "I8-bom-rest",
+			"input": "I8-bom",
+			"route": "rest",
+			"submissions": [
+				{
+					"bytes": "﻿:put \"bom574\"\n",
+					"sha256": "a59b96efcbb124b80179ff4f8720725b2672750e39712adb880483cb608bd6bc",
+					"ms": 5,
+					"ok": false,
+					"error": {
+						"code": "validation/syntax",
+						"summary": "RouterOS rejected the command syntax while parsing it.",
+						"cause": "null"
+					},
+					"stages": [["offline", "passed"], ["device", "failed"]]
+				}
+			],
+			"fallbacks": [
+				{
+					"bytes": "﻿:put \"bom574\"\n",
+					"ok": true,
+					"out": "{\"output\":\"expected command name (line 1 column 1)\",\"via\":\"rest\"}",
+					"reason": "product validation rejected: validation/syntax"
+				}
+			]
+		},
+		{
+			"cell": "I8-bom-native",
+			"input": "I8-bom",
+			"route": "native",
+			"submissions": [
+				{
+					"bytes": "﻿:put \"bom574\"\n",
+					"sha256": "a59b96efcbb124b80179ff4f8720725b2672750e39712adb880483cb608bd6bc",
+					"ms": 126,
+					"ok": false,
+					"error": {
+						"code": "validation/syntax",
+						"summary": "RouterOS rejected the command syntax while parsing it.",
+						"cause": "null"
+					},
+					"stages": [["offline", "passed"], ["device", "failed"]]
+				}
+			],
+			"fallbacks": [
+				{
+					"bytes": "﻿:put \"bom574\"\n",
+					"ok": true,
+					"out": "{\"output\":\"expected command name (line 1 column 1)\",\"via\":\"rest\"}",
+					"reason": "product validation rejected: validation/syntax"
+				}
+			]
+		},
+		{
+			"cell": "I8-bom-ssh",
+			"input": "I8-bom",
+			"route": "ssh",
+			"submissions": [
+				{
+					"bytes": "﻿:put \"bom574\"\n",
+					"sha256": "a59b96efcbb124b80179ff4f8720725b2672750e39712adb880483cb608bd6bc",
+					"ms": 485,
+					"ok": true,
+					"out": "{\"ret\":\"bom574\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I8-bom-mactelnet",
+			"input": "I8-bom",
+			"route": "mactelnet",
+			"submissions": [
+				{
+					"bytes": "﻿:put \"bom574\"\n",
+					"sha256": "a59b96efcbb124b80179ff4f8720725b2672750e39712adb880483cb608bd6bc",
+					"ms": 11135,
+					"ok": true,
+					"out": "{\"ret\":\"bom574\"}",
+					"stages": [["offline", "passed"], ["device", "passed"]]
+				}
+			]
+		},
+		{
+			"cell": "I8-bom-session",
+			"input": "I8-bom",
+			"route": "session",
+			"submissions": [
+				{
+					"bytes": "﻿:put \"bom574\"\n",
+					"sha256": "a59b96efcbb124b80179ff4f8720725b2672750e39712adb880483cb608bd6bc",
+					"ms": 151,
+					"ok": true,
+					"out": "{\"output\":\"bom574\"}",
+					"note": "held console, one run() per submission"
+				}
+			]
+		},
+		{
+			"cell": "I8-bom-stored",
+			"input": "I8-bom",
+			"route": "stored",
+			"submissions": [
+				{
+					"bytes": "/system/script/run cmx-I8-bom-stored-1",
+					"sha256": "f3746bb35f654b0ad69f80903bb1beb1c189486bd791f6a84c0c5b485c78f5f9",
+					"ms": 3,
+					"ok": false,
+					"error": {
+						"code": "routeros/request-failed",
+						"summary": "RouterOS reported an error: expected command name (line 1 column 1)",
+						"cause": "\"expected command name (line 1 column 1)\""
+					},
+					"stages": [["offline", "passed"], ["device", "passed"]],
+					"note": "script cmx-I8-bom-stored-1 source-sha256 a59b96efcbb124b80179ff4f8720725b2672750e39712adb880483cb608bd6bc"
+				}
+			]
+		}
+	]
+}
