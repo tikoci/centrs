@@ -1,5 +1,9 @@
 // cspell:ignore héllo
 import { describe, expect, test } from "bun:test";
+import {
+	detectPastedPrompts,
+	pastedPromptTips,
+} from "../../src/explain/pasted-prompt.ts";
 import { explainCommand, explainEnvelope } from "../../src/explain.ts";
 
 const pastedTips = (input: string) =>
@@ -120,5 +124,26 @@ describe("explain pasted-prompt repair (#370)", () => {
 		);
 		const edge = pastedTips("[admin@x] > :put `");
 		expect(edge[0]?.fix).toContain("`` :put ` ``");
+	});
+
+	test("a near-miss bracket prompt fails in linear time", () => {
+		// Overlapping quantifiers made these ~1-2 s at 64k bytes (quadratic).
+		for (const input of [
+			`[admin@x]${" ".repeat(64_000)}x`,
+			`[${"@".repeat(64_000)}`,
+		]) {
+			const started = performance.now();
+			expect(detectPastedPrompts(input)).toEqual([]);
+			expect(performance.now() - started).toBeLessThan(250);
+		}
+	});
+
+	test("a candidate with a million backtick runs still gets a tip", () => {
+		// Spreading every run into Math.max overflowed the call stack.
+		const tips = pastedPromptTips(
+			`[admin@x] > :put "${"`x".repeat(1_000_000)}"`,
+		);
+		expect(tips).toHaveLength(1);
+		expect(tips[0]?.fix).toStartWith("Drop the pasted prompt and try ``:put");
 	});
 });

@@ -38,9 +38,13 @@ import { type Segment, segmentStatements } from "./segment.ts";
  * whatever follows them. The slice needs analyzed-byte offsets as JS indices,
  * which hold only when the segmentation reports `ascii`; otherwise the
  * per-segment candidate stands (narrow, never wrong).
+ *
+ * No two adjacent quantifiers in BRACKET_PROMPT_RE can match the same bytes
+ * (the user part stops at the first `@`; the menu's leading space lives inside
+ * its optional group), so a near-miss fails in linear time.
  */
 const BRACKET_PROMPT_RE =
-	/^\[[^[\]\r\n]*@[^[\]\r\n]*\]\s*(\/[A-Za-z0-9_\-/]*)?\s*>>?\s*([\s\S]*)$/;
+	/^\[[^[\]\r\n@]*@[^[\]\r\n]*\](?:\s*(\/[A-Za-z0-9_\-/]*))?\s*>>?\s*([\s\S]*)$/;
 const MENU_PROMPT_RE = /^(\/[A-Za-z0-9_\-/]+)\s*>>?\s*([\s\S]*)$/;
 
 export interface PastedPromptHit {
@@ -151,10 +155,9 @@ export function detectPastedPrompts(input: string): PastedPromptHit[] {
  * ends with one (CommonMark code spans).
  */
 function codeSpan(text: string): string {
-	const longest = Math.max(
-		0,
-		...(text.match(/`+/g) ?? []).map((run) => run.length),
-	);
+	let longest = 0;
+	for (const run of text.match(/`+/g) ?? [])
+		longest = Math.max(longest, run.length);
 	const fence = "`".repeat(longest + 1);
 	const pad = text.startsWith("`") || text.endsWith("`") ? " " : "";
 	return `${fence}${pad}${text}${pad}${fence}`;
