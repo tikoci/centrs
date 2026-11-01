@@ -3043,6 +3043,21 @@ object — no copies of rule logic per surface. Checks evaluate against the
 never against byte containment: a finding anchors to a statement id and its
 span, so a reordered document moves the finding with its statement.
 
+**Findings reuse the shipped envelope — no new finding object.** A check emits
+what explain already emits: an `ExplainDiagnostic` (`code`, `severity`,
+`message`, `span`, `ev`) for the finding, the `ExplainEvidence` entry it cites
+(`id`, `source`, `probe`, `basis`, `outcome`, `statementIds`) for how it was
+decided and which statement it anchors to, and a `tip` (`code`, `message`,
+`fix`) for the next step. Codes follow `explain/<source>/<slug>`, with the
+check family as the slug prefix (`topic-…`, `special-command-…`). Topic
+findings are `info`: like the pasted-prompt tip, advice never moves
+`data.verdict`, which stays the validity answer. A check that should raise the
+verdict is a separate, explicitly decided change, not a default. Certainty is
+the cited evidence's `basis` — `heuristic` for a ratified rule over the
+offline structure (the `containsWrite` precedent), `derived` once it rests on
+live responses — so how sure a finding is reads from the same field as every
+other explain fact.
+
 **What is decided where.** Source-only: structural facts the canonicalizer
 already proves (unresolved statements, write-shape, symbol bindings). Live
 schema: what a menu accepts (argument names, enums) — only `--schema` /
@@ -3057,9 +3072,9 @@ reported as a failed read, never as a successful execution.
 network-free; naming a router does not authorize reads. A contextual read
 fires only under an explicit flag (name TBD, e.g. `--with-print`), one bounded
 `print` per confidently resolved menu, projected and truncated, each reported
-independently with its own target, read command, time, projection, and
-truncation — so an agent can distinguish current observed state from the
-proposed script. Deduplication is by (statement id, resolved path): two
+independently with its read command, time, projection, and truncation — so an
+agent can distinguish current observed state from the proposed script. The
+target is the envelope's `meta.target`, not a per-read field. Deduplication is by (statement id, resolved path): two
 statements in one menu share one read, and a failed read fails alone. The
 read is a validated centrs `retrieve` on the resolved path — never the user's
 `[find]`, expression, or analyzed script executed to get context.
@@ -3075,80 +3090,126 @@ sensitivity opt-in — no automatic sensitive exports.
 **Shape 1 — a grounded topic finding (synthetic illustration).**
 Input `SYNTHETIC-1` (illustrative only):
 `/ip service set telnet disabled=no` — a statement the analyzer resolves with
-id `s0`. A management-plane topic check (definition owned beside the
-analyzer, evaluated against `s0`) would emit a finding with a stable id, the
-statement anchor, a severity that is separate from its certainty, the evidence
-and version scope it was decided from, and an actionable next step:
+id `s0`, span 0–34. A management-plane topic check (definition owned beside
+the analyzer, evaluated against `s0`) adds one diagnostic, the evidence entry
+it cites, and a tip; the ids and the check's `probe` name are invented. A
+partial envelope — only the fields the finding adds or reads are shown:
 
 ```json
 {
-  "finding": "topic/plaintext-management-service",
-  "statement": "s0",
-  "span": { "start": 0, "end": 34 },
-  "severity": "high",
-  "certainty": "decided-from-source",
-  "evidence": ["canonicalizer: resolved verb `set` at `/ip/service`"],
-  "fix": "Disable the plaintext service or restrict it to a management address list."
+  "data": {
+    "verdict": "pass",
+    "diagnostics": [
+      {
+        "code": "explain/canonicalizer/topic-plaintext-management-service",
+        "severity": "info",
+        "message": "This enables telnet, a plaintext management service.",
+        "span": { "start": 0, "end": 34 },
+        "ev": "e10"
+      }
+    ],
+    "evidence": [
+      {
+        "id": "e10",
+        "source": "canonicalizer",
+        "probe": "topicPlaintextManagementService",
+        "basis": "heuristic",
+        "outcome": "ok",
+        "statementIds": ["s0"]
+      }
+    ]
+  },
+  "tips": [
+    {
+      "code": "tip/explain-topic-plaintext-management-service",
+      "message": "Telnet sends credentials in clear text.",
+      "fix": "Disable the plaintext service or restrict it to a management address list."
+    }
+  ]
 }
 ```
 
-Severity (how bad) and certainty (how sure, and from what probe) stay distinct
-fields; probe outcome and `runtimeAcceptance` are untouched — the finding does
-not claim the router accepted anything.
+The verdict stays `pass`; probe outcome and `runtimeAcceptance` are untouched —
+the finding does not claim the router accepted anything.
 
 **Shape 2 — a special-command fact (synthetic illustration).** #363 records
-the real cases (deferred there, not duplicated here); the shape is the same
-finding envelope with a `kind: "special-command"` marker and a consequence,
-not a configuration judgement. Illustrative only:
+the real cases (deferred there, not duplicated here); the shape is Shape 1's,
+with the `special-command-` slug family and a consequence, not a
+configuration judgement. Illustrative only:
 
 ```json
 {
-  "finding": "special-command/connection-loss",
-  "statement": "s2",
+  "code": "explain/canonicalizer/special-command-connection-loss",
+  "severity": "info",
+  "message": "This command can drop the session that runs it.",
   "span": { "start": 64, "end": 79 },
-  "severity": "medium",
-  "certainty": "decided-from-source",
-  "evidence": ["canonicalizer: resolved verb at a loss-of-access path (see #363)"],
-  "fix": "This command can drop the session that runs it; run it from a path that survives the change."
+  "ev": "e11"
 }
 ```
+
+`e11` cites `statementIds: ["s2"]`, and the paired tip's `fix` says to run it
+from a path that survives the change.
 
 No isolated device-mode table ships first (the #363 deferral stands); a
 special-command fact names its consequence and its evidence, nothing more.
 
 **Shape 3 — an explicitly requested contextual read (synthetic illustration).**
 Input (illustrative): `/ip address add address=198.51.100.1/32 interface=ether1`
-with an explicit `--with-print`-style opt-in. The response carries the read as
-its own result, independent of the analysis verdict:
+with an explicit `--with-print`-style opt-in. The read follows the live
+argument-name precedent (`data.live.arguments[]` cites a `live-inspect`
+evidence entry): one evidence entry per read, and the rows in `data.live`
+citing it, independent of the analysis verdict. A partial `data` object —
+`evidence` is `data.evidence`, `live` is `data.live`:
 
 ```json
 {
-  "contextReads": [
+  "evidence": [
     {
-      "statement": "s0",
+      "id": "e12",
+      "source": "live-read",
+      "probe": "print",
+      "basis": "direct",
+      "outcome": "ok",
+      "version": "SYNTHETIC-version",
+      "observedAt": "SYNTHETIC-timestamp",
+      "statementIds": ["s0"],
       "path": "/ip/address",
-      "read": "/ip/address/print",
-      "target": "<router>",
-      "at": "SYNTHETIC-timestamp",
-      "projection": ".proplist=address,interface,disabled",
-      "truncation": "3 of 12 rows",
-      "outcome": "ok"
+      "projection": ["address", "interface", "disabled"],
+      "truncation": { "returned": 3, "total": 12 }
     }
-  ]
+  ],
+  "live": {
+    "reads": [
+      {
+        "ev": "e12",
+        "path": "/ip/address",
+        "statementIds": ["s0"],
+        "rows": [
+          { "address": "192.0.2.1/24", "interface": "ether1", "disabled": "false" },
+          { "address": "198.51.100.2/24", "interface": "ether2", "disabled": "false" },
+          { "address": "203.0.113.1/24", "interface": "bridge", "disabled": "true" }
+        ]
+      }
+    ]
+  }
 }
 ```
 
-Originating statement and path, target, time, projection, and truncation are
-all present, so observed state cannot be mistaken for the proposed script.
-A failed read reports `outcome` plus the error and fails alone.
+The target is the envelope's existing `meta.target`, not a per-read field.
+Three additions are proposed, not shipped: the `live-read` evidence source,
+the `projection` and `truncation` evidence fields, and `data.live.reads[]`.
+Originating statement and path, time, projection, and truncation are all
+present, so observed state cannot be mistaken for the proposed script. A
+failed read reports its `outcome` with `reason`/`errorCode` and fails alone.
 
 **Acceptance controls and dependencies before implementation slices.**
 
 - Each check ships with accepted/rejected CHR controls and committed evidence;
   synthetic shapes above are replaced by measured rows, never promoted as-is.
 - Controls assert statement-id anchoring (finding moves with its statement),
-  severity/certainty separation, and read independence (one failed read does
-  not fail the analysis or sibling reads).
+  verdict independence (a finding leaves `data.verdict` unchanged), the cited
+  evidence's `basis`, and read independence (one failed read does not fail
+  the analysis or sibling reads).
 - A check that needs a sensitive field is refused without the sensitivity
   opt-in; the redaction contract is asserted, not assumed.
 - Dependencies: published offline readings stay honest (#211, #350, #351,
