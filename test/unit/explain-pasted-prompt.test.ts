@@ -44,4 +44,21 @@ describe("explain pasted-prompt repair (#370)", () => {
 	test("a bare prompt with no command offers nothing", () => {
 		expect(pastedTips("[admin@MikroTik] >")).toEqual([]);
 	});
+
+	test("a ;-joined pasted line keeps every statement in the repair", () => {
+		const tips = pastedTips("[admin@MikroTik] > :put 1; :put 2");
+		expect(tips).toHaveLength(1);
+		expect(tips[0]?.fix).toContain(":put 1; :put 2");
+		const menuTips = pastedTips("/interface/lte> monitor lte1; monitor lte2");
+		expect(menuTips).toHaveLength(1);
+		expect(menuTips[0]?.fix).toContain("monitor lte1; monitor lte2");
+	});
+
+	test("a second pasted prompt starts its own repair", () => {
+		const tips = pastedTips("[admin@x] > :put 1\n[admin@x] > :put 2");
+		expect(tips).toHaveLength(2);
+		expect(tips[0]?.fix).toContain(":put 1");
+		expect(tips[0]?.fix).not.toContain(":put 2");
+		expect(tips[1]?.fix).toContain(":put 2");
+	});
 });
