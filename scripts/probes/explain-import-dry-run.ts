@@ -7,12 +7,13 @@
  * Every row records input hashes, the RouterOS version, probe arguments, raw
  * responses, timings, upload cost, and the observed device state afterwards.
  *
- * Two families of input. The syntax files (`mixed.rsc`) carry a fault the
- * parser sees. The apply-time files carry the #203 import blockers — a
- * duplicate, a builtin, a missing mandatory value — plus a missing object and
- * an out-of-enum value: statements `:parse` accepts that a real import can
- * still reject. Each one sits between two harmless address-list adds, so the
- * state readback shows exactly which lines applied.
+ * Two families of input. The syntax files carry a fault `:parse` rejects:
+ * `mixed.rsc` (a bad command name) and `invalid-value.rsc` (an out-of-enum
+ * value). The apply-time files carry the #203 import blockers — a duplicate,
+ * a builtin, a missing mandatory value — plus a missing object: statements
+ * `:parse` accepts that a real import can still reject. Each fault sits
+ * between two harmless address-list adds, so the state readback shows exactly
+ * which lines applied.
  *
  * What this establishes (and what it does not): whether dry-run reports the
  * same errors as a real import, what it executes vs skips (observable
@@ -194,11 +195,11 @@ async function highlightLine(chr: ProbeChr, line: string) {
 	const perByte = Array.isArray(res.value)
 		? res.value[0]?.highlight
 		: undefined;
-	if (!perByte)
+	const classes = typeof perByte === "string" ? perByte.split(",") : [];
+	if (classes.length !== Buffer.byteLength(line, "utf8"))
 		throw new Error(
-			`no per-byte highlight classes for ${JSON.stringify(line)}: ${JSON.stringify(res.value).slice(0, 120)}`,
+			`highlight is not one class per byte for ${JSON.stringify(line)}: ${JSON.stringify(res.value).slice(0, 120)}`,
 		);
-	const classes = perByte.split(",");
 	const errorBytes = classes.filter((c) => c === "error").length;
 	return {
 		input: line,
@@ -345,7 +346,12 @@ async function routerOsVersion(chr: ProbeChr): Promise<string> {
 		string,
 		string
 	>;
-	return resource["version"]?.trim().split(/\s+/)[0] ?? "unknown";
+	const version = resource["version"]?.trim().split(/\s+/)[0];
+	if (!version)
+		throw new Error(
+			`no RouterOS version in /system/resource: ${JSON.stringify(resource).slice(0, 120)}`,
+		);
+	return version;
 }
 
 await main();

@@ -25,7 +25,12 @@ interface Run {
 
 interface Static {
 	parse: { verdict: string; output: string };
-	highlight: { input: string; highlight: string; errorBytes: number }[];
+	highlight: {
+		input: string;
+		highlight: string;
+		errorBytes: number;
+		classBytes: number;
+	}[];
 }
 
 const runs = slice.runs as Run[];
@@ -87,6 +92,18 @@ describe("import dry-run evidence slice (#520)", () => {
 			).toBe(file.sha256);
 	});
 
+	test("highlight rows are one class per byte of each file line", () => {
+		for (const file of slice.files) {
+			const lines = file.input.split("\n").filter((l) => l.length > 0);
+			const rows = statics[file.name]?.highlight ?? [];
+			expect(rows.map((r) => r.input)).toEqual(lines);
+			for (const row of rows) {
+				expect(row.classBytes).toBe(Buffer.byteLength(row.input, "utf8"));
+				expect(row.highlight).toBe(row.errorBytes > 0 ? "flagged" : "clean");
+			}
+		}
+	});
+
 	test(":parse and highlight accept every apply-time blocker", () => {
 		for (const file of Object.keys(APPLY_TIME)) {
 			expect(statics[file]?.parse.verdict).toBe("accepted");
@@ -106,8 +123,8 @@ describe("import dry-run evidence slice (#520)", () => {
 			"validation/syntax",
 		);
 		expect(
-			statics["invalid-value.rsc"]?.highlight.map((l) => l.highlight),
-		).toEqual(["clean", "flagged", "clean"]);
+			statics["invalid-value.rsc"]?.highlight.map((l) => l.errorBytes),
+		).toEqual([0, 1, 0]);
 	});
 
 	test("dry-run executes nothing (observable controls)", () => {
@@ -115,8 +132,12 @@ describe("import dry-run evidence slice (#520)", () => {
 			const dry = run(file, "dry-run");
 			expect(applied(dry)).toEqual([]);
 			expect(dry.state["identity"]).toContain("name: CHR");
-			expect(dry.state["snmpCommunity"]).not.toContain("canary-snmp-priv");
-			expect(dry.state["forwardFilter"]).not.toContain("probe-520");
+			expect(dry.state["snmpCommunity"]).toBe("");
+			expect(dry.state["forwardFilter"]).toBe("");
+			expect(dry.state["ether1Comment"]).toBe("");
+			expect(dry.state["interfaceListAll"]).toContain(
+				';;; contains all interfaces\r\n     name="all" dynamic=no include="" exclude=""',
+			);
 		}
 	});
 
@@ -141,6 +162,12 @@ describe("import dry-run evidence slice (#520)", () => {
 				expect(applied(real)).toEqual([first]);
 			}
 			expect(run(file, "plain").importOutput).toContain(error);
+			// Verbose reports the same failure without the `(<path>; line N)` suffix.
+			const bare = error.replace(/ \(\/[^()]*; line 2\)$/, "");
+			expect(bare).not.toBe(error);
+			expect(run(file, "verbose").importOutput).toEndWith(
+				`#line 2\r\n${statics[file]?.highlight[1]?.input}\r\nScript Error: ${bare}`,
+			);
 		}
 	});
 
