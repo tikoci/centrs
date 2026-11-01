@@ -892,7 +892,10 @@ a value byte in an argument. The envelope also carries
 `tip/explain-pasted-prompt` offering the stripped `/ip address print` as
 repair text (never applied). A `/menu>` prompt such as
 `/interface/lte> monitor lte1` keeps a `warn` abstention with the same tip
-shape, offering `monitor lte1` typed at `/interface/lte`.
+shape, offering `monitor lte1` typed at `/interface/lte`. The manual's
+in-menu prompt `[admin@MikroTik] /ip/address> add …` fails the same way and
+offers `add …` typed at `/ip/address`; a HotLock `>>` is stripped with the
+prompt.
 
 ### 41. A named comparison brace inside a `[find where …]` is rejected
 

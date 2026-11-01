@@ -1,5 +1,9 @@
 // cspell:ignore héllo
 import { describe, expect, test } from "bun:test";
+import {
+	detectPastedPrompts,
+	pastedPromptTips,
+} from "../../src/explain/pasted-prompt.ts";
 import { explainCommand, explainEnvelope } from "../../src/explain.ts";
 
 const pastedTips = (input: string) =>
@@ -75,6 +79,21 @@ describe("explain pasted-prompt repair (#370)", () => {
 		expect(tips[0]?.fix).toContain(":put 1;\n:put 2");
 	});
 
+	test("a multi-line candidate renders as a block that keeps its newlines", () => {
+		const tips = pastedTips("[admin@x] > :put 1\n:put 2");
+		expect(tips[0]?.fix).toBe(
+			"Drop the pasted prompt and try this instead — this input was not executed:\n\n```\n:put 1\n:put 2\n```",
+		);
+		// A code span would render as `:put 1 :put 2`, one command with an extra argument.
+		expect(Bun.markdown.html(tips[0]?.fix ?? "")).toContain(
+			"<pre><code>:put 1\n:put 2\n</code></pre>",
+		);
+		const fenced = pastedTips('[admin@x] > :put "```"\n:put 2');
+		expect(Bun.markdown.html(fenced[0]?.fix ?? "")).toContain(
+			"<pre><code>:put &quot;```&quot;\n:put 2\n</code></pre>",
+		);
+	});
+
 	test("non-ascii input falls back to the prompt's own segment", () => {
 		const tips = pastedTips('[admin@x] > :put "héllo"; :put 2');
 		expect(tips).toHaveLength(1);
@@ -87,5 +106,59 @@ describe("explain pasted-prompt repair (#370)", () => {
 		expect(tips).toHaveLength(1);
 		expect(tips[0]?.fix).toContain("monitor lte1");
 		expect(tips[0]?.fix).not.toContain("}");
+	});
+
+	test("a bracket prompt inside a menu offers the command in that menu", () => {
+		// The manual's Console page shape: the menu sits between `]` and `>`.
+		const input =
+			"[admin@MikroTik] /ip/address> add address=192.0.2.1/24 interface=ether1";
+		expect(explainCommand(input).verdict).toBe("fail");
+		const tips = pastedTips(input);
+		expect(tips).toHaveLength(1);
+		expect(tips[0]?.message).toContain("`[user@host] /ip/address>`");
+		expect(tips[0]?.fix).toBe(
+			"Drop the pasted prompt and try `add address=192.0.2.1/24 interface=ether1` (typed at `/ip/address`) instead — this input was not executed.",
+		);
+	});
+
+	test("a HotLock prompt's doubled > is part of the prompt", () => {
+		for (const input of [
+			"[admin@MikroTik] /ip/address>> print",
+			"[admin@MikroTik] >> /ip/address print",
+		]) {
+			const tips = pastedTips(input);
+			expect(tips).toHaveLength(1);
+			expect(tips[0]?.fix).not.toContain(">");
+		}
+	});
+
+	test("a backtick in the candidate keeps the tip's code span intact", () => {
+		const tips = pastedTips('[admin@x] > :put "a`b"');
+		expect(tips[0]?.fix).toBe(
+			'Drop the pasted prompt and try ``:put "a`b"`` instead — this input was not executed.',
+		);
+		const edge = pastedTips("[admin@x] > :put `");
+		expect(edge[0]?.fix).toContain("`` :put ` ``");
+	});
+
+	test("a near-miss bracket prompt fails in linear time", () => {
+		// Overlapping quantifiers made these ~1-2 s at 64k bytes (quadratic).
+		for (const input of [
+			`[admin@x]${" ".repeat(64_000)}x`,
+			`[${"@".repeat(64_000)}`,
+		]) {
+			const started = performance.now();
+			expect(detectPastedPrompts(input)).toEqual([]);
+			expect(performance.now() - started).toBeLessThan(250);
+		}
+	});
+
+	test("a candidate with a million backtick runs still gets a tip", () => {
+		// Spreading every run into Math.max overflowed the call stack.
+		const tips = pastedPromptTips(
+			`[admin@x] > :put "${"`x".repeat(1_000_000)}"`,
+		);
+		expect(tips).toHaveLength(1);
+		expect(tips[0]?.fix).toStartWith("Drop the pasted prompt and try ``:put");
 	});
 });
