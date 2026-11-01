@@ -1,5 +1,5 @@
 {
-	"_source": "Recorded by `bun run explain:probe:context-matrix 7.24.5` (scripts/probes/explain-context-matrix.ts) on stock CHR 7.24.5 x86, 2026-11-01 — two disposable CHRs (IP routes, MAC routes), 59 cells, every product cell through centrs executeEnvelope with pinned --via. Replicated on a second full-matrix pass with identical cell outcomes and gate table. Re-run that command to reproduce; per-run captures stay in `.scratch/`. Findings read per #507's dimensions; unknowns stay unknown. No router is needed to read this file.",
+	"_source": "Recorded by `bun run explain:probe:context-matrix 7.24.5` (scripts/probes/explain-context-matrix.ts) on stock CHR 7.24.5 x86, 2026-11-01 — two disposable CHRs (IP routes, MAC routes), 59 cells, every product cell through centrs executeEnvelope with pinned --via. Replicated on a second full-matrix pass with identical cell outcomes and gate table. Re-run that command to reproduce, then regenerate this file mechanically with `bun run explain:probe:context-matrix --slice <matrix-capture.json>` (cells/gate/inputs from the capture; routes/findings prose preserved for human review — a re-record that changes conclusions needs its prose and replay test updated too); per-run captures stay in `.scratch/`. Session submissions always carry their raw screen. Findings read per #507's dimensions; unknowns stay unknown. No router is needed to read this file.",
 	"routerosVersion": "7.24.5 (stable)",
 	"arch": "x86",
 	"routes": {
@@ -388,7 +388,8 @@
 					"ms": 153,
 					"ok": true,
 					"out": "{\"output\":\"[cmx@CHR] > :put \\\"a=$a574I1nlscopesession\\\"\\na=\"}",
-					"note": "held console, one run() per submission"
+					"note": "held console, one run() per submission",
+					"raw": "{\"raw\":\":local a574I1nlscopesession 1\\r[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mlocal\\u001b[m \\u001b[m\\u001b[32;1ma574I1nlscopesession\\u001b[m 1\\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > :set a574I1nlscopesession 2\\r[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mset\\u001b[m \\u001b[37;41;1ma\\u001b[m\\u001b[31m574I1nlscopesession\\u001b[m 2\\r\\n\\rsyntax error (line 1 column 6)\\r\\n\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > :put \\\"a=$a574I1nlscopesession\\\"\\r[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mput\\u001b[m \\u001b[m\\u001b[33m\\\"\\u001b[ma=\\u001b[m\\u001b[33m$\\u001b[m\\u001b[31ma574I1nlscopesession\\u001b[m\\u001b[33m\\\"\\u001b[m\\r\\n\\ra=\\r\\n\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \"}"
 				}
 			]
 		},
@@ -697,7 +698,8 @@
 					"ms": 156,
 					"ok": true,
 					"out": "{\"output\":\"{... }\\na=2\"}",
-					"note": "held console, one run() per submission"
+					"note": "held console, one run() per submission",
+					"raw": "{\"raw\":\"{\\b\\u001b[m\\u001b[33m{\\u001b[m\\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K{... :local a574I4bracesmultisession 1\\r{... \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mlocal\\u001b[m \\u001b[m\\u001b[32;1ma574I4bracesmultisession\\u001b[m 1\\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K{... :set a574I4bracesmultisession 2\\r{... \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mset\\u001b[m \\u001b[m\\u001b[32;1ma574I4bracesmultisession\\u001b[m 2\\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K{... :put \\\"a=$a574I4bracesmultisession\\\"\\r{... \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mput\\u001b[m \\u001b[m\\u001b[33m\\\"\\u001b[ma=\\u001b[m\\u001b[33m$\\u001b[m\\u001b[32;1ma574I4bracesmultisession\\u001b[m\\u001b[33m\\\"\\u001b[m\\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K{... }\\b\\u001b[m\\u001b[33m}\\u001b[m\\r\\n\\ra=2\\r\\n\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \"}"
 				}
 			]
 		},
@@ -1083,7 +1085,8 @@
 					"ms": 153,
 					"ok": true,
 					"out": "{\"output\":\"Columns: LIST, ADDRESS, CREATION-TIME\\n# LIST       ADDRESS     CREATION-TIME\\n;;; probe-574-menu\\n0 probe-574  192.0.2.44  2026-11-01 02:39:04\"}",
-					"note": "held console, one run() per submission"
+					"note": "held console, one run() per submission",
+					"raw": "{\"raw\":\"/ip/firewall/address-list\\r[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\u001b[m\\u001b[36m/ip/firewall/address-list\\u001b[m\\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] \\u001b[m\\u001b[36m/ip/firewall/address-list\\u001b[m> print\\u001b[5D\\u001b[m\\u001b[35mprint\\u001b[m\\r\\n\\r\\u001b[KColumns: \\u001b[m\\u001b[1mLIST\\u001b[m, \\u001b[m\\u001b[1mADDRESS\\u001b[m, \\u001b[m\\u001b[1mCREATION-TIME\\r\\n#\\u001b[m \\u001b[m\\u001b[1mLIST\\u001b[m       \\u001b[m\\u001b[1mADDRESS\\u001b[m     \\u001b[m\\u001b[1mCREATION-TIME\\u001b[m      \\r\\n;;; probe-574-menu\\r\\n0 probe-574  192.0.2.44  2026-11-01 02:39:04\\r\\r\\n\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] \\u001b[m\\u001b[36m/ip/firewall/address-list\\u001b[m> \\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] \\u001b[m\\u001b[36m/ip/firewall/address-list\\u001b[m> \"}"
 				}
 			]
 		},
@@ -1098,7 +1101,8 @@
 					"ms": 151,
 					"ok": true,
 					"out": "{\"output\":\"\"}",
-					"note": "held console, one run() per submission"
+					"note": "held console, one run() per submission",
+					"raw": "{\"raw\":\"/ip/firewall/address-list\\r[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\u001b[m\\u001b[36m/ip/firewall/address-list\\u001b[m\\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] \\u001b[m\\u001b[36m/ip/firewall/address-list\\u001b[m> \"}"
 				},
 				{
 					"bytes": "print",
@@ -1106,7 +1110,8 @@
 					"ms": 152,
 					"ok": true,
 					"out": "{\"output\":\"Columns: LIST, ADDRESS, CREATION-TIME\\n# LIST       ADDRESS     CREATION-TIME\\n;;; probe-574-menu\\n0 probe-574  192.0.2.44  2026-11-01 02:39:04\"}",
-					"note": "held console, one run() per submission"
+					"note": "held console, one run() per submission",
+					"raw": "{\"raw\":\"print\\u001b[5D\\u001b[m\\u001b[35mprint\\u001b[m\\r\\n\\r\\u001b[KColumns: \\u001b[m\\u001b[1mLIST\\u001b[m, \\u001b[m\\u001b[1mADDRESS\\u001b[m, \\u001b[m\\u001b[1mCREATION-TIME\\r\\n#\\u001b[m \\u001b[m\\u001b[1mLIST\\u001b[m       \\u001b[m\\u001b[1mADDRESS\\u001b[m     \\u001b[m\\u001b[1mCREATION-TIME\\u001b[m      \\r\\n;;; probe-574-menu\\r\\n0 probe-574  192.0.2.44  2026-11-01 02:39:04\\r\\r\\n\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] \\u001b[m\\u001b[36m/ip/firewall/address-list\\u001b[m> \"}"
 				}
 			]
 		},
@@ -1342,7 +1347,8 @@
 					"ms": 151,
 					"ok": true,
 					"out": "{\"output\":\"bom574\"}",
-					"note": "held console, one run() per submission"
+					"note": "held console, one run() per submission",
+					"raw": "{\"raw\":\":put \\\"bom574\\\"\\u001b[13D\\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mput\\u001b[m \\u001b[m\\u001b[33m\\\"\\u001b[mbom574\\u001b[m\\u001b[33m\\\"\\u001b[m\\r\\n\\rbom574\\r\\n\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \"}"
 				}
 			]
 		},

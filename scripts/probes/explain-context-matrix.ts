@@ -21,11 +21,15 @@
  * Run: bun run explain:probe:context-matrix [version] (default 7.24.5).
  * Captures land in `.scratch/explain-context-matrix.*.json` (in-flight by
  * design). The reviewed slice lives at
- * `test/fixtures/explain/context-matrix.slice.json`. This probe establishes
- * the submission matrix only — no `--context` modes, fields, or binding
- * behavior ship from it.
+ * `test/fixtures/explain/context-matrix.slice.json`, regenerated mechanically
+ * with `bun run explain:probe:context-matrix --slice <matrix.json> [out]`
+ * (cells/gate/inputs from the capture; routes/findings prose preserved for
+ * human review — a re-record that changes conclusions needs its prose and
+ * replay test updated too, and the test fails until they are). This probe
+ * establishes the submission matrix only — no `--context` modes, fields, or
+ * binding behavior ship from it.
  */
-// cspell:ignore cmx héllo
+// cspell:ignore cmx héllo nohome UNREVIEWED
 import { createHash } from "node:crypto";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -618,7 +622,12 @@ async function main(): Promise<void> {
 			["script-run", `/system/script/run cmx-gate`],
 		];
 		for (const [shape, bytes] of gateShapes) {
-			const gate = await executeEnvelope({ ...restBase, command: bytes }, env);
+			// Pinned non-interactive: on a contributor TTY these no-yes calls
+			// must record usage/confirmation-required, never prompt a human.
+			const gate = await executeEnvelope(
+				{ ...restBase, command: bytes, stdinIsTty: false },
+				env,
+			);
 			gateTable.push({
 				shape,
 				ok: gate.ok,
@@ -830,4 +839,143 @@ async function main(): Promise<void> {
 	console.log(`matrix complete: ${cells.length} cells in ${Date.now() - t0}ms`);
 }
 
-await main();
+const SLICE_PATH = "test/fixtures/explain/context-matrix.slice.json";
+
+interface MatrixCapture {
+	requestedVersion: string;
+	versions: Record<string, string>;
+	elapsedMs: number;
+	gateTable: unknown;
+	inputs: unknown;
+	cells: CellRecord[];
+}
+
+const SLICE_INPUT_ORDER = [
+	"I1-nl-scope",
+	"I2-semi-scope",
+	"I3-braces-1line",
+	"I4-braces-multi",
+	"I5-global",
+	"I6-menu",
+	"I7-unicode",
+	"I8-bom",
+];
+const SLICE_ROUTE_ORDER = [
+	"rest",
+	"native",
+	"ssh",
+	"mactelnet",
+	"session",
+	"stored",
+];
+
+function slimSubmission(
+	s: RecordedCall,
+	wantRaw: boolean,
+): Record<string, unknown> {
+	const stages = (
+		(s.validation as { stages?: { stage?: unknown; result?: unknown }[] })
+			?.stages ?? []
+	).map((st) => [st.stage, st.result]);
+	const o: Record<string, unknown> = {
+		bytes: s.bytes,
+		sha256: s.bytesSha256,
+		ms: s.ms,
+		ok: s.ok,
+	};
+	if (s.ok) {
+		o["out"] = s.dataJson.slice(0, 400);
+		if (s.dataTruncated) o["outTruncated"] = true;
+	} else {
+		const err: Record<string, unknown> = {
+			code: s.error?.code,
+			summary: s.error?.summary,
+		};
+		if (s.error?.cause) err["cause"] = s.error.cause.slice(0, 300);
+		o["error"] = err;
+	}
+	if (stages.length > 0) o["stages"] = stages;
+	if (s.infraSuspect) o["infraSuspect"] = true;
+	if (s.note) o["note"] = s.note;
+	if (wantRaw && s.rawJson) o["raw"] = s.rawJson.slice(0, 2500);
+	return o;
+}
+
+/**
+ * Regenerate the committed slice from a matrix capture. Cells, gate table,
+ * inputs, and versions come from the capture; `_source`, `routes`, and
+ * `findings` are curated prose preserved from the existing slice (or a TODO
+ * template on first curation). Session submissions always carry their raw
+ * screen — the device truth behind the console reader.
+ */
+async function sliceMode(capturePath: string, outPath: string): Promise<void> {
+	const matrix = (await Bun.file(capturePath).json()) as MatrixCapture;
+	let prev: Record<string, unknown> = {};
+	try {
+		prev = (await Bun.file(outPath).json()) as Record<string, unknown>;
+	} catch {
+		console.log(`no existing slice at ${outPath}; writing TODO prose`);
+	}
+	const rank = (c: CellRecord): [number, number] => [
+		SLICE_INPUT_ORDER.indexOf(c.input),
+		SLICE_ROUTE_ORDER.indexOf(c.route),
+	];
+	const cells = [...matrix.cells]
+		.sort((a, b) => {
+			const [ai, ar] = rank(a);
+			const [bi, br] = rank(b);
+			return ai !== bi
+				? ai - bi
+				: ar !== br
+					? ar - br
+					: a.cell < b.cell
+						? -1
+						: 1;
+		})
+		.map((c) => {
+			const wantRaw = c.route === "session";
+			const e: Record<string, unknown> = {
+				cell: c.cell,
+				input: c.input,
+				route: c.route,
+				submissions: c.submissions.map((s) => slimSubmission(s, wantRaw)),
+			};
+			if (c.fallbacks)
+				e["fallbacks"] = c.fallbacks.map((f) => ({
+					bytes: f.bytes,
+					ok: f.ok,
+					out: f.dataJson.slice(0, 250),
+					reason: f.reason,
+				}));
+			return e;
+		});
+	const slice = {
+		_source:
+			prev["_source"] ??
+			"UNREVIEWED — curate provenance, then re-run the replay test",
+		routerosVersion: matrix.versions["ip"],
+		arch: "x86",
+		routes: prev["routes"] ?? {},
+		gateTable: matrix.gateTable,
+		inputs: matrix.inputs,
+		findings: prev["findings"] ?? ["UNREVIEWED — curate before commit"],
+		cells,
+	};
+	await Bun.write(outPath, `${JSON.stringify(slice, null, 2)}\n`);
+	console.log(
+		`slice written to ${outPath} (${cells.length} cells); run \`bunx biome check --write ${outPath}\` before commit`,
+	);
+}
+
+if (Bun.argv[2] === "--slice") {
+	const capture = Bun.argv[3];
+	if (!capture) {
+		console.error(
+			"usage: bun run explain:probe:context-matrix --slice <matrix.json> [slice-out]",
+		);
+		process.exit(2);
+	}
+	await sliceMode(capture, Bun.argv[4] ?? SLICE_PATH);
+} else {
+	await main();
+}
