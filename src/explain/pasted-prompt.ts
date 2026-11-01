@@ -54,6 +54,17 @@ interface StrippedPrompt {
 	candidate: string;
 }
 
+/** True when re-segmenting `text` reports an unbalanced delimiter. */
+function hasUnbalancedDelimiters(text: string): boolean {
+	try {
+		return segmentStatements(text).defects.some(
+			(d) => d.code === "unbalanced-close" || d.code === "unclosed",
+		);
+	} catch {
+		return true;
+	}
+}
+
 export function detectPastedPrompts(input: string): PastedPromptHit[] {
 	const hits: PastedPromptHit[] = [];
 	let segments: Segment[];
@@ -113,7 +124,12 @@ export function detectPastedPrompts(input: string): PastedPromptHit[] {
 			const sliced = input
 				.slice((segment?.start ?? 0) + hit.promptEnd, end)
 				.trim();
-			if (sliced.length > 0) candidate = sliced;
+			// The slice must not cross the prompt's enclosing container: it is
+			// kept only when it re-segments balanced, else the narrow
+			// per-segment candidate stands (`{ /menu> cmd }` would otherwise
+			// offer `cmd }`).
+			if (sliced.length > 0 && !hasUnbalancedDelimiters(sliced))
+				candidate = sliced;
 		}
 		hits.push(
 			hit.shape === "bracket"

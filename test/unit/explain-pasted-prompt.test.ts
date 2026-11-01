@@ -80,4 +80,11 @@ describe("explain pasted-prompt repair (#370)", () => {
 		expect(tips[0]?.fix).toContain(':put "héllo"');
 		expect(tips[0]?.fix).not.toContain(":put 2");
 	});
+
+	test("a prompt nested in a block keeps the narrow candidate", () => {
+		const tips = pastedTips("{ /interface/lte> monitor lte1 }");
+		expect(tips).toHaveLength(1);
+		expect(tips[0]?.fix).toContain("monitor lte1");
+		expect(tips[0]?.fix).not.toContain("}");
+	});
 });
