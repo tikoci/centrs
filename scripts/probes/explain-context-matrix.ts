@@ -30,10 +30,10 @@ import { createHash } from "node:crypto";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runCli } from "../../src/cli.ts";
 import { type ExecuteRequest, executeEnvelope } from "../../src/execute.ts";
 import { parseMac } from "../../src/protocols/mac-telnet.ts";
 import { MacTelnetConsole } from "../../src/protocols/mac-telnet-console.ts";
+import { transferEnvelope } from "../../src/transfer.ts";
 import {
 	readEnv,
 	splitQuickChrAuth,
@@ -190,11 +190,24 @@ async function runProductCell(
 	return record;
 }
 
-/** `CENTRS_*`-free env so a contributor's shell cannot steer the matrix. */
-function cleanEnv(): Record<string, string | undefined> {
-	return Object.fromEntries(
+/**
+ * Deterministic env for every product call in the matrix: no `CENTRS_*` from
+ * the shell, the `centrs.env` file tier skipped outright, and HOME/XDG parked
+ * in an empty temp dir so the default CDB path resolves to nothing. Without
+ * this, a contributor's `CENTRS_VALIDATE=false` file or a CDB record matching
+ * a probe target would silently record a different matrix.
+ */
+async function cleanEnv(): Promise<Record<string, string | undefined>> {
+	const home = await mkdtemp(join(tmpdir(), "centrs-574-nohome-"));
+	const scrubbed: Record<string, string | undefined> = Object.fromEntries(
 		Object.entries(Bun.env).filter(([k]) => !k.startsWith("CENTRS_")),
 	);
+	return {
+		...scrubbed,
+		CENTRS_SKIP_ENV_FILE: "1",
+		HOME: home,
+		XDG_CONFIG_HOME: join(home, ".config"),
+	};
 }
 
 type ProductBase = Omit<ExecuteRequest, "command">;
@@ -509,7 +522,7 @@ async function runStoredCell(
 }
 
 async function main(): Promise<void> {
-	const env = cleanEnv();
+	const env = await cleanEnv();
 	const t0 = Date.now();
 	const gateTable: { shape: string; ok: boolean; code: string }[] = [];
 	const cells: CellRecord[] = [];
@@ -558,18 +571,21 @@ async function main(): Promise<void> {
 		const keygen = spawnKeygen(key);
 		if ((await keygen.exited) !== 0)
 			throw new Error("ssh-keygen failed for the matrix probe");
-		await runCli([
-			"transfer",
-			chr.restUrl,
-			"--username",
-			auth.username,
-			"--password",
-			auth.password,
-			"upload",
-			`${key}.pub`,
-			"centrs_574.pub",
-			"--json",
-		]);
+		const keyUpload = await transferEnvelope(
+			{
+				verb: "upload",
+				targetInput: chr.restUrl,
+				username: auth.username,
+				password: auth.password,
+				local: `${key}.pub`,
+				remote: "centrs_574.pub",
+			},
+			env,
+		);
+		if (!keyUpload.ok)
+			throw new Error(
+				`matrix ssh-key upload failed: ${(keyUpload.error as { code?: unknown }).code} ${JSON.stringify((keyUpload.error as { summary?: unknown }).summary ?? "").slice(0, 200)}`,
+			);
 		await chr.exec(
 			`/user ssh-keys import public-key-file=centrs_574.pub user=${auth.username}`,
 		);
