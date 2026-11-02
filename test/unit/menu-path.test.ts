@@ -68,6 +68,9 @@ const URL_REWRITING = [
 	"/system/reboot\n",
 	"/system/reboot/..",
 	"/ip/address/./x",
+	"/system/identity/%2e%2e/reboot",
+	"/system/identity/.%2E/reboot",
+	"/ip/%2e/address",
 ];
 
 describe("menu-path grammar (#586)", () => {
@@ -132,6 +135,7 @@ describe("REST URL backstop (#586)", () => {
 			"/interface/ether 1",
 			"/execute",
 			"/console/inspect",
+			"/a/%2e%2e%2e/b",
 		]) {
 			expect(() => assertRestRequestPath(path)).not.toThrow();
 		}

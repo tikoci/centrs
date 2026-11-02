@@ -108,8 +108,10 @@ path is safe: RouterOS answers `POST /rest/system/reboot/print` (and a `GET` of
 a command) with "no such command", and native API answers
 `/system/reboot/print` the same way (CHR 7.24.5). Under the REST adapter, a
 second guard refuses any request path containing `?`, `#`, `\`, a control
-character, or a `.`/`..` segment for every command; RouterOS does not decode
-percent-escapes in REST paths, so nothing else changes the target.
+character, or a `.`/`..` segment (including the percent-encoded `%2e%2e` and
+`.%2E` forms, which the URL parser also collapses) for every command. RouterOS
+does not decode percent-escapes in REST paths, so nothing else changes the
+target.
 
 SNMP validation is separate from RouterOS `/console/inspect`: OIDs and MIB
 names must resolve through the MIB cache before any SNMP request is sent.

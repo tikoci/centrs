@@ -50,7 +50,8 @@ export function assertRouterOsMenuPath(
 /**
  * Characters and segments that make a WHATWG URL address something other
  * than the path as written: `?` starts a query, `#` a fragment, `\` is read
- * as `/`, tabs and newlines are stripped, and `.`/`..` segments collapse.
+ * as `/`, tabs and newlines are stripped, and `.`/`..` segments collapse
+ * (also percent-encoded: `%2e%2e`, `.%2E`).
  * RouterOS does not decode percent-escapes in REST paths (`reboot%23` is
  * "no such command or directory" on CHR 7.24.5), so the rest is inert.
  */
@@ -63,6 +64,9 @@ function hasUrlStructuralCharacter(path: string): boolean {
 	return false;
 }
 
+/** `.`/`..` and the percent-encoded forms WHATWG also collapses (`%2e%2e`, `.%2E`). */
+const DOT_SEGMENT = /^(?:\.|%2e){1,2}$/i;
+
 /**
  * Refuse a REST request path that the URL parser would rewrite. This is the
  * backstop under every REST caller (retrieve, api, execute, transfer, explain)
@@ -71,7 +75,7 @@ function hasUrlStructuralCharacter(path: string): boolean {
 export function assertRestRequestPath(path: string): void {
 	const dotSegment = path
 		.split("/")
-		.some((segment) => segment === "." || segment === "..");
+		.some((segment) => DOT_SEGMENT.test(segment));
 	if (!hasUrlStructuralCharacter(path) && !dotSegment) {
 		return;
 	}

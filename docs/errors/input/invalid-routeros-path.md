@@ -11,7 +11,8 @@ menu name, or characters a REST URL would reinterpret.
   `/ip/dhcp-server`). The check runs on every transport and even with
   `--validate=false`, because a read must only dispatch a read (#586).
 - A REST request path containing `?`, `#`, `\`, a control character, or a
-  `.`/`..` segment. The URL parser would turn these into a query, a fragment
+  `.`/`..` segment, including percent-encoded forms such as `%2e%2e`. The
+  URL parser would turn these into a query, a fragment
   or a different path, so the request would not reach the path as written.
   Before this guard, `retrieve '/system/reboot#' --no-validate` posted
   `/rest/system/reboot`.
