@@ -17,6 +17,14 @@ part of this section.
 
 ### Added
 
+- `--match user=<name>|target=<addr>|<record-type>` on `retrieve`, `execute`,
+  `api`, `transfer`, `terminal` and `btest client` picks one of several CDB
+  records saved for the same `<router>` (#583), as `devices show --match`
+  does. One address saved under two users was `identity/ambiguous` on every
+  command, and the error named a `--match` they rejected. The flag is
+  single-target: with a fan-out selection or `--quickchr` it is
+  `usage/conflicting-flags`, and with no CDB record in play it is
+  `identity/no-match` rather than ignored.
 - **Live `explain` over rest-api + native-api is `CHR-passed`** (#236).
   Examples 7–16, 19, 24, 48 and 52–53 pass on both transports on stable
   7.24.5 and long-term 7.23.8. `runtimeAcceptance` stays `not-proven`.
@@ -201,6 +209,29 @@ part of this section.
 
 ### Fixed
 
+- **`retrieve` and `api` can no longer send a non-read** (#586). A `#` or
+  `?` in the path cut the appended `/print` off the REST URL, so
+  `retrieve '/system/reboot#' --no-validate --attribute uptime` posted
+  `/rest/system/reboot` and rebooted CHR 7.24.5 without `--yes`; `api` with a
+  projection did the same. Both now require every path segment to be a
+  RouterOS menu name (letters, digits, hyphens; case folds) on every
+  transport, even with `--validate=false`, failing
+  `input/invalid-routeros-path` before resolution. The REST adapter also
+  refuses any request path containing `?`, `#`, `\`, control characters or a
+  dot segment (including `%2e%2e`), for every command. Reported by
+  routeros-muse.
+- `devices set <target> key=` removes the comment token instead of storing an
+  empty value, as documented (#590). Removing an absent token is a no-op;
+  `--password ""` still clears the password, and bare `password=`/`user=`
+  stay `cdb/reserved-key`.
+- `transfer` honors a CDB record's `via=` preference (#591). A record with
+  `via=ssh` drove `execute` over SSH but transfer ignored it and needed
+  `--via sftp`. Transfer now maps the record's transport to a method
+  (`ssh`→`sftp`, `rest-api`→`rest`, `native-api`→`native`) after `--via` and
+  `CENTRS_TRANSFER_VIA`, and accepts `--via ssh` as an alias of `sftp`. A
+  record transport that cannot carry files fails `settings/invalid-via`
+  naming the record; a record-pinned REST upload over 60 KB names the record
+  in its `transport/unsupported-operation` remediation.
 - The `explain` catalog generator skips the CLI Reference's new
   `compare-versions` widget page (2026-10-30). The page carries no command
   entry, and it aborted the catalog drift report. The refreshed catalog adds

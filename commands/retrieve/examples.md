@@ -146,6 +146,43 @@ centrs retrieve $R /system/license --username $U --password $P --json
 centrs retrieve $R /system/resource --attribute bogus --username $U --password $P --json
 ```
 
+## Read paths dispatch only reads (#586)
+
+A read sends only a `print`/`get`, even with `--validate=false`. Covered by
+the CHR test `test/integration/read-path-guard.test.ts` (RP1–RP2, over REST
+and native-api, for `retrieve` and `api`; the router's uptime must never go
+backwards) and the offline grammar and REST-guard tests in
+`test/unit/menu-path.test.ts` (RP3).
+
+### RP1. A `#` or `?` in the path is refused before dispatch
+
+```bash
+centrs retrieve $R '/system/reboot#' --no-validate --attribute uptime --username $U --password $P --json
+centrs api $R '/system/reboot?' --validate=false --attribute uptime --username $U --password $P --json
+```
+
+Envelope: `ok: false`, `error.code=input/invalid-routeros-path`,
+`error.context.invalidSegments` names the bad segment, and nothing is sent.
+Before #586 the first line posted `/rest/system/reboot` and rebooted the CHR.
+
+### RP2. A well-formed command path is RouterOS's refusal, not a dispatch
+
+```bash
+centrs retrieve $R /system/reboot --no-validate --username $U --password $P --json
+centrs retrieve $R /system/reset-configuration --no-validate --attribute uptime --username $U --password $P --json
+```
+
+Envelope: `ok: false` with a `routeros/*` code. RouterOS answers
+`<command>/print` and a `GET` of a command with "no such command", so the
+appended `/print` is the guarantee once the path cannot cut it off.
+
+### RP3. Menu-name grammar and the REST URL guard
+
+Path segments are letters, digits and hyphens (case folds:
+`/IP/Address` is accepted). Under every REST caller, a request path with
+`?`, `#`, `\`, a control character or a `.`/`..` segment (including
+`%2e%2e` and `.%2E`) fails `input/invalid-routeros-path` before `fetch`.
+
 ## Transport / error contract
 
 ### 12. Bad credentials
