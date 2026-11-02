@@ -821,3 +821,49 @@ centrs retrieve $R /interface --until name=missing --wait 500ms --username $U --
 One envelope goes to stdout, with `stopReason: "deadline-elapsed"`; exit 1.
 No intermediate sample frames are printed. Unit anchors cover slow validation,
 unfinished reads, cancellation and narrow retry classification.
+
+## Record selection (`--match`, #583)
+
+Covered by `test/integration/cdb-match.test.ts` (MA1–MA3) on disposable CHR;
+MA4 is the offline contract in `test/unit/cdb-match.test.ts`. `$CDB` holds
+two `ipAdmin` records for the same target `$R`: user `$U` with a deliberately
+wrong password, and a `read`-group user `reader` with its real password.
+The same selector works on `execute`, `api`, `transfer`, `terminal` and
+`btest client`.
+
+### MA1. Two records for one target are ambiguous
+
+```bash
+centrs retrieve $R /system/identity --cdb-file $CDB --json
+```
+
+Envelope: `ok: false`, `error.code=identity/ambiguous`, `context.matches`
+lists both records, and the remediation names `--match user=<name>`.
+
+### MA2. `--match user=` picks the record and its credentials
+
+```bash
+centrs retrieve $R /system/identity --cdb-file $CDB --match user=reader --json
+centrs execute $R /system/identity/print --cdb-file $CDB --match user=reader --json
+centrs api $R system/identity --cdb-file $CDB --match user=reader --json
+```
+
+Each is `ok: true` with `meta.target.recordIndex=1`. With
+`--match user=$U` instead, each fails `transport/auth-failed`: the decoy's
+wrong password went on the wire, so the selection is real.
+
+### MA3. A selector that matches nothing
+
+```bash
+centrs retrieve $R /system/identity --cdb-file $CDB --match user=nobody --json
+```
+
+Envelope: `ok: false`, `error.code=identity/no-match`.
+
+### MA4. `--match` is single-target and never ignored
+
+With a fan-out selection (`--group`, `--where`, `--all`, several
+positionals) or `--quickchr`, `--match` is `usage/conflicting-flags`. When no
+CDB record is in play (no CDB file, an unregistered literal host, a
+`__default__`-only fallback) it is `identity/no-match`, never a silent
+literal-host read.

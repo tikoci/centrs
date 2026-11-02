@@ -1,5 +1,5 @@
 /**
- * #583 on real RouterOS: `--match` picks one of two CDB records saved for the
+ * #583 on real RouterOS (commands/retrieve/examples.md MA1–MA3): `--match` picks one of two CDB records saved for the
  * same address. One record carries a deliberately wrong password, so the
  * selected record is visible on the wire: `--match user=reader` reads, the
  * other record fails `auth/failed`, and no `--match` is `identity/ambiguous`.
