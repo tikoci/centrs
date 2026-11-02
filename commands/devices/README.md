@@ -459,12 +459,18 @@ mode of initialization or ordinary writes. The library exports
 `encryptCdb({ cdbPassword, cdbFile })`; both use the shared settings precedence.
 
 Encrypted initialization keeps atomic no-clobber creation and mode `0600`.
+Initialization returns `data.encrypted` for both newly created and existing
+files. Competing encrypted initializers with different passwords fail closed:
+the loser gets `cdb/decrypt-failed` when it cannot unlock the winner's file.
 An existing open CDB refuses `init --encrypt`; conversion must be explicit.
 An existing encrypted CDB is verified with the supplied password and left alone.
 Conversion requires an existing readable CDB, preserves its records and unknown
 fields, uses a fresh salt and atomic replacement, and keeps its file mode.
 `data` reports `cdbFile`, `encrypted: true`, `changed`, `recordCount`, and the
-new `backupPath` when conversion occurred. Already-encrypted conversion verifies
+new `backupPath` when conversion occurred. Default text output reports
+`encrypted` or `verified encrypted ... (unchanged)`, the record count, and
+the backup path when created, followed by the plaintext-backup warning.
+Already-encrypted conversion verifies
 the password and returns `changed: false` without rewriting or rotating it.
 
 **Backups remain sensitive.** Conversion retains every existing backup and

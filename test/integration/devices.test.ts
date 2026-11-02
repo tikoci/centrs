@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import {
+	chmod,
 	copyFile,
 	mkdir,
 	readdir,
 	readFile,
 	rm,
+	stat,
 	writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
@@ -1992,6 +1994,7 @@ describe("centrs devices init (#376)", () => {
 		expect(JSON.parse(init.stdout).data).toEqual({
 			cdbFile: cdbPath,
 			created: true,
+			encrypted: false,
 			recordCount: 0,
 		});
 
@@ -2066,6 +2069,70 @@ describe("centrs devices encryption (#558)", () => {
 		const again = await run("encrypt", "--cdb-password", "fixture-secret");
 		expect(JSON.parse(again.stdout).data.changed).toBe(false);
 	});
+	test("example 57 text reports conversion, backup, and verified unchanged", async () => {
+		const cdbFile = join(tempDir, `encryption-text-${randomUUID()}.cdb`);
+		await runWithCapture(["devices", "init", "--cdb-file", cdbFile]);
+		await runWithCapture([
+			"devices",
+			"add",
+			"192.0.2.1",
+			"--user",
+			"reader",
+			"--cdb-file",
+			cdbFile,
+		]);
+		const args = [
+			"devices",
+			"encrypt",
+			"--cdb-file",
+			cdbFile,
+			"--cdb-password",
+			"fixture-secret",
+		];
+		const converted = await runWithCapture(args);
+		expect(converted.exitCode).toBe(0);
+		expect(converted.stdout).toContain(`encrypted ${cdbFile}`);
+		expect(converted.stdout).toContain("records:       1");
+		const backupLine = converted.stdout
+			.split("\n")
+			.find((line) => line.startsWith("backup:        "));
+		expect(backupLine).toBeDefined();
+		expect(
+			await Bun.file(
+				backupLine?.slice("backup:        ".length) ?? "",
+			).exists(),
+		).toBe(true);
+		expect(converted.stdout).toContain("warning: [cdb/plaintext-backups]");
+		const verified = await runWithCapture(args);
+		expect(verified.exitCode).toBe(0);
+		expect(verified.stdout).toContain(
+			`verified encrypted ${cdbFile} (unchanged)`,
+		);
+		expect(verified.stdout).toContain("records:       1");
+		expect(verified.stdout).not.toContain("backup:        ");
+		expect(verified.stdout).toContain("warning: [cdb/plaintext-backups]");
+	});
+	test.skipIf(process.platform === "win32")(
+		"example 57 preserves a non-0600 POSIX mode on the CDB and backup",
+		async () => {
+			const cdbFile = join(tempDir, `encryption-mode-${randomUUID()}.cdb`);
+			await runWithCapture(["devices", "init", "--cdb-file", cdbFile]);
+			await chmod(cdbFile, 0o640);
+			const converted = await runWithCapture([
+				"devices",
+				"encrypt",
+				"--cdb-file",
+				cdbFile,
+				"--cdb-password",
+				"fixture-secret",
+				"--json",
+			]);
+			expect(converted.exitCode).toBe(0);
+			const data = JSON.parse(converted.stdout).data;
+			expect((await stat(cdbFile)).mode & 0o777).toBe(0o640);
+			expect((await stat(data.backupPath)).mode & 0o777).toBe(0o640);
+		},
+	);
 	test("example 58 refuses invalid encryption requests without mutation", async () => {
 		const cdbFile = join(tempDir, `encryption-refused-${randomUUID()}.cdb`);
 		const run = (...args: string[]) =>

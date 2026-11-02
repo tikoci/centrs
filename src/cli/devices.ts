@@ -634,13 +634,15 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 
 		envSnapshot = Bun.env;
 		if (parsed.subcommand === "init" || parsed.subcommand === "encrypt") {
-			const operation = parsed.subcommand === "init" ? initCdb : encryptCdb;
-			const envelope = await operation({
-				encrypt: parsed.encrypt,
+			const options = {
 				cdbFile: parsed.cdbFile,
 				cdbPassword: parsed.cdbPassword,
 				env: envSnapshot,
-			});
+			};
+			const envelope =
+				parsed.subcommand === "init"
+					? await initCdb({ ...options, encrypt: parsed.encrypt })
+					: await encryptCdb(options);
 			console.log(renderDevicesEnvelope(envelope, parsed.format ?? "text"));
 			return 0;
 		}

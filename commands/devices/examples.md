@@ -651,7 +651,7 @@ centrs devices add 192.0.2.1 --user robot-reader --cdb-file ./lab/winbox.cdb --j
 ```
 
 Creates missing parent directories and an empty open CDB with mode `0600`.
-`data` is `{ cdbFile, created: true, recordCount: 0 }`. The `add` then succeeds.
+`data` is `{ cdbFile, created: true, encrypted: false, recordCount: 0 }`. The `add` then succeeds.
 
 ### 55. `init` never clobbers
 
@@ -660,6 +660,7 @@ centrs devices init --cdb-file ./lab/winbox.cdb --json
 ```
 
 On an existing, readable CDB: `ok: true`, `data.created: false`,
+`data.encrypted` reports the actual encryption mode,
 `data.recordCount` is the current count, and a `cdb/file-exists` warning says
 nothing was written. As with `git init`, re-running is safe. An existing file that
 does not load fails with that load error (`cdb/parse-failed`,
@@ -673,7 +674,8 @@ CENTRS_CDB_PASSWORD="$CDB_SECRET" centrs devices init --encrypt --cdb-file ./pro
 ```
 
 Creates a complete encrypted empty CDB with mode `0600`; subsequent loads require
-that password. Re-running verifies the password and reports `created: false`.
+that password. `data.encrypted` is `true`. Re-running verifies the password
+and reports `created: false`, `encrypted: true`.
 Test: `centrs devices encryption (#558)` in `test/integration/devices.test.ts`.
 
 ### 57. Convert a lab CDB to encrypted
@@ -689,7 +691,9 @@ Conversion reports `encrypted: true`, `changed: true`, `recordCount: 1`, and
 `backupPath`. Records survive a password-protected reload; loading without a
 password fails. All backups remain, including the plaintext pre-conversion file;
 `cdb/plaintext-backups` warns explicitly. Repeating with the same password returns
-`changed: false`; a wrong password fails without writing.
+`changed: false`; a wrong password fails without writing. Without `--json`,
+text reports conversion or verified unchanged, the record count, and the
+plaintext snapshot path when created; the warning remains visible.
 Test: `centrs devices encryption (#558)` in `test/integration/devices.test.ts`.
 
 ### 58. Encryption intent fails closed

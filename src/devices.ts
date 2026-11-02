@@ -278,6 +278,8 @@ export interface DevicesInitData {
 	cdbFile: string;
 	/** False when a readable CDB was already there; nothing was written. */
 	created: boolean;
+	/** Actual mode of the newly created or verified existing CDB. */
+	encrypted: boolean;
 	recordCount: number;
 }
 
@@ -314,7 +316,12 @@ export async function initCdb(
 		}
 		return {
 			ok: true as const,
-			data: { cdbFile, created: false, recordCount: existing.entries.length },
+			data: {
+				cdbFile,
+				created: false,
+				encrypted: existing.encrypted,
+				recordCount: existing.entries.length,
+			},
 			warnings: [
 				...existing.warnings,
 				{
@@ -353,7 +360,12 @@ export async function initCdb(
 	}
 	return {
 		ok: true,
-		data: { cdbFile, created: true, recordCount: 0 },
+		data: {
+			cdbFile,
+			created: true,
+			encrypted: options.encrypt === true,
+			recordCount: 0,
+		},
 		warnings: [],
 		tips: [],
 		meta: devicesMeta("init", settings),
@@ -1969,6 +1981,18 @@ function renderText(envelope: DevicesEnvelope<unknown>): string {
 					? `created ${data.cdbFile}`
 					: `exists ${data.cdbFile} (${data.recordCount} record(s))`,
 			);
+			lines.push(`encrypted:     ${data.encrypted}`);
+			break;
+		}
+		case "encrypt": {
+			const data = envelope.data as DevicesEncryptData;
+			lines.push(
+				data.changed
+					? `encrypted ${data.cdbFile}`
+					: `verified encrypted ${data.cdbFile} (unchanged)`,
+			);
+			lines.push(`records:       ${data.recordCount}`);
+			if (data.backupPath) lines.push(`backup:        ${data.backupPath}`);
 			break;
 		}
 		case "list":
