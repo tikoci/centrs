@@ -162,7 +162,7 @@ Usage: centrs transfer <router>|--host <host> upload <local> [remote] | download
 
 | Flag | Value | Description |
 | ---- | ----- | ----------- |
-| `--via` | `<method>` | Pin the method: rest, native, or sftp (large transfers); scp/fetch/ftp are not built yet. Auto picks the cheapest by size/direction. |
+| `--via` | `<method>` | Pin the method: rest, native, or sftp (large transfers; `ssh` is an alias); scp/fetch/ftp are not built yet. Auto picks the cheapest by size/direction, after a CDB record's `via=` (ssh→sftp). |
 | `--ssh-key` | `<path>` | sftp only: explicit private-key path. Falls back to CENTRS_SSH_KEY / the ssh-agent. |
 | `--insecure` |  | Accept a self-signed TLS cert (https/api-ssl) or a new SSH host key. Default verifies. |
 | `--force / --overwrite` |  | Skip the existing-destination check on the device for `upload`/`mkdir`/`copy` (`upload` then overwrites). Default refuses an existing target. `download` always replaces the local file. |

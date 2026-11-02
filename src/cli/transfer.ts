@@ -73,7 +73,7 @@ export const transferCommand: CliCommandMetadata = {
 			flag: "--via",
 			valueName: "<method>",
 			description:
-				"Pin the method: rest, native, or sftp (large transfers); scp/fetch/ftp are not built yet. Auto picks the cheapest by size/direction.",
+				"Pin the method: rest, native, or sftp (large transfers; `ssh` is an alias); scp/fetch/ftp are not built yet. Auto picks the cheapest by size/direction, after a CDB record's `via=` (ssh→sftp).",
 		},
 		{
 			flag: "--ssh-key",

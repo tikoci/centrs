@@ -153,6 +153,7 @@ const TRANSFER_VIA_VALUES = [
 	"native",
 	"native-api",
 	"sftp",
+	"ssh",
 	"scp",
 	"fetch",
 	"ftp",

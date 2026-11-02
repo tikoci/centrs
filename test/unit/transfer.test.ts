@@ -22,6 +22,7 @@ import {
 	validateTransferRequestShape,
 } from "../../src/index.ts";
 import { SftpClient } from "../../src/protocols/sftp.ts";
+import type { CdbResolution } from "../../src/resolver/index.ts";
 import { HERMETIC_ENV } from "./hermetic-env.ts";
 
 // ── fetch mock (drives the REST adapter end-to-end, no CHR) ──────────────────
@@ -151,6 +152,114 @@ describe("selectTransferMethod", () => {
 		expect(
 			selectTransferMethod(baseRequest({ via: "sftp" }), "upload", 10, {}),
 		).toMatchObject({ method: "sftp", protocol: "ssh" });
+	});
+
+	test("--via ssh is an alias of sftp (#591)", () => {
+		expect(
+			selectTransferMethod(baseRequest({ via: "ssh" }), "upload", 10, {}),
+		).toMatchObject({ method: "sftp", protocol: "ssh" });
+	});
+
+	describe("a CDB record's via= preference (#591)", () => {
+		const cdbVia = (value: "ssh" | "rest-api" | "native-api" | "mac-telnet") =>
+			({
+				value,
+				source: { kind: "comment-kv", key: "record:1:via" },
+			}) as const;
+
+		test("maps the transport name to the transfer method", () => {
+			for (const [transport, method, protocol] of [
+				["ssh", "sftp", "ssh"],
+				["rest-api", "rest", "rest-api"],
+				["native-api", "native", "native-api"],
+			] as const) {
+				const selected = selectTransferMethod(
+					baseRequest({ verb: "download" }),
+					"download",
+					undefined,
+					{},
+					{},
+					cdbVia(transport),
+				);
+				expect(selected).toMatchObject({ method, protocol });
+				expect(selected.via.source).toEqual({
+					kind: "comment-kv",
+					key: "record:1:via",
+				});
+			}
+		});
+
+		test("--via and CENTRS_TRANSFER_VIA still win over the record", () => {
+			expect(
+				selectTransferMethod(
+					baseRequest({ via: "rest" }),
+					"download",
+					undefined,
+					{},
+					{},
+					cdbVia("ssh"),
+				),
+			).toMatchObject({
+				method: "rest",
+				via: { source: { kind: "explicit" } },
+			});
+			expect(
+				selectTransferMethod(
+					baseRequest({ verb: "download" }),
+					"download",
+					undefined,
+					{ CENTRS_TRANSFER_VIA: "native" },
+					{},
+					cdbVia("ssh"),
+				),
+			).toMatchObject({ method: "native", via: { source: { kind: "env" } } });
+		});
+
+		test("a record preference is not an auto hop: REST stays REST", () => {
+			expect(
+				selectTransferMethod(
+					baseRequest({ verb: "upload" }),
+					"upload",
+					70_000,
+					{},
+					{},
+					cdbVia("rest-api"),
+				),
+			).toMatchObject({ method: "rest" });
+		});
+
+		test("a transport that cannot carry files fails, naming the record", () => {
+			let error: CentrsError | undefined;
+			try {
+				selectTransferMethod(
+					baseRequest({ verb: "download" }),
+					"download",
+					undefined,
+					{},
+					{},
+					cdbVia("mac-telnet"),
+				);
+			} catch (caught) {
+				error = caught as CentrsError;
+			}
+			expect(error?.code).toBe("settings/invalid-via");
+			expect(error?.context).toMatchObject({
+				via: "mac-telnet",
+				source: "record:1:via",
+			});
+			expect(error?.remediation).toContain("--via sftp");
+			// An explicit --via makes the record's preference moot.
+			expect(
+				selectTransferMethod(
+					baseRequest({ via: "sftp" }),
+					"download",
+					undefined,
+					{},
+					{},
+					cdbVia("mac-telnet"),
+				),
+			).toMatchObject({ method: "sftp" });
+		});
 	});
 
 	test("scp / fetch are not implemented yet", () => {
@@ -346,6 +455,79 @@ describe("transfer upload (rest)", () => {
 				code = (error as CentrsError).code;
 			}
 			expect(code).toBe("transport/unsupported-operation");
+			expect(fetchMock.calls).toHaveLength(0);
+		} finally {
+			fetchMock.restore();
+		}
+	});
+});
+
+// ── CDB record via= wiring (#591) ───────────────────────────────────────────
+
+describe("resolveTransferRequest takes the CDB record's via= (#591)", () => {
+	const record = (
+		via: "ssh" | "rest-api" | "mac-telnet" | "romon" | "snmp",
+	): CdbResolution => ({
+		target: "127.0.0.1",
+		identity: "127.0.0.1",
+		username: "admin",
+		password: "",
+		recordIndex: 3,
+		overrides: {
+			via: { value: via, source: { kind: "comment-kv", key: "record:3:via" } },
+		},
+		warnings: [],
+	});
+	const request = (overrides: Partial<TransferRequest> = {}) =>
+		baseRequest({ host: undefined, port: undefined, ...overrides });
+
+	test("a via=ssh record selects sftp with the record as the source", async () => {
+		const resolved = await resolveTransferRequest(request(), HERMETIC_ENV, {
+			cdbResolution: record("ssh"),
+		});
+		expect(resolved.method).toBe("sftp");
+		expect(resolved.via).toMatchObject({
+			value: "sftp",
+			source: { kind: "comment-kv", key: "record:3:via" },
+		});
+	});
+
+	test("every transport that cannot carry files fails naming the record", async () => {
+		for (const via of ["mac-telnet", "romon", "snmp"] as const) {
+			let error: CentrsError | undefined;
+			try {
+				await resolveTransferRequest(request(), HERMETIC_ENV, {
+					cdbResolution: record(via),
+				});
+			} catch (caught) {
+				error = caught as CentrsError;
+			}
+			expect({
+				via,
+				code: error?.code,
+				source: error?.context?.["source"],
+			}).toEqual({
+				via,
+				code: "settings/invalid-via",
+				source: "record:3:via",
+			});
+		}
+	});
+
+	test("a via=rest-api record over the write cap names the record", async () => {
+		const local = tmpFile("big-591.bin", Buffer.alloc(70_000, 1));
+		const fetchMock = mockFetchSequence([]);
+		try {
+			const envelope = await transferEnvelope(
+				request({ verb: "upload", local, remote: "big.bin" }),
+				HERMETIC_ENV,
+				{ cdbResolution: record("rest-api") },
+			);
+			expect(envelope.ok).toBe(false);
+			if (envelope.ok) return;
+			expect(envelope.error.code).toBe("transport/unsupported-operation");
+			expect(envelope.error.remediation).toContain("--via sftp");
+			expect(envelope.error.remediation).toContain("record:3:via");
 			expect(fetchMock.calls).toHaveLength(0);
 		} finally {
 			fetchMock.restore();
