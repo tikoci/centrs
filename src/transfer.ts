@@ -424,7 +424,7 @@ async function runUpload(
 		isRestFamily(resolved.method) &&
 		bytes.byteLength > REST_FILE_WRITE_CAP_BYTES
 	) {
-		throw restWriteCapError(remote, bytes.byteLength);
+		throw restWriteCapError(remote, bytes.byteLength, resolved.via);
 	}
 
 	const existing = await backend.findFile(remote);
@@ -1813,13 +1813,30 @@ function targetExistsError(remote: string): CentrsError {
 	});
 }
 
-function restWriteCapError(remote: string, bytes: number): CentrsError {
+function restWriteCapError(
+	remote: string,
+	bytes: number,
+	via: ResolvedSetting<string>,
+): CentrsError {
+	// A pinned REST method is never hopped to sftp; name the pin so a record
+	// or env preference the caller did not type is visible (#591 review).
+	const pinnedBy =
+		via.source.kind === "comment-kv"
+			? ` The method came from the CDB record's \`via=\` (\`${via.source.key}\`).`
+			: via.source.kind === "env" || via.source.kind === "config"
+				? ` The method came from \`${via.source.key}=${via.value}\` (${via.source.kind}).`
+				: "";
 	return new CentrsError({
 		code: "transport/unsupported-operation",
 		summary: `Cannot write ${bytes} bytes to ${remote} over REST/native (60 KB cap).`,
-		remediation:
-			"Large uploads need sftp (lands with the SSH transport); the REST `/file` write cap is 60 KB.",
-		context: { remote, bytes, capBytes: REST_FILE_WRITE_CAP_BYTES },
+		remediation: `Pass \`--via sftp\` for this upload; the REST \`/file\` write cap is 60 KB.${pinnedBy}`,
+		context: {
+			remote,
+			bytes,
+			capBytes: REST_FILE_WRITE_CAP_BYTES,
+			via: via.value,
+			viaSource: via.source.key ?? via.source.kind,
+		},
 	});
 }
 
