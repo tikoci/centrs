@@ -7,7 +7,7 @@ menu name, or characters a REST URL would reinterpret.
 
 - A path without a leading slash: `retrieve <router> ip/address`.
 - A `retrieve` or `api` path segment that is not a RouterOS menu name. Menu
-  names are lowercase letters, digits and hyphens (`/interface/6to4`,
+  names are letters, digits and hyphens (case folds) (`/interface/6to4`,
   `/ip/dhcp-server`). The check runs on every transport and even with
   `--validate=false`, because a read must only dispatch a read (#586).
 - A REST request path containing `?`, `#`, `\`, a control character, or a

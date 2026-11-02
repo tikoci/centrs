@@ -52,8 +52,8 @@ centrs api <router> <endpoint> [flags]
   POST reject it with `input/invalid-path`. A trailing `/listen` segment is
   the menu's `listen` command, which implies `--stream` + `--via native-api`
   and requires GET (`ip/address/*1/listen` follows one row). After that
-  normalization every menu segment must be a RouterOS menu name (lowercase
-  letters, digits, hyphens), or the request fails with
+  normalization every menu segment must be a RouterOS menu name (letters,
+  digits, hyphens; case folds), or the request fails with
   `input/invalid-routeros-path` before any transport is chosen, whatever
   `--validate` says. A `#` or `?` once cut `/print` off a projected GET's
   REST URL and posted the bare command (`/system/reboot#` rebooted CHR 7.24.5,

@@ -119,9 +119,20 @@ describeFast("read surfaces never dispatch a non-read (#586)", () => {
 
 			// Wait out a reboot that would have started: RouterOS acks the
 			// request before it goes down, so an immediate read can still land.
+			// A regression leaves REST down while it reboots, so poll until it
+			// answers and report the uptime, not a transport error.
 			await Bun.sleep(5_000);
-			const after = await readUptime();
-			expect(after).toBeGreaterThanOrEqual(before);
+			let after: number | undefined;
+			const deadline = Date.now() + 120_000;
+			while (after === undefined && Date.now() < deadline) {
+				try {
+					after = await readUptime();
+				} catch {
+					await Bun.sleep(2_000);
+				}
+			}
+			expect(after).toBeDefined();
+			expect(after ?? 0).toBeGreaterThanOrEqual(before);
 		} finally {
 			await chr.destroy();
 		}

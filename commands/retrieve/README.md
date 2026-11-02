@@ -98,8 +98,8 @@ If `--all-attributes` is combined with `--attribute(s)`, fail with
 
 A read only ever dispatches a `print`/`get`, on every transport and even with
 `--validate=false`: that flag skips command validation, not the read/write
-split (#586). Each path segment must be a RouterOS menu name — lowercase
-letters, digits and hyphens, the grammar of every dir and command in the
+split (#586). Each path segment must be a RouterOS menu name — letters,
+digits and hyphens (case folds), the grammar of every dir and command in the
 7.9–7.26 tree — or the read fails with `input/invalid-routeros-path` before
 resolution. Before this check, a `#` or `?` cut the appended `/print` off the
 REST URL, so `retrieve '/system/reboot#' --no-validate --attribute uptime`

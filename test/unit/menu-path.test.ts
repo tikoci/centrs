@@ -76,6 +76,7 @@ describe("menu-path grammar (#586)", () => {
 			"/system/resource",
 			"/ip/address",
 			"/interface/6to4",
+			"/IP/Address",
 			"/ip/dhcp-server/lease",
 			"/ip/address/",
 		]) {
@@ -89,7 +90,6 @@ describe("menu-path grammar (#586)", () => {
 			...URL_REWRITING,
 			"/system/reboot%23",
 			"/ip address",
-			"/IP/Address",
 			"/ip/-address",
 		]) {
 			expect(errorCode(() => assertRouterOsMenuPath(path))).toBe(
@@ -127,6 +127,8 @@ describe("REST URL backstop (#586)", () => {
 		for (const path of [
 			"/ip/address/print",
 			"/ip/address/*1A",
+			// A space cannot reinterpret the URL (RouterOS does not decode
+			// `%20`), so the backstop passes it; it is not a working address.
 			"/interface/ether 1",
 			"/execute",
 			"/console/inspect",

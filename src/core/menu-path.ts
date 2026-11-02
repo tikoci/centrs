@@ -3,8 +3,8 @@
  * the REST URL guard every REST request passes through (#586).
  *
  * Every dir and command name in the RouterOS 7.9–7.26 command tree (rosetta
- * v0.12.0, 579 dirs / 5370 commands) is lowercase letters, digits and
- * hyphens, starting with a letter or digit (`/interface/6to4`). Anything else
+ * v0.12.0, 579 dirs / 5370 commands) is letters, digits and hyphens,
+ * starting with a letter or digit (`/interface/6to4`); case folds. Anything else
  * in a menu segment is not a menu, and some of it changes what the request
  * addresses: in a REST URL, `#` and `?` turn the appended `/print` into a
  * fragment or query, so `retrieve '/system/reboot#'` posted to
@@ -18,7 +18,11 @@ const MENU_SEGMENT = /^[a-z0-9][a-z0-9-]*$/;
 
 /** The menu segments of `path` that are not RouterOS menu or command names. */
 export function invalidMenuSegments(path: string): string[] {
-	return pathTokens(path).filter((segment) => !MENU_SEGMENT.test(segment));
+	// Case folds, as RouterOS menus do (`src/explain/menus.ts` isMenuPath);
+	// letter case cannot change how a URL parses, so it is not a hazard.
+	return pathTokens(path).filter(
+		(segment) => !MENU_SEGMENT.test(segment.toLowerCase()),
+	);
 }
 
 /**
@@ -38,7 +42,7 @@ export function assertRouterOsMenuPath(
 		code: "input/invalid-routeros-path",
 		summary: `RouterOS path ${JSON.stringify(path)} has a segment that is not a menu name: ${invalid.map((segment) => JSON.stringify(segment)).join(", ")}.`,
 		remediation:
-			"Write the menu path with lowercase letters, digits and hyphens between slashes, such as `/ip/address` or `/system/resource`. Filter rows with `--query`, not characters in the path.",
+			"Write the menu path with letters, digits and hyphens between slashes, such as `/ip/address` or `/system/resource`. Filter rows with `--query`, not characters in the path.",
 		context: { path, invalidSegments: invalid, ...context },
 	});
 }
