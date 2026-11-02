@@ -345,7 +345,7 @@ Usage: centrs btest <client <router>|server> [flags]
 | `--port` | `<port>` | Control port. Default 2000. |
 | `--cdb-file` | `<path>` | (client) Read target credentials from a WinBox CDB file. |
 | `--cdb-password` | `<password>` | (client) Decrypt an encrypted WinBox CDB file. |
-| `--match` | &lt;user=name\|target=addr\|record-type&gt; | Pick one of several CDB records saved for `<router>` (as `devices show --match`); single target only. |
+| `--match` | &lt;user=name\|target=addr\|record-type&gt; | (client) Pick one of several CDB records saved for `<router>` (as `devices show --match`); `btest server` rejects it. |
 | `--format` | &lt;text\|csv\|json\|yaml&gt; | Output format. Default text. |
 | `--csv` |  | Shortcut for `--format csv`. |
 

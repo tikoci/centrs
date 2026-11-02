@@ -149,7 +149,7 @@ export const btestCommand: CliCommandMetadata = {
 			flag: "--match",
 			valueName: "<user=name|target=addr|record-type>",
 			description:
-				"Pick one of several CDB records saved for <router> (as `devices show --match`); single target only.",
+				"(client) Pick one of several CDB records saved for <router> (as `devices show --match`); `btest server` rejects it.",
 		},
 		{
 			flag: "--format",

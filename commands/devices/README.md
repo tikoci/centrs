@@ -96,6 +96,8 @@ or a duplicated `identity=`):
   `usage/conflicting-flags`, and when no CDB record is in play (no CDB, an
   unregistered literal host, a `__default__`-only fallback, or `--host`
   without `<router>`) it fails `identity/no-match` rather than being ignored.
+  With no target at all (no `<router>`, no `--host`) the CLI still reports
+  the missing-target usage error first.
   An ambiguous positional inside a fan-out names the single-target
   `--match` re-run, since the fan-out itself refuses the flag.
 

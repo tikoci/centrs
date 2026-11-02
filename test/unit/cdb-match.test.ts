@@ -120,13 +120,46 @@ describe("resolveCdb --match (#583)", () => {
 				{ CENTRS_CDB_FILE: undefined, HOME: dir, XDG_CONFIG_HOME: dir },
 			),
 		);
-		expect(["identity/no-match", "cdb/not-found"]).toContain(noCdb.code);
+		// The "no CDB file in play" branch: the default path is absent.
+		expect(noCdb.code).toBe("identity/no-match");
 		// No <router> (e.g. --host only).
 		const noTarget = await failure(() =>
 			resolveCdb({ cdbFile, match: "user=bob" }, {}),
 		);
 		expect(noTarget.code).toBe("identity/no-match");
 	});
+});
+
+test("a __default__-only fallback does not satisfy --match", async () => {
+	const defaultOnly = join(dir, "default-only.cdb");
+	await writeFile(
+		defaultOnly,
+		encodeOpenWinBoxCdb([
+			buildWinBoxCdbEntryRecord({
+				recordType: winBoxCdbRecordType.ipAdmin,
+				target: "__default__",
+				user: "bob",
+				password: "fallback",
+				group: "",
+				comment: "",
+				profile: "<own>",
+				savedPassword: true,
+			}),
+		]),
+	);
+	// Without --match the __default__ record supplies fallback credentials.
+	const fallback = await resolveCdb(
+		{ targetInput: "192.0.2.50", cdbFile: defaultOnly },
+		{},
+	);
+	expect(fallback?.defaults).toBeDefined();
+	const error = await failure(() =>
+		resolveCdb(
+			{ targetInput: "192.0.2.50", cdbFile: defaultOnly, match: "user=bob" },
+			{},
+		),
+	);
+	expect(error.code).toBe("identity/no-match");
 });
 
 describe("--match is single-target CDB only (#583)", () => {
