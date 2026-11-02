@@ -424,9 +424,10 @@ export async function encryptCdb(
 		} catch (cause) {
 			throw new CentrsError({
 				code: "cdb/encrypt-failed",
-				summary: "Could not replace the CDB with encrypted bytes.",
+				summary: `Could not encrypt the CDB at ${cdbFile}.`,
 				remediation:
 					"Check directory permissions and available disk space; retain the original and any backups before retrying.",
+				context: { cdbFile },
 				cause,
 			});
 		}
