@@ -511,7 +511,14 @@ function parseKvArg(token: string): CommentKvUpdate {
 	// canonical key a `--lon`/`--lat`/`--altitude` flag would use. A no-op for
 	// every non-geo key.
 	const key = canonicalizeGeoKey(token.slice(0, eq));
-	return { key, value: parseKvValue(token.slice(eq + 1)) };
+	const value = parseKvValue(token.slice(eq + 1));
+	// An empty value removes the token (`devices set <t> via=` deletes the
+	// `via` override) instead of storing a literally-empty value, per
+	// `commands/devices/README.md` (Comment kv-soup). The core upsert/remove
+	// model lives in `applyCommentKv` (`src/resolver/comment-kv.ts`), which
+	// treats `value: null` as removal; the CLI lowers `key=` to that form
+	// here. There is currently no need to store a literally-empty value.
+	return { key, value: value === "" ? null : value };
 }
 
 /**

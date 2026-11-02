@@ -141,6 +141,15 @@ Rules:
 - An **empty value removes** the token: `devices set <t> via=` deletes the `via`
   override (matching the internal upsert/remove model in `comment-kv.ts`). There
   is no current need to store a literally-empty value; revisit if one arises.
+  Removing a token that is already absent is a no-op success — the comment is
+  left byte-for-byte identical.
+- First-class fields have their own empty-value rules, distinct from token
+  removal: `--password ""` clears the stored password (and its saved-password
+  flag); `--user ""` writes an empty user. Bare `user=` / `password=` /
+  `group=` / `profile=` / `session=` positionals never reach those fields —
+  they are refused with `cdb/reserved-key` — so comment-token removal (`key=`
+  deletes the token) and credential clearing (`--password ""` empties the
+  password) are deliberately different operations.
 - `commentMirror` is kept in sync with `comment` on every write.
 
 Precedence (lowest → highest): built-in defaults → user config file
