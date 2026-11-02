@@ -60,6 +60,7 @@ import {
 } from "./execute.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 import {
+	assertNoMatchInFanout,
 	emptyWriteSelectionError,
 	expandSelection,
 	isDefaultRecordTarget,
@@ -206,6 +207,7 @@ export async function executeFanout(
 	internals: ExecuteFanoutInternals = {},
 	options: ExecuteFanoutOptions = {},
 ): Promise<ExecuteFanoutEnvelope> {
+	assertNoMatchInFanout(request.match);
 	// Validate + canonicalize the command ONCE, before selection expansion: a bad
 	// command shape is an outer error regardless of how many targets resolve, and
 	// write-ness is target-independent.

@@ -89,6 +89,15 @@ or a duplicated `identity=`):
   lists all matching entries (by `cdbRecordIndex`, `target`, `user`, and
   `recordType`). The caller pins the choice with `--match` by `user`
   (`--match user=admin`), by record-type (`--match ipUser`), or by exact target.
+  `--match` takes the same selector on `devices show`/`set`/`remove` and on
+  every command that resolves a `<router>` from the CDB: `retrieve`,
+  `execute`, `api`, `transfer`, `terminal` and `btest client` (#583). It is a
+  single-target flag: with a fan-out selection or `--quickchr` it is
+  `usage/conflicting-flags`, and when no CDB record is in play (no CDB, an
+  unregistered literal host, a `__default__`-only fallback, or `--host`
+  without `<router>`) it fails `identity/no-match` rather than being ignored.
+  An ambiguous positional inside a fan-out names the single-target
+  `--match` re-run, since the fan-out itself refuses the flag.
 
 `--prefer-family=ipv4|ipv6` is a non-interactive way to break v4/v6 ties
 deterministically; with it set, no prompt is raised. It emits a warning

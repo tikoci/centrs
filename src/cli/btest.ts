@@ -146,6 +146,12 @@ export const btestCommand: CliCommandMetadata = {
 			description: "(client) Decrypt an encrypted WinBox CDB file.",
 		},
 		{
+			flag: "--match",
+			valueName: "<user=name|target=addr|record-type>",
+			description:
+				"Pick one of several CDB records saved for <router> (as `devices show --match`); single target only.",
+		},
+		{
 			flag: "--format",
 			valueName: `<${btestOutputFormats.join("|")}>`,
 			description: "Output format. Default text.",
@@ -301,6 +307,9 @@ function parseClientArgs(args: readonly string[]): ClientCliArgs {
 				break;
 			case "--cdb-password":
 				request.cdbPassword = expectValue(args, ++i, arg);
+				break;
+			case "--match":
+				request.match = expectValue(args, ++i, arg);
 				break;
 			case "--csv":
 				parsed.format = "csv";

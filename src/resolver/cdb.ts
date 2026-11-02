@@ -137,6 +137,44 @@ export interface CdbResolveInput {
 	targetInput?: string;
 	cdbFile?: string;
 	cdbPassword?: string;
+	/**
+	 * `--match` record selector (`user=<name>`, `target=<addr>`, or a record
+	 * type such as `ipUser`) for a `<router>` several CDB records share — the
+	 * same selector `devices show --match` takes (#583). Given a `match`, the
+	 * call must resolve a CDB record: no CDB, a literal host, or a
+	 * `__default__`-only fallback fails `identity/no-match` instead of
+	 * ignoring the selector.
+	 */
+	match?: string;
+}
+
+/**
+ * `--match` picks one CDB record for one `<router>`; a fan-out selection
+ * already visits every selected record. Shared by every command's fan-out
+ * entry so the flag is never silently ignored (#583).
+ */
+export function assertNoMatchInFanout(match: string | undefined): void {
+	if (match === undefined) {
+		return;
+	}
+	throw new CentrsError({
+		code: "usage/conflicting-flags",
+		summary:
+			"`--match` selects one CDB record for a single `<router>`; it cannot be combined with a fan-out selection.",
+		remediation:
+			"Drop `--match`, or target the one router positionally: `<router> --match user=<name>`. A fan-out already visits every selected record.",
+		context: { flag: "--match", match },
+	});
+}
+
+function matchWithoutRecord(input: CdbResolveInput, reason: string): never {
+	throw new CentrsError({
+		code: "identity/no-match",
+		summary: `--match "${input.match}" needs a CDB record for "${input.targetInput ?? ""}", but ${reason}.`,
+		remediation:
+			"Run `centrs devices list` to see the saved records and their users, then pass the `<router>` they are saved under with --match, or drop --match for an ad-hoc host.",
+		context: { target: input.targetInput, match: input.match },
+	});
 }
 
 function warningFromDevices(warning: DevicesWarning): ResolverWarning {
@@ -164,6 +202,9 @@ export async function resolveCdb(
 	config: Record<string, string | undefined> = {},
 ): Promise<CdbResolution | undefined> {
 	if (!input.targetInput) {
+		if (input.match !== undefined) {
+			matchWithoutRecord(input, "no `<router>` was given");
+		}
 		return undefined;
 	}
 	// Before any lookup: a CDB miss echoes the target it was given (#478).
@@ -186,6 +227,9 @@ export async function resolveCdb(
 		env[ENV_CDB_PASSWORD] !== undefined ||
 		config[ENV_CDB_FILE] !== undefined;
 	if (!explicitCdb && !(await Bun.file(settings.cdbFile.value).exists())) {
+		if (input.match !== undefined) {
+			matchWithoutRecord(input, "no CDB file is in play");
+		}
 		return undefined;
 	}
 
@@ -201,7 +245,8 @@ export async function resolveCdb(
 		if (
 			!explicitCdb &&
 			error instanceof CentrsError &&
-			error.code === "cdb/not-found"
+			error.code === "cdb/not-found" &&
+			input.match === undefined
 		) {
 			return undefined;
 		}
@@ -211,7 +256,11 @@ export async function resolveCdb(
 	const defaults = findDefaultCreds(cdb);
 
 	try {
-		const envelope = showDevice({ cdb, target: input.targetInput });
+		const envelope = showDevice({
+			cdb,
+			target: input.targetInput,
+			match: input.match,
+		});
 		const entry = envelope.data.entry;
 		const warnings: ResolverWarning[] =
 			envelope.warnings.map(warningFromDevices);
@@ -235,6 +284,13 @@ export async function resolveCdb(
 		// Preserve registered identities; mask credential-shaped lookup failures.
 		if (redactTargetInput(input.targetInput) !== input.targetInput) {
 			assertNoTargetCredentials(input.targetInput);
+		}
+		if (
+			error instanceof CentrsError &&
+			error.code === "cdb/not-found-target" &&
+			input.match !== undefined
+		) {
+			matchWithoutRecord(input, "no CDB record matches it");
 		}
 		if (error instanceof CentrsError && error.code === "cdb/not-found-target") {
 			// A `__default__` record supplies fallback credentials even when the

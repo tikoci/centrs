@@ -309,6 +309,17 @@ export async function expandSelection(
 				}
 				continue;
 			}
+			// The devices remediation names `--match`, which a fan-out refuses
+			// (it picks one record for one `<router>`, #583).
+			if (error instanceof CentrsError && error.code === "identity/ambiguous") {
+				throw new CentrsError({
+					code: error.code,
+					summary: error.summary,
+					remediation: `In a fan-out each positional must name one CDB record. Run "${positional}" on its own with --match user=<name>, --match target=<addr>, or --match <record-type>, or select the records with --group / --where instead.`,
+					context: error.context,
+					cause: error,
+				});
+			}
 			throw error;
 		}
 	}

@@ -62,6 +62,7 @@ import {
 import { promptForWriteConfirmation } from "./execute.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 import {
+	assertNoMatchInFanout,
 	emptyWriteSelectionError,
 	expandSelection,
 	isDefaultRecordTarget,
@@ -213,6 +214,7 @@ export async function apiFanout(
 	// missing endpoint or an invalid `-X` is an outer error regardless of how many
 	// targets the selection resolves to (so an empty selection cannot mask it).
 	validateApiRequestShape(request);
+	assertNoMatchInFanout(request.match);
 	const config = await loadEnvFileDefaults(env);
 	const method = parseApiMethod(request.method);
 	const requestSummary = apiRequestSummaryFromRequest(request, env);

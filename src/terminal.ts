@@ -81,6 +81,12 @@ export interface TerminalRequest {
 	insecure?: boolean;
 	cdbFile?: string;
 	cdbPassword?: string;
+	/**
+	 * `--match` selector for a `<router>` several CDB records share
+	 * (`user=<name>`, `target=<addr>`, or a record type): the same selector
+	 * `devices show --match` takes. Single-target only (#583).
+	 */
+	match?: string;
 	format?: string;
 	verbose?: boolean;
 }
@@ -154,6 +160,7 @@ export async function resolveTerminalRequest(
 			targetInput: request.targetInput,
 			cdbFile: request.cdbFile,
 			cdbPassword: request.cdbPassword,
+			match: request.match,
 		},
 		env,
 		config,

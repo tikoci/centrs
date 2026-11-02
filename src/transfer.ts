@@ -172,6 +172,12 @@ export interface TransferRequest {
 	name?: string;
 	cdbFile?: string;
 	cdbPassword?: string;
+	/**
+	 * `--match` selector for a `<router>` several CDB records share
+	 * (`user=<name>`, `target=<addr>`, or a record type): the same selector
+	 * `devices show --match` takes. Single-target only (#583).
+	 */
+	match?: string;
 	/** `download` fan-out: directory to write one file per target into. */
 	outDir?: string;
 	/** Fan-out write gate: confirm a mutating fan-out (upload/remove/mkdir/copy). */
@@ -915,6 +921,7 @@ export async function resolveTransferRequest(
 					targetInput: request.targetInput,
 					cdbFile: request.cdbFile,
 					cdbPassword: request.cdbPassword,
+					match: request.match,
 				},
 				env,
 				config,

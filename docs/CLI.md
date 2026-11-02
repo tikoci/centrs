@@ -64,6 +64,7 @@ Usage: centrs retrieve <target> <routeros-path> [flags] | centrs retrieve <targe
 | `--max-results` | `<bytes>` | Fail instead of printing output larger than the given byte budget. |
 | `--cdb-file` | `<path>` | Read target credentials from a WinBox CDB file. |
 | `--cdb-password` | `<password>` | Decrypt an encrypted WinBox CDB file. |
+| `--match` | &lt;user=name\|target=addr\|record-type&gt; | Pick one of several CDB records saved for `<router>` (as `devices show --match`); single target only. |
 | `--resolve` | &lt;none\|arp&gt; | Resolve a MAC-address target to an IP via the host ARP cache (default none). |
 | `--validate / --no-validate` |  | Enable or disable inspect-backed preflight validation. |
 | `--verbose` |  | Show resolved setting sources in text output, on stderr. |
@@ -97,6 +98,7 @@ Usage: centrs execute <target> <command> [flags] | centrs execute <target...> --
 | `--insecure` |  | Disable SSH host-key verification (`--via ssh`: accepts changed/impersonated keys, not just new) or accept a self-signed `api-ssl` TLS cert. Default verifies. |
 | `--cdb-file` | `<path>` | Read target credentials from a WinBox CDB file. |
 | `--cdb-password` | `<password>` | Decrypt an encrypted WinBox CDB file. |
+| `--match` | &lt;user=name\|target=addr\|record-type&gt; | Pick one of several CDB records saved for `<router>` (as `devices show --match`); single target only. |
 | `--resolve` | &lt;none\|arp&gt; | Resolve a MAC-address target to an IP via the host ARP cache (default none). |
 | `--timeout` | `<duration>` | Per-request timeout (for REST, max 60s). |
 | `--validate / --no-validate` |  | Run RouterOS :parse and /console/inspect validation before execution (default true; `--validate=false` also accepted). |
@@ -145,6 +147,7 @@ Usage: centrs api <router> <endpoint> [flags] | centrs api --host <host|url> <en
 | `--insecure` |  | Accept a self-signed `api-ssl`/REST TLS cert. Default verifies. |
 | `--cdb-file` | `<path>` | Read target credentials from a WinBox CDB file. |
 | `--cdb-password` | `<password>` | Decrypt an encrypted WinBox CDB file. |
+| `--match` | &lt;user=name\|target=addr\|record-type&gt; | Pick one of several CDB records saved for `<router>` (as `devices show --match`); single target only. |
 | `--resolve` | &lt;none\|arp&gt; | Resolve a MAC-address target to an IP via the host ARP cache (default none). |
 | `--timeout` | `<duration>` | Per-request timeout (for REST, max 60s). |
 | `--validate / --no-validate` |  | Run `/console/inspect` validation before the request (default true; `--validate=false` also accepted). |
@@ -189,6 +192,7 @@ Usage: centrs transfer <router>|--host <host> upload <local> [remote] | download
 | `--yaml` |  | Shortcut for --format yaml. |
 | `--cdb-file` | `<path>` | Read target credentials from a WinBox CDB file. |
 | `--cdb-password` | `<password>` | Decrypt an encrypted WinBox CDB file. |
+| `--match` | &lt;user=name\|target=addr\|record-type&gt; | Pick one of several CDB records saved for `<router>` (as `devices show --match`); single target only. |
 | `--validate / --no-validate` |  | Enable or disable the existence-probe preflight. |
 | `--verbose` |  | Show the resolved transport in text output, on stderr. |
 
@@ -212,6 +216,7 @@ Usage: centrs terminal <router> [flags] | centrs terminal --host <host> [flags]
 | `--insecure` |  | `--via ssh`: disable host-key verification (accepts changed/impersonated keys). Default verifies. |
 | `--cdb-file` | `<path>` | Read target credentials from a WinBox CDB file. |
 | `--cdb-password` | `<password>` | Decrypt an encrypted WinBox CDB file. |
+| `--match` | &lt;user=name\|target=addr\|record-type&gt; | Pick one of several CDB records saved for `<router>` (as `devices show --match`); single target only. |
 | `--resolve` | &lt;none\|arp&gt; | `--via ssh` only: turn a MAC target into an IP. CDB-first; `arp` opts into the host ARP cache (default none). The mac-telnet default ignores it. |
 | `--format` | &lt;text\|json\|yaml&gt; | Error-envelope format on failure. --json / --yaml shortcuts. |
 | `--json` |  | Shortcut for --format json. |
@@ -340,6 +345,7 @@ Usage: centrs btest <client <router>|server> [flags]
 | `--port` | `<port>` | Control port. Default 2000. |
 | `--cdb-file` | `<path>` | (client) Read target credentials from a WinBox CDB file. |
 | `--cdb-password` | `<password>` | (client) Decrypt an encrypted WinBox CDB file. |
+| `--match` | &lt;user=name\|target=addr\|record-type&gt; | Pick one of several CDB records saved for `<router>` (as `devices show --match`); single target only. |
 | `--format` | &lt;text\|csv\|json\|yaml&gt; | Output format. Default text. |
 | `--csv` |  | Shortcut for `--format csv`. |
 
