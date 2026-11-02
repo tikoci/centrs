@@ -22,6 +22,7 @@ import {
 	describeCentrs,
 	devicesOutputFormats,
 	editInteractiveOnlyError,
+	encryptCdb,
 	initCdb,
 	listDevices,
 	listGroups,
@@ -48,10 +49,15 @@ import {
 export const devicesCommand: CliCommandMetadata = {
 	name: "devices",
 	usage:
-		"centrs devices <init|list|show|groups|add|edit|set|remove> [args] [flags]",
+		"centrs devices <init|encrypt|list|show|groups|add|edit|set|remove> [args] [flags]",
 	summary:
 		"Inspect and mutate the CDB-backed device registry. `devices` is the only command that writes the CDB.",
 	options: [
+		{
+			flag: "--encrypt",
+			description:
+				"`init` only — require encrypted creation with a non-empty CDB password; refuse an existing open CDB.",
+		},
 		{
 			flag: "--cdb-file",
 			valueName: "<path>",
@@ -62,7 +68,7 @@ export const devicesCommand: CliCommandMetadata = {
 			flag: "--cdb-password",
 			valueName: "<secret>",
 			description:
-				"Decrypt an encrypted CDB. Falls back to `CENTRS_CDB_PASSWORD`. Also used to re-encrypt on writes.",
+				"Decrypt an encrypted CDB. Falls back to `CENTRS_CDB_PASSWORD`. Also used for `init --encrypt`, `encrypt`, and to re-encrypt on writes.",
 		},
 		{
 			flag: "--via",
@@ -200,6 +206,7 @@ export const devicesCommand: CliCommandMetadata = {
 
 type DevicesSubcommand =
 	| "init"
+	| "encrypt"
 	| "list"
 	| "show"
 	| "groups"
@@ -226,6 +233,7 @@ interface DevicesCliArgs {
 	subcommand?: DevicesSubcommand;
 	cdbFile?: string;
 	cdbPassword?: string;
+	encrypt?: boolean;
 	group?: string;
 	where?: string[];
 	via?: string;
@@ -267,6 +275,9 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 			case "--help":
 			case "-h":
 				parsed.help = true;
+				break;
+			case "--encrypt":
+				parsed.encrypt = true;
 				break;
 			case "--cdb-file":
 				parsed.cdbFile = expectValue(args, ++index, arg);
@@ -382,6 +393,7 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 
 	const subcommands: readonly DevicesSubcommand[] = [
 		"init",
+		"encrypt",
 		"list",
 		"show",
 		"groups",
@@ -393,17 +405,21 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 	const [rawSub, ...rest] = positional;
 	if (rawSub === undefined) {
 		throw new Error(
-			"`centrs devices` requires a subcommand: init, list, show, groups, add, edit, set, or remove.",
+			"`centrs devices` requires a subcommand: init, encrypt, list, show, groups, add, edit, set, or remove.",
 		);
 	}
 	// Resolve aliases (print/get/rm/delete) to the canonical verb before validating.
 	const sub = SUBCOMMAND_ALIASES[rawSub] ?? (rawSub as DevicesSubcommand);
 	if (!subcommands.includes(sub)) {
 		throw new Error(
-			`Unknown devices subcommand: ${rawSub}. Use init, list, show, groups, add, edit, set, or remove (aliases: print, get, rm, delete).`,
+			`Unknown devices subcommand: ${rawSub}. Use init, encrypt, list, show, groups, add, edit, set, or remove (aliases: print, get, rm, delete).`,
 		);
 	}
 	parsed.subcommand = sub;
+	if (parsed.encrypt && sub !== "init")
+		throw new Error(
+			"--encrypt is supported only by devices init; use devices encrypt for conversion.",
+		);
 
 	// Reject flags that don't apply to the resolved subcommand instead of
 	// silently ignoring the user's input: `--where`/`--near`/`--bbox` select
@@ -617,8 +633,10 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 		}
 
 		envSnapshot = Bun.env;
-		if (parsed.subcommand === "init") {
-			const envelope = await initCdb({
+		if (parsed.subcommand === "init" || parsed.subcommand === "encrypt") {
+			const operation = parsed.subcommand === "init" ? initCdb : encryptCdb;
+			const envelope = await operation({
+				encrypt: parsed.encrypt,
 				cdbFile: parsed.cdbFile,
 				cdbPassword: parsed.cdbPassword,
 				env: envSnapshot,

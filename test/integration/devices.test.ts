@@ -2023,3 +2023,75 @@ describe("centrs devices init (#376)", () => {
 		expect(envelope.warnings.map((w) => w.code)).toContain("cdb/file-exists");
 	});
 });
+
+describe("centrs devices encryption (#558)", () => {
+	test("examples 56-57 encrypted init and lab-to-production conversion", async () => {
+		const cdbFile = join(tempDir, `encryption-${randomUUID()}.cdb`);
+		const run = (...args: string[]) =>
+			runWithCapture(["devices", ...args, "--cdb-file", cdbFile, "--json"]);
+		const initialized = await run(
+			"init",
+			"--encrypt",
+			"--cdb-password",
+			"fixture-secret",
+		);
+		expect(initialized.exitCode).toBe(0);
+		expect(JSON.parse(initialized.stdout).data.created).toBe(true);
+		expect((await run("list")).exitCode).toBe(1);
+		expect(
+			(await run("list", "--cdb-password", "fixture-secret")).exitCode,
+		).toBe(0);
+		await rm(cdbFile);
+		expect((await run("init")).exitCode).toBe(0);
+		expect((await run("add", "192.0.2.1", "--user", "reader")).exitCode).toBe(
+			0,
+		);
+		const converted = await run("encrypt", "--cdb-password", "fixture-secret");
+		expect(converted.exitCode).toBe(0);
+		const result = JSON.parse(converted.stdout);
+		expect(result.data).toMatchObject({
+			encrypted: true,
+			changed: true,
+			recordCount: 1,
+		});
+		expect(result.warnings.map((w: { code: string }) => w.code)).toContain(
+			"cdb/plaintext-backups",
+		);
+		expect(await Bun.file(result.data.backupPath).exists()).toBe(true);
+		expect((await run("list")).exitCode).toBe(1);
+		const listed = await run("list", "--cdb-password", "fixture-secret");
+		expect(listed.exitCode).toBe(0);
+		expect(JSON.parse(listed.stdout).data[0].target).toBe("192.0.2.1");
+		expect((await run("encrypt", "--cdb-password", "wrong")).exitCode).toBe(1);
+		const again = await run("encrypt", "--cdb-password", "fixture-secret");
+		expect(JSON.parse(again.stdout).data.changed).toBe(false);
+	});
+	test("example 58 refuses invalid encryption requests without mutation", async () => {
+		const cdbFile = join(tempDir, `encryption-refused-${randomUUID()}.cdb`);
+		const run = (...args: string[]) =>
+			runWithCapture(["devices", ...args, "--cdb-file", cdbFile, "--json"]);
+		for (const args of [
+			["init", "--encrypt"],
+			["encrypt"],
+			["init", "--encrypt", "--cdb-password", ""],
+		]) {
+			expect((await run(...args)).exitCode).toBe(1);
+			expect(await Bun.file(cdbFile).exists()).toBe(false);
+		}
+		expect((await run("init")).exitCode).toBe(0);
+		const original = await readFile(cdbFile);
+		expect(
+			(await run("init", "--encrypt", "--cdb-password", "fixture-secret"))
+				.exitCode,
+		).toBe(1);
+		expect(
+			(await run("list", "--encrypt", "--cdb-password", "fixture-secret"))
+				.exitCode,
+		).toBe(1);
+		expect(
+			(await run("encrypt", "unexpected", "--cdb-password", "fixture-secret"))
+				.exitCode,
+		).toBe(1);
+		expect(await readFile(cdbFile)).toEqual(original);
+	});
+});

@@ -19,6 +19,7 @@ import {
 	decryptWinBoxCdb,
 	type EncryptedWinBoxCdbFile,
 	encodeOpenWinBoxCdb,
+	encryptWinBoxCdb,
 	parseWinBoxCdb,
 	type WinBoxCdbEntry,
 	type WinBoxCdbField,
@@ -112,6 +113,7 @@ export interface DevicesGroupSummary {
 
 export type DevicesCommand =
 	| "init"
+	| "encrypt"
 	| "list"
 	| "show"
 	| "groups"
@@ -165,7 +167,7 @@ export interface LoadedCdb {
 	entries: readonly WinBoxCdbEntry[];
 	settings: DevicesSettings;
 	warnings: readonly DevicesWarning[];
-	/** True when the source file on disk was encrypted (writes are blocked). */
+	/** True when the source file on disk was encrypted. */
 	encrypted: boolean;
 }
 
@@ -232,7 +234,7 @@ function isAlreadyExistsError(cause: unknown): boolean {
 }
 
 /**
- * Create an empty open CDB at `path` without clobbering an existing file.
+ * Create an empty CDB at `path` without clobbering an existing file.
  * The bytes are written to a private temp file first and then hard-linked
  * into place: `link` fails with EEXIST instead of replacing, and `path` never
  * exists half-written, so a concurrent creator that loses the race reads a
@@ -242,14 +244,20 @@ function isAlreadyExistsError(cause: unknown): boolean {
  * file. Mode `0o600` keeps the CDB (device credentials) unreadable by other
  * local users instead of falling back to the process umask default.
  */
-async function createEmptyCdbNoClobber(path: string): Promise<boolean> {
+async function createEmptyCdbNoClobber(
+	path: string,
+	password?: string,
+): Promise<boolean> {
 	await mkdir(dirname(path), { recursive: true });
 	const tempPath = `${path}.init.${randomUUID()}`;
 	const handle = await open(tempPath, "wx", 0o600);
 	try {
 		try {
 			await handle.chmod(0o600);
-			await handle.write(encodeOpenWinBoxCdb([]));
+			const bytes = encodeOpenWinBoxCdb([]);
+			await handle.write(
+				password === undefined ? bytes : encryptWinBoxCdb(bytes, password),
+			);
 			await handle.sync();
 		} finally {
 			await handle.close();
@@ -273,8 +281,14 @@ export interface DevicesInitData {
 	recordCount: number;
 }
 
+export interface InitCdbOptions extends LoadCdbOptions {
+	/** Require encryption; an existing open CDB is refused, never converted. */
+	encrypt?: boolean;
+}
+
 /**
- * `devices init` (#376): create an empty open CDB at the resolved path, the
+ * `devices init`: create an empty CDB (open by default, encrypted with
+ * `encrypt: true`) at the resolved path, the
  * explicit counterpart of the default path's first-run auto-create. Never
  * clobbers: like `git init`, re-running on an existing, readable CDB succeeds
  * with a `cdb/file-exists` warning and writes nothing, so a workspace bootstrap
@@ -282,12 +296,22 @@ export interface DevicesInitData {
  * (not a CDB, or encrypted without a password) fails with the load error.
  */
 export async function initCdb(
-	options: LoadCdbOptions,
+	options: InitCdbOptions,
 ): Promise<CentrsSuccessEnvelope<DevicesInitData, DevicesOperationMeta>> {
 	const settings = resolveDevicesSettings(options);
 	const cdbFile = settings.cdbFile.value;
+	if (options.encrypt) requireEncryptionPassword(settings);
 	const existingResult = async () => {
 		const existing = await loadCdb(options);
+		if (options.encrypt && !existing.encrypted) {
+			throw new CentrsError({
+				code: "input/invalid-command",
+				summary:
+					"An open CDB already exists; encrypted initialization wrote nothing.",
+				remediation:
+					"Use `centrs devices encrypt` to explicitly convert the existing CDB.",
+			});
+		}
 		return {
 			ok: true as const,
 			data: { cdbFile, created: false, recordCount: existing.entries.length },
@@ -310,7 +334,10 @@ export async function initCdb(
 	}
 	let created: boolean;
 	try {
-		created = await createEmptyCdbNoClobber(cdbFile);
+		created = await createEmptyCdbNoClobber(
+			cdbFile,
+			options.encrypt ? settings.cdbPassword.value : undefined,
+		);
 	} catch (cause) {
 		throw new CentrsError({
 			code: "cdb/create-failed",
@@ -330,6 +357,89 @@ export async function initCdb(
 		warnings: [],
 		tips: [],
 		meta: devicesMeta("init", settings),
+	};
+}
+
+function requireEncryptionPassword(settings: DevicesSettings): void {
+	if (
+		!settings.cdbPassword.provided ||
+		settings.cdbPassword.value.length === 0
+	) {
+		throw new CentrsError({
+			code: "cdb/password-required",
+			summary: "CDB encryption requires a non-empty password.",
+			remediation:
+				"Pass --cdb-password or set CENTRS_CDB_PASSWORD to a non-empty CDB password.",
+		});
+	}
+}
+
+export interface DevicesEncryptData {
+	cdbFile: string;
+	encrypted: true;
+	/** False when the CDB was already encrypted and the password verified. */
+	changed: boolean;
+	recordCount: number;
+	backupPath?: string;
+}
+
+/**
+ * Explicitly convert an existing open CDB with a fresh salt and atomic replacement.
+ * Retain all backups: converting the active file does not protect old plaintext.
+ * Close WinBox and other writers first; this is not a cross-process transaction (#581).
+ * Already-encrypted files are verified with the supplied password and left untouched.
+ */
+export async function encryptCdb(
+	options: LoadCdbOptions,
+): Promise<CentrsSuccessEnvelope<DevicesEncryptData, DevicesOperationMeta>> {
+	const settings = resolveDevicesSettings(options);
+	requireEncryptionPassword(settings);
+	const cdbFile = settings.cdbFile.value;
+	// Pin even the default path so conversion never implicitly creates a file.
+	const cdb = await loadCdb({ ...options, cdbFile });
+	let backupPath: string | undefined;
+	if (!cdb.encrypted) {
+		try {
+			const written = await writeWinBoxCdb(
+				cdbFile,
+				cdb.entries.map((entry) => entry.record),
+				{
+					encryptWith: { password: settings.cdbPassword.value },
+					backupRetention: -1,
+				},
+			);
+			backupPath = written.backupPath;
+		} catch (cause) {
+			throw new CentrsError({
+				code: "cdb/encrypt-failed",
+				summary: "Could not replace the CDB with encrypted bytes.",
+				remediation:
+					"Check directory permissions and available disk space; retain the original and any backups before retrying.",
+				cause,
+			});
+		}
+	}
+	return {
+		ok: true,
+		data: {
+			cdbFile,
+			encrypted: true,
+			changed: !cdb.encrypted,
+			recordCount: cdb.entries.length,
+			...(backupPath ? { backupPath } : {}),
+		},
+		warnings: [
+			...cdb.warnings.filter(
+				(warning) => warning.code !== "cdb/password-not-needed",
+			),
+			{
+				code: "cdb/plaintext-backups",
+				message:
+					"Backups may contain plaintext credentials. Encryption protects only the active CDB; no backups were deleted or encrypted.",
+			},
+		],
+		tips: [],
+		meta: devicesMeta("encrypt", settings),
 	};
 }
 

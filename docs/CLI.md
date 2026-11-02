@@ -258,13 +258,14 @@ Usage: centrs explain [<router>] '<input>' [flags]
 Inspect and mutate the CDB-backed device registry. `devices` is the only command that writes the CDB.
 
 ```text
-Usage: centrs devices <init|list|show|groups|add|edit|set|remove> [args] [flags]
+Usage: centrs devices <init|encrypt|list|show|groups|add|edit|set|remove> [args] [flags]
 ```
 
 | Flag | Value | Description |
 | ---- | ----- | ----------- |
+| `--encrypt` |  | `init` only — require encrypted creation with a non-empty CDB password; refuse an existing open CDB. |
 | `--cdb-file` | `<path>` | Override the resolved CDB path (default `~/.config/tikoci/winbox.cdb`). |
-| `--cdb-password` | `<secret>` | Decrypt an encrypted CDB. Falls back to `CENTRS_CDB_PASSWORD`. Also used to re-encrypt on writes. |
+| `--cdb-password` | `<secret>` | Decrypt an encrypted CDB. Falls back to `CENTRS_CDB_PASSWORD`. Also used for `init --encrypt`, `encrypt`, and to re-encrypt on writes. |
 | `--via` | `<protocol>` | Resolve and report the protocol source for provenance examples; no network IO is performed. |
 | `--group` | `<name>` | `list` filter / `add`,`edit` first-class group field for the target entry. |
 | `--where` | `<attr=value>` | `list` only — repeatable device-class filter over CDB facts (AND-combined), e.g. `--where lat=37.7749`. |

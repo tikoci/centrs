@@ -665,3 +665,37 @@ nothing was written. As with `git init`, re-running is safe. An existing file th
 does not load fails with that load error (`cdb/parse-failed`,
 `cdb/password-required`) and is left untouched. A location that cannot be
 written fails with `cdb/create-failed`.
+
+### 56. Initialize encrypted from the start
+
+```bash
+CENTRS_CDB_PASSWORD="$CDB_SECRET" centrs devices init --encrypt --cdb-file ./prod.cdb --json
+```
+
+Creates a complete encrypted empty CDB with mode `0600`; subsequent loads require
+that password. Re-running verifies the password and reports `created: false`.
+Test: `centrs devices encryption (#558)` in `test/integration/devices.test.ts`.
+
+### 57. Convert a lab CDB to encrypted
+
+```bash
+centrs devices init --cdb-file ./lab.cdb
+centrs devices add 192.0.2.1 --user reader --cdb-file ./lab.cdb
+CENTRS_CDB_PASSWORD="$CDB_SECRET" centrs devices encrypt --cdb-file ./lab.cdb --json
+CENTRS_CDB_PASSWORD="$CDB_SECRET" centrs devices list --cdb-file ./lab.cdb --json
+```
+
+Conversion reports `encrypted: true`, `changed: true`, `recordCount: 1`, and
+`backupPath`. Records survive a password-protected reload; loading without a
+password fails. All backups remain, including the plaintext pre-conversion file;
+`cdb/plaintext-backups` warns explicitly. Repeating with the same password returns
+`changed: false`; a wrong password fails without writing.
+Test: `centrs devices encryption (#558)` in `test/integration/devices.test.ts`.
+
+### 58. Encryption intent fails closed
+
+`init --encrypt` and `encrypt` refuse a missing or empty CDB password before
+creating anything. `init --encrypt` refuses an existing open CDB without changing
+it. `--encrypt` on other subcommands and positional targets on `encrypt` are
+invalid commands. Test: `centrs devices encryption (#558)` in
+`test/integration/devices.test.ts`.
