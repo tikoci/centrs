@@ -153,6 +153,25 @@ test("conversion preserves records and opaque fields, retains plaintext backups,
 	expect(JSON.stringify(result)).not.toContain("secret");
 });
 
+test("skipBackup converts without a new snapshot and keeps existing backups", async () => {
+	const cdbFile = await sandbox();
+	const original = encodeOpenWinBoxCdb([]);
+	await writeFile(cdbFile, original, { mode: 0o600 });
+	await writeFile(`${cdbFile}.bak.old`, original, { mode: 0o600 });
+	const result = await encryptCdb({
+		cdbFile,
+		cdbPassword: "secret",
+		skipBackup: true,
+	});
+	expect(result.data).toMatchObject({ encrypted: true, changed: true });
+	expect(result.data.backupPath).toBeUndefined();
+	expect((await readdir(join(cdbFile, ".."))).sort()).toEqual([
+		"devices.cdb",
+		"devices.cdb.bak.old",
+	]);
+	expect(decryptWinBoxCdb(await bytes(cdbFile), "secret")).toEqual(original);
+});
+
 test("conversion refuses missing and malformed files without creating or replacing them", async () => {
 	const cdbFile = await sandbox();
 	await expect(

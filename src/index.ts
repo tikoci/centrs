@@ -224,6 +224,7 @@ export {
 	type DevicesWhereClause,
 	defaultCdbPath,
 	devicesOutputFormats,
+	type EncryptCdbOptions,
 	editInteractiveOnlyError,
 	encryptCdb,
 	type InitCdbOptions,

@@ -2159,6 +2159,58 @@ describe("centrs devices encryption (#558)", () => {
 			(await run("encrypt", "unexpected", "--cdb-password", "fixture-secret"))
 				.exitCode,
 		).toBe(1);
+		// Record, selection, and provenance flags would be silently ignored by
+		// file-level subcommands, so they are refused instead.
+		for (const args of [
+			["encrypt", "--user", "reader", "--cdb-password", "fixture-secret"],
+			["encrypt", "--group", "lab", "--cdb-password", "fixture-secret"],
+			["init", "--password", "x"],
+			["init", "--via", "rest-api"],
+			["init", "--no-backup"],
+			["list", "--no-backup"],
+		]) {
+			const refused = await run(...args);
+			expect(refused.exitCode).toBe(1);
+			expect(JSON.parse(refused.stderr).error.code).toBe(
+				"input/invalid-command",
+			);
+		}
 		expect(await readFile(cdbFile)).toEqual(original);
+		expect(
+			(await readdir(dirname(cdbFile))).filter((name) =>
+				name.startsWith(`${basename(cdbFile)}.bak.`),
+			),
+		).toEqual([]);
+	});
+	test("example 59 --no-backup converts without a plaintext snapshot", async () => {
+		const cdbFile = join(tempDir, `encryption-no-backup-${randomUUID()}.cdb`);
+		const backups = async () =>
+			(await readdir(dirname(cdbFile))).filter((name) =>
+				name.startsWith(`${basename(cdbFile)}.bak.`),
+			);
+		const run = (...args: string[]) =>
+			runWithCapture(["devices", ...args, "--cdb-file", cdbFile, "--json"]);
+		expect((await run("init")).exitCode).toBe(0);
+		expect((await run("add", "192.0.2.1", "--user", "reader")).exitCode).toBe(
+			0,
+		);
+		const before = await backups();
+		expect(before).toHaveLength(1);
+		const converted = await run(
+			"encrypt",
+			"--no-backup",
+			"--cdb-password",
+			"fixture-secret",
+		);
+		expect(converted.exitCode).toBe(0);
+		const result = JSON.parse(converted.stdout);
+		expect(result.data).toMatchObject({ changed: true, recordCount: 1 });
+		expect(result.data.backupPath).toBeUndefined();
+		expect(result.warnings.map((w: { code: string }) => w.code)).toContain(
+			"cdb/plaintext-backups",
+		);
+		expect(await backups()).toEqual(before);
+		const listed = await run("list", "--cdb-password", "fixture-secret");
+		expect(JSON.parse(listed.stdout).data[0].target).toBe("192.0.2.1");
 	});
 });

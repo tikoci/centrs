@@ -701,5 +701,18 @@ Test: `centrs devices encryption (#558)` in `test/integration/devices.test.ts`.
 `init --encrypt` and `encrypt` refuse a missing or empty CDB password before
 creating anything. `init --encrypt` refuses an existing open CDB without changing
 it. `--encrypt` on other subcommands and positional targets on `encrypt` are
-invalid commands. Test: `centrs devices encryption (#558)` in
-`test/integration/devices.test.ts`.
+invalid commands. Record, selection, and provenance flags (`--user`, `--group`,
+`--password`, `--via`, …) on `init`/`encrypt`, and `--no-backup` on anything but
+`encrypt`, are `input/invalid-command` rather than silently ignored. Test:
+`centrs devices encryption (#558)` in `test/integration/devices.test.ts`.
+
+### 59. Convert without a plaintext snapshot
+
+```bash
+CENTRS_CDB_PASSWORD="$CDB_SECRET" centrs devices encrypt --no-backup --cdb-file ./lab.cdb --json
+```
+
+Conversion reports `changed: true` with no `backupPath`, and no new `.bak.*`
+file appears. Backups from earlier writes are retained, so
+`cdb/plaintext-backups` still warns. Test: `centrs devices encryption (#558)`
+in `test/integration/devices.test.ts`.

@@ -350,7 +350,7 @@ runs produce stable diffs.
 
 ```text
 centrs devices init [--encrypt]         # create an empty CDB at the resolved path
-centrs devices encrypt                  # explicitly encrypt an existing open CDB
+centrs devices encrypt [--no-backup]    # explicitly encrypt an existing open CDB
 centrs devices list [--group G] [--where attr=value]
                     [--near lat,lon,radius] [--bbox south,west,north,east]
                     [--format json|yaml|text]
@@ -479,6 +479,15 @@ The `cdb/plaintext-backups` warning accompanies conversion, including no-op runs
 only the active file is protected. Handle backups according to your own retention
 policy; centrs neither encrypts nor deletes them during conversion. Subsequent
 ordinary writes still use the normal five-backup retention below.
+`--no-backup` (library: `skipBackup: true`) skips the new plaintext snapshot, so
+no fresh plaintext copy is written; earlier backups are still retained and the
+warning still applies to them. Without the snapshot, a forgotten password cannot
+be recovered.
+
+`init` and `encrypt` act on the CDB file, not on records: they accept only
+`--cdb-file`, `--cdb-password`, `--format`/`--json`, plus `--encrypt` (`init`)
+or `--no-backup` (`encrypt`). Any other flag is `input/invalid-command`
+instead of being silently ignored.
 
 Close WinBox and other CDB writers before conversion. If they share this path,
 they must reopen it using the CDB password; a stale writer can overwrite the

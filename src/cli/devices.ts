@@ -59,6 +59,11 @@ export const devicesCommand: CliCommandMetadata = {
 				"`init` only — require encrypted creation with a non-empty CDB password; refuse an existing open CDB.",
 		},
 		{
+			flag: "--no-backup",
+			description:
+				"`encrypt` only — skip the plaintext pre-conversion snapshot. Without it, a forgotten password cannot be recovered.",
+		},
+		{
 			flag: "--cdb-file",
 			valueName: "<path>",
 			description:
@@ -234,6 +239,7 @@ interface DevicesCliArgs {
 	cdbFile?: string;
 	cdbPassword?: string;
 	encrypt?: boolean;
+	noBackup?: boolean;
 	group?: string;
 	where?: string[];
 	via?: string;
@@ -262,15 +268,33 @@ interface DevicesCliArgs {
 	bbox?: BboxPredicate;
 }
 
+/**
+ * Flags `init`/`encrypt` honor. They touch only the CDB file, never a record,
+ * so record, selection, and provenance flags would be silently ignored there.
+ */
+const CDB_FILE_FLAGS: Readonly<Record<"init" | "encrypt", readonly string[]>> =
+	{
+		init: ["--cdb-file", "--cdb-password", "--format", "--json", "--encrypt"],
+		encrypt: [
+			"--cdb-file",
+			"--cdb-password",
+			"--format",
+			"--json",
+			"--no-backup",
+		],
+	};
+
 function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 	const parsed: DevicesCliArgs = {};
 	const positional: string[] = [];
+	const suppliedFlags: string[] = [];
 
 	for (let index = 0; index < args.length; index += 1) {
 		const arg = args[index];
 		if (arg === undefined) {
 			continue;
 		}
+		if (arg.startsWith("-")) suppliedFlags.push(arg);
 		switch (arg) {
 			case "--help":
 			case "-h":
@@ -278,6 +302,9 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 				break;
 			case "--encrypt":
 				parsed.encrypt = true;
+				break;
+			case "--no-backup":
+				parsed.noBackup = true;
 				break;
 			case "--cdb-file":
 				parsed.cdbFile = expectValue(args, ++index, arg);
@@ -420,6 +447,8 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 		throw new Error(
 			"--encrypt is supported only by devices init; use devices encrypt for conversion.",
 		);
+	if (parsed.noBackup && sub !== "encrypt")
+		throw new Error("--no-backup is supported only by devices encrypt.");
 
 	// Reject flags that don't apply to the resolved subcommand instead of
 	// silently ignoring the user's input: `--where`/`--near`/`--bbox` select
@@ -461,6 +490,18 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 				"Store GPS with `centrs devices add`/`set` (e.g. `--gps <lat>,<lon>`); query it with `centrs devices list --where lat=…` / `--near`.",
 			context: { subcommand: sub, flag: geoFlag },
 		});
+	}
+	if (sub === "init" || sub === "encrypt") {
+		const allowed = CDB_FILE_FLAGS[sub];
+		const ignored = suppliedFlags.find((flag) => !allowed.includes(flag));
+		if (ignored !== undefined) {
+			throw new CentrsError({
+				code: "input/invalid-command",
+				summary: `\`${ignored}\` is not supported by \`centrs devices ${sub}\`.`,
+				remediation: `\`centrs devices ${sub}\` accepts only ${allowed.map((flag) => `\`${flag}\``).join(", ")}. Edit records with \`centrs devices add\`/\`set\`.`,
+				context: { subcommand: sub, flag: ignored },
+			});
+		}
 	}
 
 	if (sub === "show" || sub === "edit" || sub === "remove") {
@@ -642,7 +683,7 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 			const envelope =
 				parsed.subcommand === "init"
 					? await initCdb({ ...options, encrypt: parsed.encrypt })
-					: await encryptCdb(options);
+					: await encryptCdb({ ...options, skipBackup: parsed.noBackup });
 			console.log(renderDevicesEnvelope(envelope, parsed.format ?? "text"));
 			return 0;
 		}

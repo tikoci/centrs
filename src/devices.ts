@@ -386,12 +386,21 @@ function requireEncryptionPassword(settings: DevicesSettings): void {
 	}
 }
 
+export interface EncryptCdbOptions extends LoadCdbOptions {
+	/**
+	 * Skip the plaintext pre-conversion snapshot. Existing backups are still
+	 * retained untouched; without the snapshot a forgotten password is final.
+	 */
+	skipBackup?: boolean;
+}
+
 export interface DevicesEncryptData {
 	cdbFile: string;
 	encrypted: true;
 	/** False when the CDB was already encrypted and the password verified. */
 	changed: boolean;
 	recordCount: number;
+	/** Plaintext pre-conversion snapshot; absent when unchanged or `skipBackup`. */
 	backupPath?: string;
 }
 
@@ -400,9 +409,10 @@ export interface DevicesEncryptData {
  * Retain all backups: converting the active file does not protect old plaintext.
  * Close WinBox and other writers first; this is not a cross-process transaction (#581).
  * Already-encrypted files are verified with the supplied password and left untouched.
+ * `skipBackup` omits the new plaintext snapshot; it never deletes older backups.
  */
 export async function encryptCdb(
-	options: LoadCdbOptions,
+	options: EncryptCdbOptions,
 ): Promise<CentrsSuccessEnvelope<DevicesEncryptData, DevicesOperationMeta>> {
 	const settings = resolveDevicesSettings(options);
 	requireEncryptionPassword(settings);
@@ -418,6 +428,7 @@ export async function encryptCdb(
 				{
 					encryptWith: { password: settings.cdbPassword.value },
 					backupRetention: -1,
+					skipBackup: options.skipBackup === true,
 				},
 			);
 			backupPath = written.backupPath;
