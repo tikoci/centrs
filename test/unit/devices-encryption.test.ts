@@ -10,6 +10,7 @@ import {
 } from "../../src/data/winbox-cdb.ts";
 import { encryptCdb, initCdb, loadCdb } from "../../src/index.ts";
 
+const posixModes = process.platform !== "win32";
 const dirs: string[] = [];
 afterEach(async () => {
 	await Promise.all(
@@ -50,7 +51,9 @@ test("encrypted init requires explicit intent, non-empty password, and 0600; exi
 	});
 	expect(result.data).toMatchObject({ created: true, encrypted: true });
 	expect(result.warnings).toEqual([]);
-	expect((await stat(cdbFile)).mode & 0o777).toBe(0o600);
+	if (posixModes) {
+		expect((await stat(cdbFile)).mode & 0o777).toBe(0o600);
+	}
 	expect(parseWinBoxCdb(await bytes(cdbFile)).mode).toBe("encrypted");
 	await expect(loadCdb({ cdbFile })).rejects.toMatchObject({
 		code: "cdb/password-required",
@@ -131,7 +134,9 @@ test("conversion preserves records and opaque fields, retains plaintext backups,
 	).toHaveLength(7);
 	const encrypted = await bytes(cdbFile);
 	expect(decryptWinBoxCdb(encrypted, "secret")).toEqual(original);
-	expect((await stat(cdbFile)).mode & 0o777).toBe(0o600);
+	if (posixModes) {
+		expect((await stat(cdbFile)).mode & 0o777).toBe(0o600);
+	}
 	await expect(loadCdb({ cdbFile })).rejects.toMatchObject({
 		code: "cdb/password-required",
 	});
