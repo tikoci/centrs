@@ -24,6 +24,7 @@ import {
 } from "../../src/devices.ts";
 import { CentrsError } from "../../src/errors.ts";
 import { parseCommentKv } from "../../src/resolver/comment-kv.ts";
+import { runCliCaptured } from "./cli-capture.ts";
 
 // cspell:ignore neteng rawtail keepme
 
@@ -1115,6 +1116,114 @@ describe("devices init", () => {
 				`centrs devices init --cdb-file ${cdbFile}`,
 			);
 			expect(await Bun.file(cdbFile).exists()).toBe(false);
+		} finally {
+			await cleanup();
+		}
+	});
+});
+
+describe("devices set key= removes the token (#590)", () => {
+	test("core: value:null removes the token and preserves the rest byte-for-byte", async () => {
+		const { path, cleanup } = await tempCdb([
+			adminRecord("site=NYC via=ssh note=hello"),
+		]);
+		try {
+			const cdb = await reload(path);
+			const result = await setDevice({
+				cdb,
+				target: "192.0.2.5",
+				updates: [{ key: "via", value: null }],
+			});
+			expect(result.ok).toBe(true);
+
+			const after = await reload(path);
+			const entry = showDevice({ cdb: after, target: "192.0.2.5" }).data.entry;
+			// Absent, not present-with-empty-value: no token in the raw
+			// comment and no parsed value.
+			expect(entry.comment).toBe("site=NYC note=hello");
+			expect(parseCommentKv(entry.comment).values.via).toBeUndefined();
+			expect(entry.commentMirror).toBe(entry.comment);
+			// Credentials and first-class fields untouched.
+			expect(entry.user).toBe("admin");
+			expect(entry.password).toBe("old");
+			expect(entry.group).toBe("prod-edge");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("core: removing an already-absent token is a no-op success", async () => {
+		const { path, cleanup } = await tempCdb([adminRecord("site=NYC")]);
+		try {
+			const cdb = await reload(path);
+			const result = await setDevice({
+				cdb,
+				target: "192.0.2.5",
+				updates: [{ key: "via", value: null }],
+			});
+			expect(result.ok).toBe(true);
+
+			const after = await reload(path);
+			const entry = showDevice({ cdb: after, target: "192.0.2.5" }).data.entry;
+			expect(entry.comment).toBe("site=NYC");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test('cli: `devices set <t> via=` removes the token (not via="")', async () => {
+		const { path, cleanup } = await tempCdb([adminRecord("site=NYC via=ssh")]);
+		try {
+			const set = await runCliCaptured([
+				"devices",
+				"set",
+				"192.0.2.5",
+				"via=",
+				"--cdb-file",
+				path,
+			]);
+			expect(set.code).toBe(0);
+
+			const after = await reload(path);
+			const entry = showDevice({ cdb: after, target: "192.0.2.5" }).data.entry;
+			expect(entry.comment).toBe("site=NYC");
+			expect(parseCommentKv(entry.comment).values.via).toBeUndefined();
+			expect(entry.user).toBe("admin");
+			expect(entry.password).toBe("old");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("cli: already-absent removal is a no-op; password= stays reserved-key", async () => {
+		const { path, cleanup } = await tempCdb([adminRecord("site=NYC")]);
+		try {
+			const noop = await runCliCaptured([
+				"devices",
+				"set",
+				"192.0.2.5",
+				"via=",
+				"--cdb-file",
+				path,
+			]);
+			expect(noop.code).toBe(0);
+			const afterNoop = await reload(path);
+			expect(
+				showDevice({ cdb: afterNoop, target: "192.0.2.5" }).data.entry.comment,
+			).toBe("site=NYC");
+
+			// First-class credential fields never travel the kv-soup path:
+			// `password=` is refused, so token removal cannot clear a password.
+			const reserved = await runCliCaptured([
+				"devices",
+				"set",
+				"192.0.2.5",
+				"password=",
+				"--cdb-file",
+				path,
+			]);
+			expect(reserved.code).toBe(1);
+			expect(reserved.err).toContain("[cdb/reserved-key]");
 		} finally {
 			await cleanup();
 		}
