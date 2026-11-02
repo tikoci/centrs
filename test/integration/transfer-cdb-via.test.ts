@@ -1,5 +1,6 @@
 /**
- * #591 on real RouterOS: one CDB record with `via=ssh` drives both execute
+ * #591 on real RouterOS (commands/transfer/examples.md C1–C2): one CDB
+ * record with `via=ssh` drives both execute
  * (ssh) and transfer (sftp, the mapped method) with no `--via`, and an
  * explicit `--via sftp` lands on the same record. Exact-byte readback.
  *
