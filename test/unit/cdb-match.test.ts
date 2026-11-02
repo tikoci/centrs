@@ -106,7 +106,7 @@ describe("resolveCdb --match (#583)", () => {
 		expect(error.code).toBe("input/invalid-match");
 	});
 
-	test("--match never silently degrades to a literal host", async () => {
+	test("MA4. --match never silently degrades to a literal host", async () => {
 		// An unregistered address would otherwise proceed as a literal host.
 		const literal = await failure(() =>
 			resolveCdb({ targetInput: "192.0.2.99", cdbFile, match: "user=bob" }, {}),
@@ -130,7 +130,7 @@ describe("resolveCdb --match (#583)", () => {
 	});
 });
 
-test("a __default__-only fallback does not satisfy --match", async () => {
+test("MA4. a __default__-only fallback does not satisfy --match", async () => {
 	const defaultOnly = join(dir, "default-only.cdb");
 	await writeFile(
 		defaultOnly,
@@ -162,7 +162,7 @@ test("a __default__-only fallback does not satisfy --match", async () => {
 	expect(error.code).toBe("identity/no-match");
 });
 
-describe("--match is single-target CDB only (#583)", () => {
+describe("MA4. --match is single-target and never ignored (#583)", () => {
 	test("fan-out refuses --match", async () => {
 		expect(() => assertNoMatchInFanout(undefined)).not.toThrow();
 		expect(() => assertNoMatchInFanout("user=bob")).toThrow(
@@ -241,6 +241,39 @@ describe("CLI --match parsing (#583)", () => {
 		return (JSON.parse(errors[0] ?? "{}") as { error: Record<string, unknown> })
 			.error;
 	}
+
+	test("MA4. retrieve --match with a fan-out selector or --quickchr conflicts", async () => {
+		for (const args of [
+			["retrieve", "--group", "lab", "/system/resource"],
+			["retrieve", TARGET, "192.0.2.11", "/system/resource"],
+			["retrieve", "--quickchr", "vm1", "/system/resource"],
+		]) {
+			const error = await cliError([...args, "--match", "user=bob"]);
+			expect({ args, code: error["code"] }).toEqual({
+				args,
+				code: "usage/conflicting-flags",
+			});
+		}
+	});
+
+	test("MA4. api fan-out refuses --match before reading --input", async () => {
+		// The body is never read: an unreadable --input would otherwise fail
+		// first (and `--input -` would block on stdin).
+		const error = await cliError([
+			"api",
+			"--group",
+			"lab",
+			"system/resource",
+			"-X",
+			"POST",
+			"--input",
+			join(dir, "never-read.json"),
+			"--match",
+			"user=bob",
+		]);
+		expect(error["code"]).toBe("usage/conflicting-flags");
+		expect(error["context"]).toMatchObject({ flag: "--match" });
+	});
 
 	test("every target-resolving command accepts --match", async () => {
 		for (const args of [

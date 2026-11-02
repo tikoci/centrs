@@ -23,7 +23,10 @@ import {
 	formatCentrsErrorText,
 } from "../errors.ts";
 import { describeCentrs } from "../index.ts";
-import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
+import {
+	assertNoMatchInFanout,
+	assertNoQuickchrOverrideConflict,
+} from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
@@ -481,6 +484,11 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 				parsed,
 				selectionFlags.quickchr[0] ?? "",
 			);
+		}
+		// `--match` + fan-out is refused here too, before `--input -` can block
+		// on stdin; `apiFanout` keeps the same check for library callers (#583).
+		if (isFanoutMode(selectionFlags, targetPositionals.length)) {
+			assertNoMatchInFanout(parsed.match);
 		}
 
 		// Resolve `--input` (file / stdin) before handing the body to the orchestrator.

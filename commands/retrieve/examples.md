@@ -824,8 +824,9 @@ unfinished reads, cancellation and narrow retry classification.
 
 ## Record selection (`--match`, #583)
 
-Covered by `test/integration/cdb-match.test.ts` (MA1–MA3) on disposable CHR;
-MA4 is the offline contract in `test/unit/cdb-match.test.ts`. `$CDB` holds
+Covered by the named tests `MA1`–`MA3` in `test/integration/cdb-match.test.ts`
+on disposable CHR; MA4 is the offline contract in the `MA4.` tests of
+`test/unit/cdb-match.test.ts`, which drive `retrieve`/`api` through the CLI. `$CDB` holds
 two `ipAdmin` records for the same target `$R`: user `$U` with a deliberately
 wrong password, and a `read`-group user `reader` with its real password.
 The same selector works on `execute`, `api`, `transfer`, `terminal` and

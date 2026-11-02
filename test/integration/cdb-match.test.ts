@@ -1,10 +1,11 @@
 /**
- * #583 on real RouterOS (commands/retrieve/examples.md MA1–MA3): `--match` picks one of two CDB records saved for the
- * same address. One record carries a deliberately wrong password, so the
- * selected record is visible on the wire: `--match user=reader` reads, the
- * other record fails `auth/failed`, and no `--match` is `identity/ambiguous`.
+ * #583 on real RouterOS (commands/retrieve/examples.md MA1–MA3): `--match`
+ * picks one of two CDB records saved for the same address. One record carries
+ * a deliberately wrong password, so the selected record is visible on the
+ * wire: `--match user=reader` reads, the other record fails
+ * `transport/auth-failed`, and no `--match` is `identity/ambiguous`.
  */
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -48,84 +49,99 @@ async function run(args: string[]): Promise<Envelope> {
 }
 
 describeFast("--match selects a CDB record on CHR (#583)", () => {
-	test("retrieve/execute/api honor --match user= against two records", async () => {
-		const started = await startIntegrationChr();
+	let started: Awaited<ReturnType<typeof startIntegrationChr>> | undefined;
+	let dir = "";
+	let restUrl = "";
+	let adminUser = "";
+	let base: string[] = [];
+
+	beforeAll(async () => {
+		started = await startIntegrationChr();
 		const chr = started.chr;
-		const dir = await mkdtemp(join(tmpdir(), "centrs-match-chr-"));
-		try {
-			const auth = splitQuickChrAuth(
-				readEnv(started.env, "QUICKCHR_AUTH") ?? "admin:",
-			);
-			const readerPassword = "reader-583-pass";
-			await chr.exec(
-				`/user/add name=reader group=read password=${readerPassword}`,
-			);
-			const record = (user: string, password: string) =>
-				buildWinBoxCdbEntryRecord({
-					recordType: winBoxCdbRecordType.ipAdmin,
-					target: chr.restUrl,
-					user,
-					password,
-					group: "chr",
-					comment: "",
-					profile: "<own>",
-					savedPassword: true,
-				});
-			const cdbFile = join(dir, "two-users.cdb");
-			await writeFile(
-				cdbFile,
-				encodeOpenWinBoxCdb([
-					record(auth.username, `${auth.password}-wrong`),
-					record("reader", readerPassword),
-				]),
-			);
-			const base = ["--cdb-file", cdbFile, "--via", "rest-api"];
+		restUrl = chr.restUrl;
+		dir = await mkdtemp(join(tmpdir(), "centrs-match-chr-"));
+		const auth = splitQuickChrAuth(
+			readEnv(started.env, "QUICKCHR_AUTH") ?? "admin:",
+		);
+		adminUser = auth.username;
+		const readerPassword = "reader-583-pass";
+		await chr.exec(
+			`/user/add name=reader group=read password=${readerPassword}`,
+		);
+		const record = (user: string, password: string) =>
+			buildWinBoxCdbEntryRecord({
+				recordType: winBoxCdbRecordType.ipAdmin,
+				target: chr.restUrl,
+				user,
+				password,
+				group: "chr",
+				comment: "",
+				profile: "<own>",
+				savedPassword: true,
+			});
+		const cdbFile = join(dir, "two-users.cdb");
+		await writeFile(
+			cdbFile,
+			encodeOpenWinBoxCdb([
+				record(auth.username, `${auth.password}-wrong`),
+				record("reader", readerPassword),
+			]),
+		);
+		base = ["--cdb-file", cdbFile, "--via", "rest-api"];
+	}, 300_000);
 
-			const ambiguous = await run([
-				"retrieve",
-				chr.restUrl,
-				"/system/identity",
-				...base,
-			]);
-			expect(ambiguous.error?.code).toBe("identity/ambiguous");
+	afterAll(async () => {
+		if (dir) await rm(dir, { recursive: true, force: true });
+		await started?.chr.destroy();
+	});
 
-			for (const args of [
-				["retrieve", chr.restUrl, "/system/identity"],
-				["execute", chr.restUrl, "/system/identity/print"],
-				["api", chr.restUrl, "system/identity"],
-			]) {
-				const reader = await run([...args, ...base, "--match", "user=reader"]);
-				expect({ args, ok: reader.ok, code: reader.error?.code }).toEqual({
-					args,
-					ok: true,
-					code: undefined,
-				});
-				expect(reader.meta?.target?.recordIndex).toBe(1);
+	test("MA1. two records for one target are ambiguous", async () => {
+		const ambiguous = await run([
+			"retrieve",
+			restUrl,
+			"/system/identity",
+			...base,
+		]);
+		expect(ambiguous.error?.code).toBe("identity/ambiguous");
+	});
 
-				const wrong = await run([
-					...args,
-					...base,
-					"--match",
-					`user=${auth.username}`,
-				]);
-				expect({ args, code: wrong.error?.code }).toEqual({
-					args,
-					code: "transport/auth-failed",
-				});
-			}
+	test("MA2. --match user= picks the record and its credentials", async () => {
+		for (const args of [
+			["retrieve", restUrl, "/system/identity"],
+			["execute", restUrl, "/system/identity/print"],
+			["api", restUrl, "system/identity"],
+		]) {
+			const reader = await run([...args, ...base, "--match", "user=reader"]);
+			expect({ args, ok: reader.ok, code: reader.error?.code }).toEqual({
+				args,
+				ok: true,
+				code: undefined,
+			});
+			expect(reader.meta?.target?.recordIndex).toBe(1);
 
-			const none = await run([
-				"retrieve",
-				chr.restUrl,
-				"/system/identity",
+			// The decoy's wrong password goes on the wire: the selection is real.
+			const wrong = await run([
+				...args,
 				...base,
 				"--match",
-				"user=nobody",
+				`user=${adminUser}`,
 			]);
-			expect(none.error?.code).toBe("identity/no-match");
-		} finally {
-			await rm(dir, { recursive: true, force: true });
-			await chr.destroy();
+			expect({ args, code: wrong.error?.code }).toEqual({
+				args,
+				code: "transport/auth-failed",
+			});
 		}
-	}, 300_000);
+	});
+
+	test("MA3. a selector that matches nothing", async () => {
+		const none = await run([
+			"retrieve",
+			restUrl,
+			"/system/identity",
+			...base,
+			"--match",
+			"user=nobody",
+		]);
+		expect(none.error?.code).toBe("identity/no-match");
+	});
 });
