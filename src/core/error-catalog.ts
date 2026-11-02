@@ -187,7 +187,8 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "input/invalid-routeros-path",
-		summary: "The RouterOS path is malformed (it must be slash-prefixed).",
+		summary:
+			"The RouterOS path is malformed: not slash-prefixed, a segment that is not a menu name, or characters a REST URL would reinterpret.",
 	},
 	{
 		code: "input/invalid-target",

@@ -20,6 +20,7 @@ import {
 	isCommandNode,
 	pathTokens,
 } from "./core/inspect.ts";
+import { assertRouterOsMenuPath } from "./core/menu-path.ts";
 import {
 	compileQueryWords,
 	type ParsedQuery,
@@ -920,6 +921,9 @@ export function validateRetrieveRequestShape(
 			context: { path: request.path },
 		});
 	}
+	// Every transport, even under --validate=false: a malformed segment can
+	// cut the appended `/print` off a REST URL and dispatch a write (#586).
+	assertRouterOsMenuPath(request.path);
 
 	const query = resolveRetrieveQuery(request);
 	if (query && request.listAttributes) {

@@ -51,7 +51,14 @@ centrs api <router> <endpoint> [flags]
   segment (`ip/address/*1`) addresses one row for GET/PATCH/DELETE; PUT and
   POST reject it with `input/invalid-path`. A trailing `/listen` segment is
   the menu's `listen` command, which implies `--stream` + `--via native-api`
-  and requires GET (`ip/address/*1/listen` follows one row).
+  and requires GET (`ip/address/*1/listen` follows one row). After that
+  normalization every menu segment must be a RouterOS menu name (lowercase
+  letters, digits, hyphens), or the request fails with
+  `input/invalid-routeros-path` before any transport is chosen, whatever
+  `--validate` says. A `#` or `?` once cut `/print` off a projected GET's
+  REST URL and posted the bare command (`/system/reboot#` rebooted CHR 7.24.5,
+  #586); the grammar and retrieve's REST guard are described in
+  [retrieve → Validation](../retrieve/README.md#validation).
 
 The HTTP method (`-X`, default `GET`) is honored **literally** against RouterOS's
 REST mapping — `GET`→print/get, **`PUT`→add**, `PATCH`→set, `DELETE`→remove,

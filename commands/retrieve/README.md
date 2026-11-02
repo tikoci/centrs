@@ -96,6 +96,21 @@ error code, so its reason is `not reached: interrupted` (#537). With
 If `--all-attributes` is combined with `--attribute(s)`, fail with
 `usage/conflicting-flags` *before* hitting the network.
 
+A read only ever dispatches a `print`/`get`, on every transport and even with
+`--validate=false`: that flag skips command validation, not the read/write
+split (#586). Each path segment must be a RouterOS menu name — lowercase
+letters, digits and hyphens, the grammar of every dir and command in the
+7.9–7.26 tree — or the read fails with `input/invalid-routeros-path` before
+resolution. Before this check, a `#` or `?` cut the appended `/print` off the
+REST URL, so `retrieve '/system/reboot#' --no-validate --attribute uptime`
+posted `/rest/system/reboot` and rebooted CHR 7.24.5. A well-formed command
+path is safe: RouterOS answers `POST /rest/system/reboot/print` (and a `GET` of
+a command) with "no such command", and native API answers
+`/system/reboot/print` the same way (CHR 7.24.5). Under the REST adapter, a
+second guard refuses any request path containing `?`, `#`, `\`, a control
+character, or a `.`/`..` segment for every command; RouterOS does not decode
+percent-escapes in REST paths, so nothing else changes the target.
+
 SNMP validation is separate from RouterOS `/console/inspect`: OIDs and MIB
 names must resolve through the MIB cache before any SNMP request is sent.
 
