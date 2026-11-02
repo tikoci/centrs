@@ -14,6 +14,7 @@
  * protocol data.
  */
 
+import { assertRestRequestPath } from "../core/menu-path.ts";
 import { mapRouterOsError } from "../core/routeros-errors.ts";
 import { CentrsError } from "../errors.ts";
 import { formatEndpoint } from "./endpoint.ts";
@@ -1336,6 +1337,7 @@ function repliesToRecords(
 }
 
 function joinRestUrl(baseUrl: string, path: string): string {
+	assertRestRequestPath(path);
 	const normalizedPath = path.startsWith("/") ? path : `/${path}`;
 	return `${baseUrl}${normalizedPath}`;
 }

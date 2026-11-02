@@ -45,6 +45,7 @@ import {
 	isCommandNode,
 	pathTokens,
 } from "./core/inspect.ts";
+import { assertRouterOsMenuPath } from "./core/menu-path.ts";
 import {
 	compileQueryWords,
 	type ParsedQuery,
@@ -2176,6 +2177,10 @@ export function validateApiRequestShape(request: ApiRequest): void {
 				"Pass a path with at least one menu segment, such as `ip/address`.",
 		});
 	}
+	// Before transport choice and regardless of --validate: a `#`/`?` in the
+	// path cut `/print` off the REST URL and a GET read posted to the bare
+	// command, rebooting the router (#586).
+	assertRouterOsMenuPath(normalized.path, { endpoint: request.endpoint });
 }
 
 /**
