@@ -113,6 +113,12 @@ export interface BtestClientRequest {
 	natMode?: boolean;
 	cdbFile?: string;
 	cdbPassword?: string;
+	/**
+	 * `--match` selector for a `<router>` several CDB records share
+	 * (`user=<name>`, `target=<addr>`, or a record type): the same selector
+	 * `devices show --match` takes. Single-target only (#583).
+	 */
+	match?: string;
 	env?: Record<string, string | undefined>;
 	signal?: AbortSignal;
 	/** Live per-interval frame callback (text/csv streaming). */
@@ -264,6 +270,7 @@ export async function btestClient(
 				targetInput: request.targetInput,
 				cdbFile: request.cdbFile,
 				cdbPassword: request.cdbPassword,
+				match: request.match,
 			},
 			env,
 		);

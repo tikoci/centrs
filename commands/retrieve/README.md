@@ -541,7 +541,11 @@ stays the single-target envelope; a selector flag or a second positional target
 switches to fan-out. `--quickchr <name>` (the named-live-provider) behaves like a
 lone positional: one flag stays single-target, repeating it fans out, and mixing
 it with positionals or CDB selectors is `usage/conflicting-flags` (constitution:
-resolution providers). The `--host` **flag** with no `<router>` positional
+resolution providers). When several CDB records share one `<router>` (the
+same address saved under two users), `--match user=<name>` (or
+`target=<addr>`, or a record type) picks one, as on `devices show`; it is
+single-target only (see
+[devices → Ambiguity](../devices/README.md#ambiguity), #583). The `--host` **flag** with no `<router>` positional
 (`retrieve --host http://192.0.2.10:8080 /system/resource`) is a single target
 too: no CDB lookup, so auth comes from flags, env or config. `CENTRS_HOST` never
 stands in for `<router>`.

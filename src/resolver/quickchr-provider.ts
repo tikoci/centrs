@@ -347,10 +347,15 @@ export function assertNoQuickchrOverrideConflict(
 		username?: string;
 		password?: string;
 		sshKey?: string;
+		/** `--match` picks a CDB record; a quickchr target has none (#583). */
+		match?: string;
 	},
 	machine: string,
 ): void {
 	const conflicts: string[] = [];
+	if (request.match !== undefined) {
+		conflicts.push("--match");
+	}
 	if (request.host !== undefined) {
 		conflicts.push("--host");
 	}

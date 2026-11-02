@@ -122,6 +122,12 @@ export const executeCommand: CliCommandMetadata = {
 			description: "Decrypt an encrypted WinBox CDB file.",
 		},
 		{
+			flag: "--match",
+			valueName: "<user=name|target=addr|record-type>",
+			description:
+				"Pick one of several CDB records saved for <router> (as `devices show --match`); single target only.",
+		},
+		{
 			flag: "--resolve",
 			valueName: "<none|arp>",
 			description:
@@ -261,6 +267,9 @@ export function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
 				break;
 			case "--cdb-password":
 				parsed.cdbPassword = expectValue(args, ++index, arg);
+				break;
+			case "--match":
+				parsed.match = expectValue(args, ++index, arg);
 				break;
 			case "--resolve":
 				parsed.resolve = expectValue(args, ++index, arg);

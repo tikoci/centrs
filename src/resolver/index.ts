@@ -19,6 +19,7 @@
  */
 
 export {
+	assertNoMatchInFanout,
 	type CdbGroupExpansion,
 	type CdbGroupResolveInput,
 	type CdbGroupTarget,

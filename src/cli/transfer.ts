@@ -165,6 +165,12 @@ export const transferCommand: CliCommandMetadata = {
 			description: "Decrypt an encrypted WinBox CDB file.",
 		},
 		{
+			flag: "--match",
+			valueName: "<user=name|target=addr|record-type>",
+			description:
+				"Pick one of several CDB records saved for <router> (as `devices show --match`); single target only.",
+		},
+		{
 			flag: "--validate / --no-validate",
 			description: "Enable or disable the existence-probe preflight.",
 		},
@@ -413,6 +419,9 @@ export function parseTransferCliArgs(
 				break;
 			case "--cdb-password":
 				flags.cdbPassword = expectValue(args, ++index, arg);
+				break;
+			case "--match":
+				flags.match = expectValue(args, ++index, arg);
 				break;
 			case "--validate":
 				flags.validate = true;
