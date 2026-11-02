@@ -1,5 +1,6 @@
 /**
- * #586 on real RouterOS: a read surface never dispatches a non-read.
+ * #586 on real RouterOS (commands/retrieve/examples.md RP1–RP2): a read
+ * surface never dispatches a non-read.
  *
  * Before the fix, `retrieve '/system/reboot#' --no-validate --attribute uptime`
  * posted `/rest/system/reboot` and rebooted CHR 7.24.5, and `api` with a
