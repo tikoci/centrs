@@ -162,6 +162,103 @@ describe("devices password redaction — library (#551)", () => {
 		});
 	});
 
+	test("explain withholds a rawTail that may hold the password (#609 review)", async () => {
+		// An unknown tcode before tag 3: the decoder folds the rest of the record,
+		// password included, into one opaque tail, and `entry.password` is "".
+		const built = record("192.0.2.1", SECRET);
+		const passwordAt = built.fields.findIndex(
+			(f) => f.tag === winBoxCdbFieldTag.password,
+		);
+		const tailBytes = Uint8Array.from([
+			0x03,
+			0x00,
+			0x00,
+			0x21,
+			SECRET.length,
+			...new TextEncoder().encode(SECRET),
+		]);
+		const tailed: WinBoxCdbRecord = {
+			...built,
+			fields: [
+				...built.fields.slice(0, passwordAt),
+				{
+					tag: 200,
+					marker: 0x00,
+					tcode: 0x7f,
+					value: tailBytes,
+					rawTail: true,
+				},
+			],
+		};
+		const secretHex = Array.from(new TextEncoder().encode(SECRET))
+			.map((b) => b.toString(16).padStart(2, "0"))
+			.join(" ");
+		await withCdb([tailed], async (_path, cdb) => {
+			const hidden = showDevice({ cdb, target: "192.0.2.1", explain: true });
+			const tail = hidden.data.record?.fields.find((f) => f.rawTail);
+			expect(tail?.value).toBe(
+				`<redacted: ${tailBytes.length} bytes, may contain password>`,
+			);
+			const json = JSON.stringify(hidden);
+			expect(json).not.toContain(SECRET);
+			const text = renderDevicesEnvelope(hidden, "text");
+			expect(text).not.toContain(SECRET);
+			expect(text).not.toContain(secretHex);
+			expect(text).not.toContain(secretHex.slice(0, 11));
+			// The decoded password is empty, so passwordSet is false — and the
+			// load warning says the tail may hold one.
+			expect(hidden.data.entry.passwordSet).toBe(false);
+			const warning = hidden.warnings.find(
+				(w) => w.code === "cdb/unknown-field",
+			);
+			expect(warning?.context?.["mayContainPassword"]).toBe(true);
+
+			const shown = showDevice({
+				cdb,
+				target: "192.0.2.1",
+				explain: true,
+				showPassword: true,
+			});
+			expect(shown.data.record?.fields.find((f) => f.rawTail)?.value).toEqual(
+				tailBytes,
+			);
+		});
+	});
+
+	test("a rawTail after a decoded password keeps its bytes", async () => {
+		const tail = Uint8Array.from([0xca, 0xfe, 0xba, 0xbe]);
+		const trailing = buildWinBoxCdbEntryRecord({
+			recordType: winBoxCdbRecordType.ipAdmin,
+			target: "192.0.2.1",
+			user: "admin",
+			password: SECRET,
+			extraFields: [
+				{ tag: 200, marker: 0x00, tcode: 0x7f, value: tail, rawTail: true },
+			],
+		});
+		await withCdb([trailing], async (_path, cdb) => {
+			const hidden = showDevice({ cdb, target: "192.0.2.1", explain: true });
+			expect(hidden.data.record?.fields.find((f) => f.rawTail)?.value).toEqual(
+				tail,
+			);
+			expect(JSON.stringify(hidden)).not.toContain(SECRET);
+			const warning = hidden.warnings.find(
+				(w) => w.code === "cdb/unknown-field",
+			);
+			expect(warning?.context?.["mayContainPassword"]).toBeUndefined();
+		});
+	});
+
+	test("--show-password text renders an empty password as (not set)", async () => {
+		await withCdb([record("192.0.2.2", "")], async (_path, cdb) => {
+			const text = renderDevicesEnvelope(
+				showDevice({ cdb, target: "192.0.2.2", showPassword: true }),
+				"text",
+			);
+			expect(text).toContain("password:      (not set)");
+		});
+	});
+
 	test("text rendering never prints a withheld password", async () => {
 		await withCdb([record("192.0.2.1", SECRET)], async (_path, cdb) => {
 			const text = renderDevicesEnvelope(

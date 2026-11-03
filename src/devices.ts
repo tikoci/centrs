@@ -627,10 +627,19 @@ export async function loadCdb(options: LoadCdbOptions): Promise<LoadedCdb> {
 	for (const entry of entries) {
 		const tags = unknownTcodeTags(entry.record);
 		if (tags.length > 0) {
+			// `passwordSet` reports the password centrs decoded and would dial
+			// with. When the undecoded tail may hold one, say so here rather than
+			// let `passwordSet: false` read as certain.
+			const mayContainPassword =
+				passwordBearingRawTailIndex(entry.record) !== -1;
 			warnings.push({
 				code: "cdb/unknown-field",
-				message: `Entry ${entry.target || "(unnamed)"} contains ${tags.length} field(s) with unknown tcodes; preserved verbatim.`,
-				context: { target: entry.target, tags },
+				message: `Entry ${entry.target || "(unnamed)"} contains ${tags.length} field(s) with unknown tcodes; preserved verbatim.${mayContainPassword ? " The undecoded bytes may contain the record password, so passwordSet may under-report it." : ""}`,
+				context: {
+					target: entry.target,
+					tags,
+					...(mayContainPassword ? { mayContainPassword: true } : {}),
+				},
 			});
 		}
 	}
@@ -1048,17 +1057,46 @@ function projectShowItem(
  * entry redaction.
  */
 function redactRecordPassword(record: WinBoxCdbRecord): WinBoxCdbRecord {
-	if (!record.fields.some(isPasswordField)) {
+	const tailIndex = passwordBearingRawTailIndex(record);
+	if (tailIndex === -1 && !record.fields.some(isPasswordField)) {
 		return record;
 	}
 	return {
 		...record,
-		fields: record.fields.map((field) =>
-			isPasswordField(field)
+		fields: record.fields.map((field, index) => {
+			if (index === tailIndex) {
+				const length =
+					field.value instanceof Uint8Array ? field.value.length : 0;
+				return { ...field, value: redactedRawTailValue(length) };
+			}
+			return isPasswordField(field)
 				? { ...field, value: REDACTED_PASSWORD_VALUE }
-				: field,
-		),
+				: field;
+		}),
 	};
+}
+
+/**
+ * Index of a `rawTail` field whose bytes may hold the password, or -1. The
+ * decoder folds everything after an unknown tcode into one opaque tail, so
+ * when no decoded password field (tag 3) precedes the tail, the password — if
+ * the record has one — is somewhere inside those bytes (or the tail is tag 3
+ * itself).
+ */
+function passwordBearingRawTailIndex(record: WinBoxCdbRecord): number {
+	for (const [index, field] of record.fields.entries()) {
+		if (field.rawTail) {
+			return index;
+		}
+		if (field.tag === winBoxCdbFieldTag.password) {
+			return -1;
+		}
+	}
+	return -1;
+}
+
+function redactedRawTailValue(length: number): string {
+	return `<redacted: ${length} bytes, may contain password>`;
 }
 
 function isPasswordField(field: WinBoxCdbField): boolean {
@@ -2281,7 +2319,8 @@ function renderShowText(lines: string[], data: DevicesShowEnvelopeData): void {
 function passwordLine(entry: DevicesShowItem): string {
 	const shown = (entry as Partial<DevicesShowItemWithPassword>).password;
 	if (typeof shown === "string") {
-		return `password:      ${shown || "-"}`;
+		// An empty password reads `(not set)`, never `-`, which is a valid password.
+		return `password:      ${shown === "" ? "(not set)" : shown}`;
 	}
 	return `password:      ${entry.passwordSet ? "(set, hidden)" : "(not set)"}`;
 }
@@ -2289,6 +2328,10 @@ function passwordLine(entry: DevicesShowItem): string {
 function describeField(field: WinBoxCdbField): string {
 	const head = `tag=${field.tag} marker=0x${field.marker.toString(16).padStart(2, "0")} tcode=0x${field.tcode.toString(16).padStart(2, "0")}`;
 	if (field.rawTail) {
+		if (typeof field.value === "string") {
+			// Withheld by `redactRecordPassword`: the tail may hold the password.
+			return `${head} rawTail ${field.value}`;
+		}
 		const bytes = field.value instanceof Uint8Array ? field.value : null;
 		const preview = bytes
 			? Array.from(bytes.subarray(0, 16))

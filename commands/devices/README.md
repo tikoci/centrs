@@ -447,6 +447,12 @@ non-empty password is stored); text prints `password: (set, hidden)` or
 `(not set)`. `--show-password` returns the cleartext `password` on those three
 subcommands; every other subcommand refuses it with `input/invalid-command`.
 The `--explain` record's password field reads `<redacted>` without the flag.
+When an unknown-tcode `rawTail` comes before any decoded password field, the
+tail may hold the password, so without the flag its `value` reads
+`<redacted: N bytes, may contain password>` instead of the bytes. Such a
+record decodes to an empty password, so `passwordSet` is `false` (it reports
+the password centrs decoded and would dial with); the `cdb/unknown-field`
+warning then carries `context.mayContainPassword: true`.
 There is no encryption gate: the opt-in works the same on an open or encrypted
 CDB. `passwordSet` is not the WinBox `savedPassword` ("keep password") flag.
 

@@ -121,7 +121,8 @@ part of this section.
   (#551). Text and JSON carry `passwordSet: boolean` instead, and
   `--show-password` on those three subcommands opts back in; other subcommands
   refuse the flag. The `--explain` record's password field reads `<redacted>`
-  unless the flag is given. **Library consumers:** exported `showDevice`,
+  unless the flag is given, as does an unknown-tcode tail that may hold the
+  password. **Library consumers:** exported `showDevice`,
   `addDevice` and `setDevice` now redact too. `DevicesShowItem` has no
   `password` field; pass `showPassword: true` to get
   `DevicesShowItemWithPassword`. MCP output is unchanged (it already redacted)
