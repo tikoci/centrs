@@ -20,6 +20,7 @@ import {
 	parseWinBoxCdb,
 	type WinBoxCdbField,
 	type WinBoxCdbRecord,
+	winBoxCdbFieldTag,
 	winBoxCdbRecordType,
 } from "../../src/data/winbox-cdb.ts";
 import { runCliProcess } from "./cli-process.ts";
@@ -805,6 +806,7 @@ describe("centrs devices (read-only)", () => {
 			"192.0.2.5",
 			"--cdb-file",
 			cdbPath,
+			"--show-password",
 			"--json",
 		]);
 		const shown = JSON.parse(show.stdout) as {
@@ -2027,6 +2029,120 @@ describe("centrs devices init (#376)", () => {
 		};
 		expect(envelope.data).toMatchObject({ created: false, recordCount: 1 });
 		expect(envelope.warnings.map((w) => w.code)).toContain("cdb/file-exists");
+	});
+
+	test("example 60 show withholds the record password and reports passwordSet", async () => {
+		const json = await runWithCapture([
+			"devices",
+			"show",
+			"192.0.2.5",
+			"--cdb-file",
+			openCdbPath,
+			"--explain",
+			"--json",
+		]);
+		expect(json.exitCode).toBe(0);
+		expect(json.stdout).not.toContain('"secret"');
+		const envelope = JSON.parse(json.stdout) as {
+			data: {
+				entry: Record<string, unknown>;
+				record: { fields: Array<{ tag: number; value: unknown }> };
+			};
+		};
+		expect(envelope.data.entry["passwordSet"]).toBe(true);
+		expect("password" in envelope.data.entry).toBe(false);
+		expect(envelope.data.entry["savedPassword"]).toBe(true);
+		expect(
+			envelope.data.record.fields.find(
+				(f) => f.tag === winBoxCdbFieldTag.password,
+			)?.value,
+		).toBe("<redacted>");
+
+		const text = await runWithCapture([
+			"devices",
+			"show",
+			"192.0.2.5",
+			"--cdb-file",
+			openCdbPath,
+		]);
+		expect(text.exitCode).toBe(0);
+		expect(text.stdout).toContain("password:      (set, hidden)");
+		expect(text.stdout).not.toContain("secret");
+	});
+
+	test("example 61 --show-password returns the password on show, add and set", async () => {
+		const cdbPath = await copyCdbFixture("example-57-show-password");
+		const show = await runWithCapture([
+			"devices",
+			"show",
+			"192.0.2.5",
+			"--cdb-file",
+			cdbPath,
+			"--show-password",
+			"--json",
+		]);
+		expect(show.exitCode).toBe(0);
+		const shown = JSON.parse(show.stdout) as {
+			data: { entry: { password: string; passwordSet: boolean } };
+		};
+		expect(shown.data.entry.password).toBe("secret");
+		expect(shown.data.entry.passwordSet).toBe(true);
+
+		const add = await runWithCapture([
+			"devices",
+			"add",
+			"198.51.100.57",
+			"--user",
+			"writer",
+			"--password",
+			"pw57",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(add.exitCode).toBe(0);
+		expect(add.stdout).not.toContain("pw57");
+		const added = JSON.parse(add.stdout) as {
+			data: { entry: Record<string, unknown> };
+		};
+		expect(added.data.entry["passwordSet"]).toBe(true);
+
+		const set = await runWithCapture([
+			"devices",
+			"set",
+			"198.51.100.57",
+			"--group",
+			"lab",
+			"--cdb-file",
+			cdbPath,
+			"--show-password",
+			"--json",
+		]);
+		expect(set.exitCode).toBe(0);
+		const setEnvelope = JSON.parse(set.stdout) as {
+			data: { entry: { password: string } };
+		};
+		expect(setEnvelope.data.entry.password).toBe("pw57");
+	});
+
+	test("example 62 --show-password is refused outside show/add/set", async () => {
+		const result = await runWithCapture([
+			"devices",
+			"list",
+			"--cdb-file",
+			openCdbPath,
+			"--show-password",
+			"--json",
+		]);
+		expect(result.exitCode).toBe(1);
+		const envelope = JSON.parse(result.stderr) as {
+			error: { code: string; context: { flag: string; subcommand: string } };
+		};
+		expect(envelope.error.code).toBe("input/invalid-command");
+		expect(envelope.error.context).toEqual({
+			subcommand: "list",
+			flag: "--show-password",
+		});
 	});
 });
 

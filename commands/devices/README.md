@@ -366,6 +366,7 @@ centrs devices list [--group G] [--where attr=value]
                     [--near lat,lon,radius] [--bbox south,west,north,east]
                     [--format json|yaml|text]
 centrs devices show <target> [--explain] [--via <protocol>] [--match <type>]
+                    [--show-password]
 centrs devices groups [--members]
 centrs devices discover [--timeout 15s] [--group G]      # = discover --save (save implied)
 centrs devices add <target> [--user U] [--password P|--password-stdin] [--new-group G]
@@ -374,11 +375,13 @@ centrs devices add <target> [--user U] [--password P|--password-stdin] [--new-gr
                              [--record-type ipAdmin|ipUser|macTarget|...]
                              [--gps lat,lon[,altitude[,altitude-type]]]
                              [--lat D] [--lon D] [--altitude M] [--altitude-type MSL|AGL]
+                             [--show-password]
 centrs devices set  <selector…> [--user U] [--password P|--password-stdin] [--new-group G]
                              [--profile P|--profile-none|--profile-own]
                              [--session S] [k=v ...]
                              [--gps lat,lon[,altitude[,altitude-type]]]
                              [--lat D] [--lon D] [--altitude M] [--altitude-type MSL|AGL]
+                             [--show-password]
 centrs devices remove <selector…>
 centrs devices edit <target>            # future: clack/TUI wizard
 ```
@@ -468,6 +471,34 @@ is no `update`.
 
 There is no environment-variable channel for the record password:
 `CENTRS_PASSWORD` is the dial credential, not a CDB field.
+
+### Record password in output
+
+`show`, `add` and `set` withhold the stored record password by default, in text
+and JSON (#551). Each entry always carries `passwordSet: boolean` (true when a
+non-empty password is stored); text prints `password: (set, hidden)` or
+`(not set)`. `--show-password` returns the cleartext `password` on those three
+subcommands; every other subcommand refuses it with `input/invalid-command`.
+The `--explain` record's password field reads `<redacted>` without the flag.
+When an unknown-tcode `rawTail` comes before any decoded password field, the
+tail may hold the password, so without the flag its `value` reads
+`<redacted: N bytes, may contain password>` instead of the bytes. Such a
+record decodes to an empty password, so `passwordSet` is `false` (it reports
+the password centrs decoded and would dial with); the `cdb/unknown-field`
+warning then carries `context.mayContainPassword: true`.
+There is no encryption gate: the opt-in works the same on an open or encrypted
+CDB. `passwordSet` is not the WinBox `savedPassword` ("keep password") flag.
+
+The library matches the CLI: exported `showDevice` / `addDevice` / `setDevice`
+redact by default and take `showPassword?: boolean` (default `false`); with
+`showPassword: true` the entry type is `DevicesShowItemWithPassword`. MCP
+(`centrs_devices`) never passes it, so MCP output never carries the password.
+
+Dialing does not read this envelope. The resolver and the MCP allowlist gate
+read the raw record through an internal lookup (`lookupDeviceRecord`, not
+exported from the package root), so a CDB-credentialed dial still sends the
+stored password. The public entry type has no `password` field, so a caller
+that reached for the envelope instead fails to type-check.
 
 `--profile <name>` sets a named WinBox profile; `--profile-none` /
 `--profile-own` write the WinBox sentinels `<none>` / `<own>`. `profile` and

@@ -96,7 +96,9 @@ stores:
   comment carries `identity=edge1`. Every other comment token stays inert prose.
   See `commands/devices/README.md` (Identity model) for the full resolution rules.
 - **`user` / `password`** — the credentials centrs connects with. They stay in
-  the CDB and are redacted from MCP results/resources.
+  the CDB. `devices show` / `add` / `set` withhold the password and report
+  `passwordSet` (`--show-password` reveals it); MCP results/resources always
+  redact it.
 - **`group`, `profile`, `session`, port** — used as-is.
 
 So `centrs retrieve edge1 /ip/address` works with no flags: `edge1` is looked

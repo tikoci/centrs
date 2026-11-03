@@ -774,6 +774,44 @@ describe("resolver CDB end-to-end through retrieve", () => {
 			globalThis.fetch = originalFetch;
 		}
 	});
+
+	// #551: `devices show` withholds the password, so the dial path must read
+	// the raw record. Mutation-checked: routing resolveCdb back through the
+	// redacted `showDevice` envelope sends `admin:` and this goes red.
+	test("a CDB-credentialed dial sends the stored record password", async () => {
+		const cdbPath = await writeCdb("198.51.100.9", "");
+		const originalFetch = globalThis.fetch;
+		const authHeaders: (string | null)[] = [];
+		globalThis.fetch = (async (
+			input: string | URL | Request,
+			init?: RequestInit,
+		) => {
+			const headers = new Headers(
+				init?.headers ?? (input instanceof Request ? input.headers : {}),
+			);
+			authHeaders.push(headers.get("authorization"));
+			return new Response(JSON.stringify({ version: "7.22.1" }));
+		}) as typeof fetch;
+
+		try {
+			const envelope = await retrieve(
+				{
+					targetInput: "198.51.100.9",
+					path: "/system/resource",
+					via: "rest-api",
+					validate: false,
+					cdbFile: cdbPath,
+				},
+				EMPTY_ENV,
+			);
+
+			expect(envelope.ok).toBe(true);
+			expect(authHeaders.length).toBeGreaterThan(0);
+			expect(authHeaders.at(-1)).toBe(`Basic ${btoa("admin:secret")}`);
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
+	});
 });
 
 describe("resolver __default__ fallback", () => {

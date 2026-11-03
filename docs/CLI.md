@@ -278,11 +278,12 @@ Usage: centrs devices <init|encrypt|list|show|groups|add|edit|set|remove> [args]
 | `--near` | `<lat>`,`<lon>`,`<radius>` | `list` only — GPS filter: devices within radius (m/km/mi/ft; bare number = km). Lat-first. |
 | `--bbox` | `<south>`,`<west>`,`<north>`,`<east>` | `list` only — GPS filter: devices inside the lat-first bounding box. |
 | `--members` |  | `groups` only — expand each group's membership. |
-| `--explain` |  | `show` only — include the raw `WinBoxCdbRecord` in `data.record`. |
+| `--explain` |  | `show` only — include the raw `WinBoxCdbRecord` in `data.record` (its password field reads `<redacted>` unless `--show-password`). |
 | `--match` | &lt;user=…\|target=…\|record-type&gt; | `show` — disambiguate when `<router>` matches several records: `user=<name>`, `target=<addr>`, or a record-type token. |
 | `--user` | `<name>` | `add`,`set` — first-class CDB user field. |
 | `--password` | `<secret>` | `add`,`set` — first-class CDB password field. |
 | `--password-stdin` |  | `add`,`set` — read the record password from stdin (one trailing newline stripped) so it never rides argv. Conflicts with `--password`. |
+| `--show-password` |  | `show`,`add`,`set` — include the record password in cleartext. By default output carries `passwordSet` and withholds the password. |
 | `--profile` | `<name>` | `add`,`set` — named WinBox profile (Workspace). |
 | `--profile-none` |  | `add`,`set` — write the WinBox `<none>` profile sentinel. |
 | `--profile-own` |  | `add`,`set` — write the WinBox `<own>` profile sentinel. |

@@ -220,6 +220,7 @@ export {
 	type DevicesOutputFormat,
 	type DevicesShowEnvelopeData,
 	type DevicesShowItem,
+	type DevicesShowItemWithPassword,
 	type DevicesWarning,
 	type DevicesWhereClause,
 	defaultCdbPath,
