@@ -191,6 +191,14 @@ function parseSettingsCliArgs(args: readonly string[]): SettingsCliArgs {
 		result.value = rest[1];
 	}
 
+	// A blank <attr> is the caller's input, so reject it here; after parsing,
+	// an untyped throw is reported as internal/* (#587).
+	if (result.attr !== undefined && result.attr.trim() === "") {
+		throw new Error(
+			`\`centrs settings ${result.subcommand}\` requires a non-empty <attr>.`,
+		);
+	}
+
 	return result;
 }
 
@@ -249,12 +257,26 @@ export async function runSettingsCli(args: readonly string[]): Promise<number> {
 	} catch (error) {
 		const format = parsed?.format ?? inferSettingsFormat(args);
 		const settingsFile = defaultSettingsPath(envSnapshot ?? Bun.env);
-		const centrsError = asCentrsError(error, {
-			code: "input/invalid-command",
-			summary: error instanceof Error ? error.message : String(error),
-			remediation:
-				"Use `centrs settings --help` to inspect the supported subcommands and flags.",
-		});
+		const summary = error instanceof Error ? error.message : String(error);
+		// Only argument parsing reports the caller's input. Once the arguments
+		// parsed, an untyped throw (a core or renderer fault) is a centrs bug,
+		// not something `--help` can fix (#587).
+		const centrsError = asCentrsError(
+			error,
+			parsed === undefined
+				? {
+						code: "input/invalid-command",
+						summary,
+						remediation:
+							"Use `centrs settings --help` to inspect the supported subcommands and flags.",
+					}
+				: {
+						code: "internal/settings-failed",
+						summary,
+						remediation:
+							"This is a centrs bug; re-run with `--json` and report the command and the error.",
+					},
+		);
 		const envelope = buildSettingsErrorEnvelope(
 			parsed?.subcommand ?? "print",
 			settingsFile,

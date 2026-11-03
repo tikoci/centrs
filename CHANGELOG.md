@@ -241,6 +241,13 @@ part of this section.
 
 ### Fixed
 
+- `settings get <attr>` works in text mode (#587). It crashed reading
+  `typed.source` because the text renderer treated `get`'s single entry as
+  `print`'s key-to-entry map; `--json` was unaffected. It now prints one
+  `key: value [source: …]` line in `print`'s format, under the canonical attr
+  name, and the JSON envelope names that key in `meta.operation.attr`. A fault
+  after the arguments parse is now `internal/settings-failed` (exit 1), not
+  `input/invalid-command` with `--help` advice.
 - **`retrieve` and `api` can no longer send a non-read** (#586). A `#` or
   `?` in the path cut the appended `/print` off the REST URL, so
   `retrieve '/system/reboot#' --no-validate --attribute uptime` posted

@@ -156,6 +156,12 @@ centrs settings reset [<attr>]                 # clear one/all back to built-in 
   elsewhere (`src/cli/api.ts`'s `exitCode`), never a bare non-zero without an
   envelope. `settings` has no fan-out surface, so the constitution's `2`
   ("partial" fan-out result) never applies here.
+- **`get` output:** text mode renders the one entry exactly as `print`
+  renders that key — `key: value [source: kind (key)]` under the canonical
+  attr name, plus any `Tips:` footer (examples.md #33). `get`'s `data` is the
+  bare `{ source, value }` entry, so the JSON/YAML envelope names the key in
+  `meta.operation.attr` (canonical name, whichever spelling was asked for).
+  A blank `<attr>` is refused at parse time as `input/invalid-command`.
 - **Agent-facing:** every subcommand emits the standard envelope
   (`ok`/`data`/`meta`/`error`) regardless of TTY — `--format json` is
   honored on `settings` itself exactly like every other command, so an agent
