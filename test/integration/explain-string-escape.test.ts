@@ -84,7 +84,7 @@ async function execAccepts(
 
 describeFast("explain string escapes against CHR (#247)", () => {
 	test("valid escapes, uppercase hex, lowercase hex, truncated and unknown are grounded on highlight + :parse", async () => {
-		const started = await startIntegrationChr();
+		const started = await startIntegrationChr({}, { reuse: true });
 		try {
 			const resource = (await started.chr.rest("/system/resource")) as Record<
 				string,
@@ -219,7 +219,7 @@ describeFast("explain string escapes against CHR (#247)", () => {
 	// rows are the byte sweep's answers: the escapes RouterOS accepts that the
 	// manual never lists.
 	test("escapes outside the manual's table that RouterOS accepts (#252)", async () => {
-		const started = await startIntegrationChr();
+		const started = await startIntegrationChr({}, { reuse: true });
 		try {
 			const resource = (await started.chr.rest("/system/resource")) as Record<
 				string,

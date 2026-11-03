@@ -42,7 +42,7 @@ async function highlightClasses(
 
 describeFast("explain value facts against CHR", () => {
 	test("example 26 keeps shape hints separate from live type and context", async () => {
-		const started = await startIntegrationChr();
+		const started = await startIntegrationChr({}, { reuse: true });
 		try {
 			const scalar = outputOf(
 				await started.chr.exec(':put [:typeof 2.2]; :put [:typeof "2.2"]'),
@@ -235,7 +235,7 @@ describeFast("explain value facts against CHR", () => {
 	}, 300_000);
 
 	test("example 27 grounds comment placement and continuation arguments", async () => {
-		const started = await startIntegrationChr();
+		const started = await startIntegrationChr({}, { reuse: true });
 		try {
 			for (const input of [
 				":local z {#test}",
@@ -444,7 +444,7 @@ describeFast("explain value facts against CHR", () => {
 	 * exact byte a rejected brace fails at.
 	 */
 	test("example 28 grounds array members and where a brace array is legal", async () => {
-		const started = await startIntegrationChr();
+		const started = await startIntegrationChr({}, { reuse: true });
 		try {
 			/** The device's own member list: `k|kt|v|vt` per member. */
 			const members = async (literal: string): Promise<string[]> =>
@@ -830,7 +830,7 @@ describeFast("explain value facts against CHR", () => {
 	}, 300_000);
 
 	test("example 36 reads a brace in a `where` clause as an array value (#502)", async () => {
-		const started = await startIntegrationChr();
+		const started = await startIntegrationChr({}, { reuse: true });
 		const parseIl = async (source: string): Promise<string> =>
 			outputOf(
 				await started.chr.exec(
@@ -960,7 +960,7 @@ describeFast("explain value facts against CHR", () => {
 	}, 300_000);
 
 	test("example 37 reads a column-0 `#` line inside an array as a comment (#503)", async () => {
-		const started = await startIntegrationChr();
+		const started = await startIntegrationChr({}, { reuse: true });
 		const parseIl = async (source: string): Promise<string> =>
 			outputOf(
 				await started.chr.exec(

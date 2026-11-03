@@ -23,6 +23,12 @@ no section of its own.
   CDB encryption, global preferences, and the deferred interactive setup.
   Clarify that WinBox profile/session fields are preserved only, `devices edit`
   is reserved, and stable releases advance both npm dist-tags.
+- CHR integration tests can lease one default CHR per `bun test` process,
+  restored to a baseline QEMU snapshot before each lease, instead of booting
+  one per test (#612). Seven multi-boot files opt in with
+  `startIntegrationChr({}, { reuse: true })`. A failed restore triggers one
+  replacement boot, then fails closed. `CENTRS_CHR_REUSE=0` restores
+  private boots everywhere.
 
 ## 0.1.9 — 2026-11-03
 

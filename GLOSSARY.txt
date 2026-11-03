@@ -261,6 +261,9 @@ netdev
 netdevs
 NIC
 SLIRP
+loadvm # QEMU monitor: restore a live VM snapshot (guest RAM + disk); CHR reuse, #612
+savevm # QEMU monitor: save a live VM snapshot; quickchr chr.snapshot.save()
+qcow # QEMU copy-on-write disk format (qcow2); live snapshots need it
 vmnet
 # feth: macOS fake-ethernet interface; sysfs: Linux /sys pseudo-filesystem —
 # both read by resolveEgressMac's virtual-NIC MAC fallback (src/protocols/mac-telnet.ts).

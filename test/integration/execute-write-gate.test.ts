@@ -34,9 +34,12 @@ describeFast("output-file write gates against CHR", () => {
 	// this is evidence on one version, not a claimed introduction boundary.
 	for (const kind of ["export", "serialize"] as const) {
 		test(`${kind}: an argument prefix cannot bypass confirmation or mcp=ro (W5)`, async () => {
-			const started = await startIntegrationChr(
-				kind === "serialize" ? { version: serializeVersion } : {},
-			);
+			// The pinned serialize control boots privately; export leases the
+			// file's shared default CHR, restored to its baseline (#612).
+			const started =
+				kind === "serialize"
+					? await startIntegrationChr({ version: serializeVersion })
+					: await startIntegrationChr({}, { reuse: true });
 			const { chr } = started;
 			let cleanupCdb: (() => Promise<void>) | undefined;
 			try {
@@ -145,7 +148,7 @@ describeFast("output-file write gates against CHR", () => {
 
 describeFast("bare menu path reads against CHR (W6)", () => {
 	test("navigation needs no confirmation; bare no-arg writes still do (W6)", async () => {
-		const started = await startIntegrationChr({});
+		const started = await startIntegrationChr({}, { reuse: true });
 		const { chr } = started;
 		try {
 			const auth = splitQuickChrAuth(
