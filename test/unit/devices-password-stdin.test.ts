@@ -117,6 +117,26 @@ describe("devices --password-stdin argv rules", () => {
 		}
 	});
 
+	test("--password does not swallow --password-stdin as its value", async () => {
+		// `--password --password-stdin` must not store the literal flag text as
+		// the password; it is the same conflict as passing both flags.
+		for (const sub of ["add", "set"]) {
+			const result = await runCliCaptured([
+				"devices",
+				sub,
+				"192.0.2.5",
+				"--password",
+				"--password-stdin",
+				"--cdb-file",
+				"/nonexistent/devices.cdb",
+				"--json",
+			]);
+			expect(result.code).toBe(1);
+			const envelope = JSON.parse(result.err) as { error: { code: string } };
+			expect(envelope.error.code).toBe("usage/conflicting-flags");
+		}
+	});
+
 	test("subcommands other than add/set refuse --password-stdin", async () => {
 		const cases: string[][] = [
 			["init"],

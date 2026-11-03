@@ -443,11 +443,12 @@ is no `update`.
 
 `add` and `set` take the record password one of two ways:
 
-- `--password <secret>` — argv. `ps` exposes the value while the process runs;
-  shell history can retain the command after it exits.
+- `--password <secret>` — argv. Simple, but `ps` can show the value while the
+  process runs, and shell history can keep the command after it exits.
 - `--password-stdin` — read from stdin, so the value never appears in argv. For
   automation and harnesses that spawn centrs (`printf '%s' "$PW" | centrs
-  devices set <t> --password-stdin`, or `< pw.txt`).
+  devices set <t> --password-stdin`, or `centrs devices set <t>
+  --password-stdin < pw.txt`).
 
 `--password-stdin` rules:
 
