@@ -40,7 +40,8 @@ product; without them this would just be a worse `curl`.
 > Check current dist-tags with
 > `npm view @tikoci/centrs dist-tags --json`. The library, device registry, and
 > first MCP server phases are CHR-verified; the CLI is wired (`coded`);
-> encrypted-CDB writes are still blocked, and the TUI/proxy frontends are planned.
+> encrypted-CDB reads and writes are supported, and the TUI/proxy frontends
+> are planned.
 > `docs/MATRIX.md` is the single source of truth for what works today — treat
 > anything not green there as not-yet-shipped.
 
@@ -49,9 +50,10 @@ product; without them this would just be a worse `curl`.
 - **Frontends:** TypeScript API, CLI, MCP server (Phase 1 + first Phase 2 CDB
   mutation `CHR-passed` — see `commands/mcp/`), TUI and HTTP proxy/daemon
   (future).
-- **Protocols:** REST API (preferred), native API, and SNMP for reads;
-  SSH / MAC-Telnet / RoMON / WinBox Terminal for interactive and L2 execute;
-  MNDP for discovery. centrs picks the protocol for you (and lets you pin one
+- **Protocols:** REST API and native API for reads and writes; SSH / MAC-Telnet
+  for execution and interactive terminals; SFTP for file transfer; MNDP for
+  discovery; bandwidth test for peer measurement. SNMP, RoMON and WinBox
+  Terminal are planned. centrs picks the protocol for you (and lets you pin one
   with `via=` or `--via`).
 - **Commands:** every router-facing command resolves a *target* — a router you
   name on the CLI — to a real address, credentials, and a protocol, then runs.
@@ -60,12 +62,14 @@ product; without them this would just be a worse `curl`.
 
 | Command    | Purpose |
 | ---------- | ------- |
-| `retrieve` | Read RouterOS state over REST/native API and SNMP OID/MIB values. `--follow` keeps a menu's rows current over native API (snapshot, then a line per change; NDJSON); `--sample <interval>` re-reads it on a timer for counters; `--query` filters on the router with the `print where` grammar; `--wait` retries until a read succeeds (or an optional `--until` condition holds), up to a deadline. |
+| `retrieve` | Read RouterOS state over REST/native API. `--follow` keeps a menu's rows current over native API (snapshot, then a line per change; NDJSON); `--sample <interval>` re-reads it on a timer for counters; `--query` filters on the router with the `print where` grammar; `--wait` retries until a read succeeds (or an optional `--until` condition holds), up to a deadline. SNMP OID/MIB reads are planned. |
 | `execute`  | Run RouterOS CLI-shaped read/write commands (add/set/remove) over native API/REST/L2 surfaces. |
 | `api`      | Structured RouterOS API passthrough (gh-api style): one command per operation, structured in/out, can write, over REST or native API. Follow changes with `api … <menu>/listen`; `--stream` streams any command's replies (native API; NDJSON). |
 | `terminal` | Open an interactive console, primarily SSH or MAC-Telnet. |
+| `transfer` | Upload, download and manage device files over REST/native API or SFTP; `upload` and `download` are shortcuts. |
+| `btest`    | Run a MikroTik bandwidth-test client or server over TCP/UDP. |
 | `check`    | Probe reachability and management protocol availability. **Designed, not implemented** — see `docs/MATRIX.md`. |
-| `explain`  | Analyze a RouterOS command before running it: canonical form, syntax diagnostics, and what is valid at a path. Offline analysis runs today; the live-device probes are designed. |
+| `explain`  | Analyze RouterOS source offline, or add read-only device evidence over REST/native API, including path schemas, completion candidates and value types. Runtime acceptance remains unproven. |
 | `devices`  | View and maintain the CDB-backed device registry (the only writer). |
 | `discover` | Discover MNDP neighbors and optionally save them into the CDB. |
 | `settings` | Manage centrs's own settings (`centrs.env`, `__default__`) and run first-time setup. |
@@ -168,18 +172,24 @@ so you can always see *why* a given port or transport was chosen.
 
 `devices` is the only command that writes the CDB, and it does so safely
 (timestamped backup, atomic rename, unknown WinBox fields preserved verbatim).
-Encrypted-CDB **reads** work with `--cdb-password` / `CENTRS_CDB_PASSWORD`;
-encrypted **writes** are currently blocked pending a verified WinBox round-trip.
+Encrypted-CDB reads and writes work with `--cdb-password` /
+`CENTRS_CDB_PASSWORD`; writes decrypt, mutate and re-encrypt with a fresh salt.
+`devices init --encrypt` creates an encrypted registry, and `devices encrypt`
+explicitly converts an existing open CDB. Conversion retains existing backups
+and warns that plaintext copies remain. The manual WinBox round-trip is still
+pending; see the per-command contract for the current evidence and limits.
 The full contract — identity resolution, ambiguity handling, write strategy,
 and the comment grammar — lives in `commands/devices/README.md` and
 `docs/CONSTITUTION.md` (Identity and CDB).
 
 ## The result envelope, validation, and errors
 
-- **Validation is on by default** (`validate=true`). Reads are checked through
-  `/console/inspect`; CLI-shaped `execute` commands through `[:parse]`. Set
-  `validate=false` (per device or per call) only as a deliberate escape hatch.
-- **Every call returns one envelope:** `{ ok, data?, warnings?, error?, meta }`,
+- **Validation is on by default** (`validate=true`). CLI-shaped `execute` and
+  `api /execute` scripts pass the offline analyzer before device validation.
+  Reads are checked through `/console/inspect`; CLI-shaped commands through
+  `[:parse]`. Set `validate=false` (per device or per call) only as a deliberate
+  escape hatch.
+- **Every call returns one envelope:** `{ ok, data?, warnings, tips, error?, meta }`,
   with provenance and source-of-truth reporting in `meta`.
 - **Errors are typed values**, not thrown strings, with slash-namespaced codes
   (`routeros/…`, `transport/…`, `validation/…`, `cdb/…`) and a `details_url`
@@ -250,7 +260,9 @@ bun run explain:value-census  # value-surface census (#225)
 
 ## Done definition (short version)
 
-A feature is done when every line in `commands/<name>/examples.md` is green on
-real CHR via `bun run test:integration`. Code existing is not done. Unit tests
-passing is not done. Full rule:
-`.github/instructions/done-definition.instructions.md`.
+Live capabilities require every applicable example in `commands/<name>/examples.md`
+green on real CHR via `bun run test:integration`. Offline analysis requires its
+command README's full baseline acceptance criteria, including committed
+CHR-grounded semantic evidence. The fixture-backed `devices` and `settings`
+integration suites retain their command-specific contracts. Full rule:
+[`docs/CONSTITUTION.md` → Done definition](docs/CONSTITUTION.md#done-definition).

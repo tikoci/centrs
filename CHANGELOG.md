@@ -17,6 +17,10 @@ part of this section.
 
 ### Added
 
+- `explain` offers a non-applied repair tip for pasted console prompts
+  (#370, #567, #578), including `[user@host] /menu>` and HotLock `>>` forms.
+  The candidate preserves command separators and names the menu context;
+  multiline repairs render as fenced code. The original analysis stays intact.
 - `--match user=<name>|target=<addr>|<record-type>` on `retrieve`, `execute`,
   `api`, `transfer`, `terminal` and `btest client` picks one of several CDB
   records saved for the same `<router>` (#583), as `devices show --match`
