@@ -103,6 +103,16 @@ part of this section.
 
 ### Changed
 
+- **Breaking:** `devices show`, `add` and `set` no longer print the record password
+  (#551). Text and JSON carry `passwordSet: boolean` instead, and
+  `--show-password` on those three subcommands opts back in; other subcommands
+  refuse the flag. The `--explain` record's password field reads `<redacted>`
+  unless the flag is given. **Library consumers:** exported `showDevice`,
+  `addDevice` and `setDevice` now redact too. `DevicesShowItem` has no
+  `password` field; pass `showPassword: true` to get
+  `DevicesShowItemWithPassword`. MCP output is unchanged (it already redacted)
+  and now uses the same core redaction. Dialing with CDB credentials is
+  unaffected: the resolver and MCP allowlist read the raw record.
 - **Breaking:** permission and edge-auth failures get their own error codes
   (#541). Three codes change for `--json` and library readers:
   - A REST policy refusal (HTTP 500 `not enough permissions (9)` or `std

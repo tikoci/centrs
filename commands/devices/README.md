@@ -365,6 +365,7 @@ centrs devices list [--group G] [--where attr=value]
                     [--near lat,lon,radius] [--bbox south,west,north,east]
                     [--format json|yaml|text]
 centrs devices show <target> [--explain] [--via <protocol>] [--match <type>]
+                    [--show-password]
 centrs devices groups [--members]
 centrs devices discover [--timeout 15s] [--group G]      # = discover --save (save implied)
 centrs devices add <target> [--user U] [--password P] [--new-group G]
@@ -373,11 +374,13 @@ centrs devices add <target> [--user U] [--password P] [--new-group G]
                              [--record-type ipAdmin|ipUser|macTarget|...]
                              [--gps lat,lon[,altitude[,altitude-type]]]
                              [--lat D] [--lon D] [--altitude M] [--altitude-type MSL|AGL]
+                             [--show-password]
 centrs devices set  <selector…> [--user U] [--password P] [--new-group G]
                              [--profile P|--profile-none|--profile-own]
                              [--session S] [k=v ...]
                              [--gps lat,lon[,altitude[,altitude-type]]]
                              [--lat D] [--lon D] [--altitude M] [--altitude-type MSL|AGL]
+                             [--show-password]
 centrs devices remove <selector…>
 centrs devices edit <target>            # future: clack/TUI wizard
 ```
@@ -432,6 +435,28 @@ is no `update`.
   (`cdb/unknown-option`), or error under `--strict`.
 - `remove` (aliases `rm`, `delete`) removes a single entry. Group-wide deletes
   (`--group G`) require `--force` (writes are large).
+
+### Record password in output
+
+`show`, `add` and `set` withhold the stored record password by default, in text
+and JSON (#551). Each entry always carries `passwordSet: boolean` (true when a
+non-empty password is stored); text prints `password: (set, hidden)` or
+`(not set)`. `--show-password` returns the cleartext `password` on those three
+subcommands; every other subcommand refuses it with `input/invalid-command`.
+The `--explain` record's password field reads `<redacted>` without the flag.
+There is no encryption gate: the opt-in works the same on an open or encrypted
+CDB. `passwordSet` is not the WinBox `savedPassword` ("keep password") flag.
+
+The library matches the CLI: exported `showDevice` / `addDevice` / `setDevice`
+redact by default and take `showPassword?: boolean` (default `false`); with
+`showPassword: true` the entry type is `DevicesShowItemWithPassword`. MCP
+(`centrs_devices`) never passes it, so MCP output never carries the password.
+
+Dialing does not read this envelope. The resolver and the MCP allowlist gate
+read the raw record through an internal lookup (`lookupDeviceRecord`, not
+exported from the package root), so a CDB-credentialed dial still sends the
+stored password. The public entry type has no `password` field, so a caller
+that reached for the envelope instead fails to type-check.
 
 `--profile <name>` sets a named WinBox profile; `--profile-none` /
 `--profile-own` write the WinBox sentinels `<none>` / `<own>`. `profile` and

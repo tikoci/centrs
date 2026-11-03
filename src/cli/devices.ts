@@ -101,7 +101,7 @@ export const devicesCommand: CliCommandMetadata = {
 		{
 			flag: "--explain",
 			description:
-				"`show` only — include the raw `WinBoxCdbRecord` in `data.record`.",
+				"`show` only — include the raw `WinBoxCdbRecord` in `data.record` (its password field reads `<redacted>` unless `--show-password`).",
 		},
 		{
 			flag: "--match",
@@ -118,6 +118,11 @@ export const devicesCommand: CliCommandMetadata = {
 			flag: "--password",
 			valueName: "<secret>",
 			description: "`add`,`set` — first-class CDB password field.",
+		},
+		{
+			flag: "--show-password",
+			description:
+				"`show`,`add`,`set` — include the record password in cleartext. By default output carries `passwordSet` and withholds the password.",
 		},
 		{
 			flag: "--profile",
@@ -234,6 +239,7 @@ interface DevicesCliArgs {
 	match?: string;
 	user?: string;
 	password?: string;
+	showPassword?: boolean;
 	profile?: string;
 	profileNone?: boolean;
 	profileOwn?: boolean;
@@ -306,6 +312,9 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 				break;
 			case "--password":
 				parsed.password = expectValue(args, ++index, arg);
+				break;
+			case "--show-password":
+				parsed.showPassword = true;
 				break;
 			case "--profile":
 				parsed.profile = expectValue(args, ++index, arg);
@@ -444,6 +453,21 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 			remediation:
 				"Store GPS with `centrs devices add`/`set` (e.g. `--gps <lat>,<lon>`); query it with `centrs devices list --where lat=…` / `--near`.",
 			context: { subcommand: sub, flag: geoFlag },
+		});
+	}
+
+	if (
+		parsed.showPassword === true &&
+		sub !== "show" &&
+		sub !== "add" &&
+		sub !== "set"
+	) {
+		throw new CentrsError({
+			code: "input/invalid-command",
+			summary: `\`--show-password\` is not supported by \`centrs devices ${sub}\`.`,
+			remediation:
+				"`--show-password` reveals the record password in `centrs devices show`, `add` and `set` output. Run `centrs devices show <target> --show-password`.",
+			context: { subcommand: sub, flag: "--show-password" },
 		});
 	}
 
@@ -654,6 +678,7 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 					match: parsed.match,
 					via: parsed.via,
 					env: envSnapshot,
+					showPassword: parsed.showPassword,
 				});
 				break;
 			case "groups":
@@ -688,6 +713,7 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 					],
 					force: parsed.force,
 					strict: parsed.strict,
+					showPassword: parsed.showPassword,
 				});
 				break;
 			}
@@ -713,6 +739,7 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 					profile: resolveProfile(parsed),
 					session: parsed.session,
 					strict: parsed.strict,
+					showPassword: parsed.showPassword,
 				});
 				break;
 			case "remove":

@@ -4,7 +4,7 @@
  * This is the transport-agnostic seam every command (`retrieve`, and later
  * `execute` / `devices`) shares for turning a `<router>` argument into a
  * concrete target plus per-device option overrides. It reuses the devices CDB
- * primitives (`loadCdb` / `showDevice`) so decode/decrypt logic lives in one
+ * primitives (`loadCdb` / `lookupDeviceRecord`) so decode/decrypt logic lives in one
  * place, then layers the comment kv-soup contract on top.
  *
  * Comment-kv values arrive as RAW strings from {@link parseCommentKv}. This
@@ -32,8 +32,8 @@ import {
 	type DevicesWarning,
 	type LoadedCdb,
 	loadCdb,
+	lookupDeviceRecord,
 	resolveDevicesSettings,
-	showDevice,
 } from "../devices.ts";
 import { CentrsError } from "../errors.ts";
 import { plannedProtocols, type RouterOsProtocol } from "../protocols/index.ts";
@@ -256,17 +256,18 @@ export async function resolveCdb(
 	const defaults = findDefaultCreds(cdb);
 
 	try {
-		const envelope = showDevice({
+		// The raw record, not the `showDevice` envelope: that envelope withholds
+		// the password (#551), and dialing needs the stored credential.
+		const found = lookupDeviceRecord({
 			cdb,
 			target: input.targetInput,
 			match: input.match,
 		});
-		const entry = envelope.data.entry;
-		const warnings: ResolverWarning[] =
-			envelope.warnings.map(warningFromDevices);
+		const entry = found.entry;
+		const warnings: ResolverWarning[] = found.warnings.map(warningFromDevices);
 		const overrides = coerceCommentKv(
 			entry.comment,
-			entry.cdbRecordIndex,
+			found.cdbRecordIndex,
 			warnings,
 		);
 		return {
@@ -275,7 +276,7 @@ export async function resolveCdb(
 			mac: macFromComment(entry.comment, entry.target),
 			username: entry.user,
 			password: entry.password,
-			recordIndex: entry.cdbRecordIndex,
+			recordIndex: found.cdbRecordIndex,
 			overrides,
 			warnings,
 			...(defaults ? { defaults } : {}),

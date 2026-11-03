@@ -454,7 +454,11 @@ describe("devices mutation", () => {
 				updates: [{ key: "via", value: "ssh" }],
 			});
 			const after = await reload(path);
-			const entry = showDevice({ cdb: after, target: "192.0.2.9" }).data.entry;
+			const entry = showDevice({
+				cdb: after,
+				target: "192.0.2.9",
+				showPassword: true,
+			}).data.entry;
 			// A comment-kv-only set must not flip the saved-password flag or drop a
 			// stored password / known field (romon-agent).
 			expect(entry.savedPassword).toBe(false);
@@ -472,7 +476,11 @@ describe("devices mutation", () => {
 			const cdb = await reload(path);
 			await setDevice({ cdb, target: "192.0.2.9", password: "fresh-secret" });
 			const after = await reload(path);
-			const entry = showDevice({ cdb: after, target: "192.0.2.9" }).data.entry;
+			const entry = showDevice({
+				cdb: after,
+				target: "192.0.2.9",
+				showPassword: true,
+			}).data.entry;
 			expect(entry.savedPassword).toBe(true);
 			expect(entry.password).toBe("fresh-secret");
 		} finally {
@@ -1137,7 +1145,11 @@ describe("devices set key= removes the token (#590)", () => {
 			expect(result.ok).toBe(true);
 
 			const after = await reload(path);
-			const entry = showDevice({ cdb: after, target: "192.0.2.5" }).data.entry;
+			const entry = showDevice({
+				cdb: after,
+				target: "192.0.2.5",
+				showPassword: true,
+			}).data.entry;
 			// Absent, not present-with-empty-value: no token in the raw
 			// comment and no parsed value.
 			expect(entry.comment).toBe("site=NYC note=hello");
@@ -1185,7 +1197,11 @@ describe("devices set key= removes the token (#590)", () => {
 			expect(set.code).toBe(0);
 
 			const after = await reload(path);
-			const entry = showDevice({ cdb: after, target: "192.0.2.5" }).data.entry;
+			const entry = showDevice({
+				cdb: after,
+				target: "192.0.2.5",
+				showPassword: true,
+			}).data.entry;
 			expect(entry.comment).toBe("site=NYC");
 			expect(parseCommentKv(entry.comment).values.via).toBeUndefined();
 			expect(entry.user).toBe("admin");
