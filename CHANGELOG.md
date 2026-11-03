@@ -17,6 +17,10 @@ part of this section.
 
 ### Added
 
+- `explain` offers a non-applied repair tip for pasted console prompts
+  (#370, #567, #578), including `[user@host] /menu>` and HotLock `>>` forms.
+  The candidate preserves command separators and names the menu context;
+  multiline repairs render as fenced code. The original analysis stays intact.
 - `--match user=<name>|target=<addr>|<record-type>` on `retrieve`, `execute`,
   `api`, `transfer`, `terminal` and `btest client` picks one of several CDB
   records saved for the same `<router>` (#583), as `devices show --match`
@@ -100,6 +104,16 @@ part of this section.
   client, its controller.
 - `execute --cmr` accepts a command that opens with a relative menu change
   (`/system; identity/print`); its `:parse` return was read as incomplete.
+- CDB encryption lifecycle (#558). `devices init --encrypt` creates an
+  encrypted empty CDB; `devices encrypt` converts an existing open CDB in place
+  with a fresh salt, keeping its records, unknown fields, and file mode. Both
+  need a non-empty `--cdb-password` / `CENTRS_CDB_PASSWORD`; a password alone
+  still never converts. Conversion keeps every backup and writes a plaintext
+  snapshot unless `--no-backup` is passed. It warns with `cdb/plaintext-backups`.
+  An already-encrypted file is verified and left unchanged. Library:
+  `initCdb({ encrypt })`, `encryptCdb({ skipBackup })`. `init` results now
+  include `encrypted`. `init` and `encrypt` refuse flags they would otherwise
+  ignore (`--user`, `--group`, `--via`, …) with `input/invalid-command`.
 
 ### Changed
 

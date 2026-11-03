@@ -1,9 +1,10 @@
 # `cdb/password-required`
 
-The CDB is encrypted; a --cdb-password is required to read it.
+A CDB password is required for decryption or explicit encryption.
 
 ## Fix
 
-See [`docs/CONSTITUTION.md`](../../CONSTITUTION.md) for the centrs error
-contract. This stub will be expanded with the typical trigger and remediation
-for `cdb/password-required`.
+Pass `--cdb-password` or set `CENTRS_CDB_PASSWORD` to the CDB password.
+`devices init --encrypt` and `devices encrypt` require a non-empty password,
+even when the file is currently open. A password alone never implicitly
+converts an existing open CDB; use `devices encrypt` explicitly.
