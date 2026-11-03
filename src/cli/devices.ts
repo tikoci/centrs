@@ -131,6 +131,11 @@ export const devicesCommand: CliCommandMetadata = {
 			description: "`add`,`set` — first-class CDB password field.",
 		},
 		{
+			flag: "--password-stdin",
+			description:
+				"`add`,`set` — read the record password from stdin (one trailing newline stripped) so it never rides argv. Conflicts with `--password`.",
+		},
+		{
 			flag: "--show-password",
 			description:
 				"`show`,`add`,`set` — include the record password in cleartext. By default output carries `passwordSet` and withholds the password.",
@@ -253,6 +258,7 @@ interface DevicesCliArgs {
 	match?: string;
 	user?: string;
 	password?: string;
+	passwordStdin?: boolean;
 	showPassword?: boolean;
 	profile?: string;
 	profileNone?: boolean;
@@ -350,6 +356,15 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 				break;
 			case "--password":
 				parsed.password = expectValue(args, ++index, arg);
+				// `--password --password-stdin` would otherwise store the literal
+				// flag as the password and never read stdin. Treat it as both flags
+				// so the conflict check below refuses it.
+				if (parsed.password === "--password-stdin") {
+					parsed.passwordStdin = true;
+				}
+				break;
+			case "--password-stdin":
+				parsed.passwordStdin = true;
 				break;
 			case "--show-password":
 				parsed.showPassword = true;
@@ -513,6 +528,24 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 		}
 	}
 
+	if (parsed.passwordStdin && sub !== "add" && sub !== "set") {
+		throw new CentrsError({
+			code: "input/invalid-command",
+			summary: `\`--password-stdin\` is not supported by \`centrs devices ${sub}\`.`,
+			remediation:
+				"`--password-stdin` writes a record password with `centrs devices add`/`set` (e.g. `printf '%s' \"$PW\" | centrs devices set <target> --password-stdin`).",
+			context: { subcommand: sub, flag: "--password-stdin" },
+		});
+	}
+	if (parsed.passwordStdin && parsed.password !== undefined) {
+		throw new CentrsError({
+			code: "usage/conflicting-flags",
+			summary: "`--password` and `--password-stdin` cannot be used together.",
+			remediation:
+				"Pass the record password one way: `--password-stdin` with the value on stdin (keeps it out of argv and `ps`), or `--password <secret>`.",
+			context: { subcommand: sub, flags: ["--password", "--password-stdin"] },
+		});
+	}
 	if (
 		parsed.showPassword === true &&
 		sub !== "show" &&
@@ -687,6 +720,84 @@ function resolveProfile(parsed: DevicesCliArgs): string | undefined {
 	return parsed.profile;
 }
 
+/** Seams for {@link readPasswordStdin}; production reads the real fd 0. */
+export interface PasswordStdinSource {
+	/** Whether stdin is a terminal (defaults to `process.stdin.isTTY`). */
+	isTty?: boolean;
+	/** Read all of stdin as raw bytes (defaults to `Bun.stdin.bytes()`). */
+	read?: () => Promise<Uint8Array>;
+}
+
+// `fatal` rejects malformed UTF-8 instead of substituting U+FFFD; `ignoreBOM`
+// keeps a leading U+FEFF visible so it can be refused rather than dropped.
+const stdinPasswordDecoder = new TextDecoder("utf-8", {
+	fatal: true,
+	ignoreBOM: true,
+});
+
+/**
+ * Read a record password for `devices add`/`set --password-stdin` (#582).
+ *
+ * Exactly one trailing `\n` or `\r\n` is stripped (at the byte level) so
+ * `echo pw | …` works; any other whitespace is part of the password. The rest
+ * must be valid UTF-8 without a leading byte-order mark: the CDB stores record
+ * strings as UTF-8 and drops a leading BOM when it reads them back, so either
+ * would silently store a credential different from the bytes piped in. A TTY stdin is refused rather
+ * than prompted (interactive prompting is #160), and empty input is refused so
+ * clearing a stored password stays the deliberate `--password ""`. The value is
+ * never placed in an error summary, remediation, or context.
+ */
+export async function readPasswordStdin(
+	source: PasswordStdinSource = {},
+): Promise<string> {
+	const isTty = source.isTty ?? process.stdin.isTTY === true;
+	if (isTty) {
+		throw new CentrsError({
+			code: "usage/stdin-is-tty",
+			summary:
+				"`--password-stdin` reads the password from stdin, but stdin is a terminal.",
+			remediation:
+				"Pipe the password in (e.g. `printf '%s' \"$PW\" | centrs devices set <target> --password-stdin`) or redirect it from a file with `< pw.txt`. Interactive prompting is not supported.",
+			context: { flag: "--password-stdin" },
+		});
+	}
+	const raw = await (source.read ?? (() => Bun.stdin.bytes()))();
+	const end = raw.length;
+	const trimmed =
+		end >= 2 && raw[end - 2] === 0x0d && raw[end - 1] === 0x0a
+			? raw.subarray(0, end - 2)
+			: end >= 1 && raw[end - 1] === 0x0a
+				? raw.subarray(0, end - 1)
+				: raw;
+	if (trimmed.length === 0) {
+		throw new CentrsError({
+			code: "input/empty-stdin",
+			summary: "`--password-stdin` received an empty password on stdin.",
+			remediation:
+				'Pipe a non-empty password to stdin. To clear a stored password on purpose, use `centrs devices set <target> --password ""`.',
+			context: { flag: "--password-stdin" },
+		});
+	}
+	const invalid = (reason: string) =>
+		new CentrsError({
+			code: "input/invalid-stdin",
+			summary: `\`--password-stdin\` received ${reason}.`,
+			remediation:
+				"Pipe the password as UTF-8 text with no byte-order mark (e.g. `printf '%s' \"$PW\" | centrs devices set <target> --password-stdin`). Re-save a file written by an editor as UTF-8 without BOM.",
+			context: { flag: "--password-stdin", byteLength: trimmed.length },
+		});
+	let value: string;
+	try {
+		value = stdinPasswordDecoder.decode(trimmed);
+	} catch {
+		throw invalid("bytes that are not valid UTF-8");
+	}
+	if (value.startsWith("\uFEFF")) {
+		throw invalid("a leading byte-order mark (U+FEFF)");
+	}
+	return value;
+}
+
 export async function runDevicesCli(args: readonly string[]): Promise<number> {
 	let parsed: DevicesCliArgs | undefined;
 	let envSnapshot: Record<string, string | undefined> | undefined;
@@ -698,6 +809,12 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 		}
 
 		envSnapshot = Bun.env;
+		// Read stdin before touching the CDB so a TTY or empty pipe fails fast
+		// without loading (or decrypting) anything. Only add/set get here with
+		// the flag; the parser refuses it on every other subcommand.
+		const password = parsed.passwordStdin
+			? await readPasswordStdin()
+			: parsed.password;
 		if (parsed.subcommand === "init" || parsed.subcommand === "encrypt") {
 			const options = {
 				cdbFile: parsed.cdbFile,
@@ -763,7 +880,7 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 					target: parsed.target,
 					recordType,
 					user: parsed.user,
-					password: parsed.password,
+					password,
 					group: parsed.group,
 					profile: resolveProfile(parsed),
 					session: parsed.session,
@@ -795,7 +912,7 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 						...(parsed.kvArgs ?? []).map(parseKvArg),
 					],
 					user: parsed.user,
-					password: parsed.password,
+					password,
 					group: parsed.group,
 					profile: resolveProfile(parsed),
 					session: parsed.session,

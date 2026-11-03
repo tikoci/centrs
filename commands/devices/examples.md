@@ -761,3 +761,57 @@ centrs devices list --cdb-file $CDB --show-password --json
 
 `input/invalid-command` with `error.context: { subcommand: "list", flag:
 "--show-password" }`, the same refusal other subcommand-scoped flags use.
+
+## Record password on stdin
+
+`--password-stdin` (#582) reads the record password from fd 0 so it never rides
+argv. These run as subprocesses (`test/integration/cli-process.ts`), because
+only a child process can be handed real stdin bytes. The newline, empty and TTY
+rules are also unit-tested in `test/unit/devices-password-stdin.test.ts`.
+
+### 63. `add --password-stdin` stores the piped value
+
+```bash
+printf 'piped pw\n' | centrs devices add 192.0.2.77 --user robot --password-stdin --cdb-file $CDB --json
+```
+
+`ok: true`. The stored password is `piped pw`: one trailing newline is
+stripped, the inner space is kept.
+
+### 64. `set --password-stdin` strips a trailing CRLF
+
+```bash
+printf 'rotated\r\n' | centrs devices set 192.0.2.5 --password-stdin --cdb-file $CDB --json
+```
+
+`ok: true`. The stored password is `rotated`; group and comment are unchanged.
+
+### 65. Empty stdin is refused
+
+```bash
+printf '' | centrs devices set 192.0.2.5 --password-stdin --cdb-file $CDB --json
+```
+
+Errors with `input/empty-stdin` (also for a lone `\n`). The CDB is not written
+and no backup is made.
+
+### 66. `--password` with `--password-stdin` conflicts
+
+```bash
+echo stdin-secret | centrs devices set 192.0.2.5 --password argv-secret --password-stdin --cdb-file $CDB --json
+echo stdin-secret | centrs devices set 192.0.2.5 --password --password-stdin --cdb-file $CDB --json
+```
+
+Both error with `usage/conflicting-flags`. Neither value appears in the error;
+`--password` cannot consume `--password-stdin` as a literal credential.
+
+### 67. Non-UTF-8 or BOM-prefixed stdin is refused
+
+```bash
+printf 'pw\377\n' | centrs devices set 192.0.2.5 --password-stdin --cdb-file $CDB --json
+printf '\357\273\277pw\n' | centrs devices set 192.0.2.5 --password-stdin --cdb-file $CDB --json
+```
+
+Both error with `input/invalid-stdin`: the first is not valid UTF-8, the second
+starts with a byte-order mark. The bytes are not echoed, the CDB is not written
+and no backup is made.

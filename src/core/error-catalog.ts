@@ -155,6 +155,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 
 	// input/*
 	{
+		code: "input/empty-stdin",
+		summary:
+			"A flag that reads its value from stdin (e.g. `--password-stdin`) received nothing.",
+	},
+	{
 		code: "input/incomplete-gps",
 		summary: "lat/lon (or a --gps tuple) were not given as a complete pair.",
 	},
@@ -199,6 +204,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		code: "input/invalid-routeros-path",
 		summary:
 			"The RouterOS path is malformed: not slash-prefixed, a segment that is not a menu name, or characters a REST URL would reinterpret.",
+	},
+	{
+		code: "input/invalid-stdin",
+		summary:
+			"A flag that reads its value from stdin (e.g. `--password-stdin`) received bytes that are not valid UTF-8 text, or began with a byte-order mark.",
 	},
 	{
 		code: "input/invalid-target",
@@ -667,6 +677,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		code: "usage/stdin-ignored",
 		summary:
 			"stdin was redirected but the input came from the positional argument, so anything piped in was not analyzed.",
+	},
+	{
+		code: "usage/stdin-is-tty",
+		summary:
+			"A flag that reads its value from stdin (e.g. `--password-stdin`) was given while stdin is a terminal.",
 	},
 	{
 		code: "usage/fanout-not-supported",

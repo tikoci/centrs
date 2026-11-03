@@ -369,14 +369,14 @@ centrs devices show <target> [--explain] [--via <protocol>] [--match <type>]
                     [--show-password]
 centrs devices groups [--members]
 centrs devices discover [--timeout 15s] [--group G]      # = discover --save (save implied)
-centrs devices add <target> [--user U] [--password P] [--new-group G]
+centrs devices add <target> [--user U] [--password P|--password-stdin] [--new-group G]
                              [--profile P|--profile-none|--profile-own]
                              [--session S] [--comment "text k=v"]
                              [--record-type ipAdmin|ipUser|macTarget|...]
                              [--gps lat,lon[,altitude[,altitude-type]]]
                              [--lat D] [--lon D] [--altitude M] [--altitude-type MSL|AGL]
                              [--show-password]
-centrs devices set  <selector…> [--user U] [--password P] [--new-group G]
+centrs devices set  <selector…> [--user U] [--password P|--password-stdin] [--new-group G]
                              [--profile P|--profile-none|--profile-own]
                              [--session S] [k=v ...]
                              [--gps lat,lon[,altitude[,altitude-type]]]
@@ -438,6 +438,40 @@ is no `update`.
   (`cdb/unknown-option`), or error under `--strict`.
 - `remove` (aliases `rm`, `delete`) removes a single entry. Group-wide deletes
   (`--group G`) require `--force` (writes are large).
+
+### Record password channels
+
+`add` and `set` take the record password one of two ways:
+
+- `--password <secret>` — argv. Simple, but `ps` can show the value while the
+  process runs, and shell history can keep the command after it exits.
+- `--password-stdin` — read from stdin, so the value never appears in argv. For
+  automation and harnesses that spawn centrs (`printf '%s' "$PW" | centrs
+  devices set <t> --password-stdin`, or `centrs devices set <t>
+  --password-stdin < pw.txt`).
+
+`--password-stdin` rules:
+
+- Exactly one trailing newline (`\n` or `\r\n`) is stripped, so `echo pw |`
+  works. Any other whitespace is part of the password.
+- The rest must be valid UTF-8 with no leading byte-order mark; otherwise it
+  is `input/invalid-stdin`. The CDB stores record strings as UTF-8 and drops a
+  leading BOM on read, so either would store a different credential than the
+  bytes piped in.
+- Empty input (nothing, or only that one newline) is `input/empty-stdin`.
+  Clearing a stored password stays a deliberate `--password ""`, never an empty
+  pipe.
+- A terminal on stdin is refused with `usage/stdin-is-tty`; centrs does not
+  prompt.
+- `--password` together with `--password-stdin` is `usage/conflicting-flags`.
+  There is no precedence order between them.
+- Only `add` and `set` accept it; every other subcommand refuses it with
+  `input/invalid-command`.
+- The value is never echoed in errors. Success envelopes are the same as with
+  `--password`.
+
+There is no environment-variable channel for the record password:
+`CENTRS_PASSWORD` is the dial credential, not a CDB field.
 
 ### Record password in output
 

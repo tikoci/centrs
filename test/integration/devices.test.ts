@@ -14,13 +14,16 @@ import { basename, dirname, join } from "node:path";
 import { runCli } from "../../src/cli.ts";
 import {
 	buildWinBoxCdbEntryRecord,
+	decodeWinBoxCdbEntries,
 	encodeOpenWinBoxCdb,
 	encryptWinBoxCdb,
+	parseWinBoxCdb,
 	type WinBoxCdbField,
 	type WinBoxCdbRecord,
 	winBoxCdbFieldTag,
 	winBoxCdbRecordType,
 } from "../../src/data/winbox-cdb.ts";
+import { runCliProcess } from "./cli-process.ts";
 
 interface CapturedOutput {
 	logs: string[];
@@ -2328,5 +2331,175 @@ describe("centrs devices encryption (#558)", () => {
 		expect(await backups()).toEqual(before);
 		const listed = await run("list", "--cdb-password", "fixture-secret");
 		expect(JSON.parse(listed.stdout).data[0].target).toBe("192.0.2.1");
+	});
+});
+
+// `--password-stdin` (#582): the record password arrives on fd 0, never argv.
+// Subprocess tier on purpose — the in-process `runCli` capture cannot put real
+// bytes on stdin. The stored value is read back from the CDB bytes directly so
+// the assertion does not depend on how `devices show` renders a password.
+describe("centrs devices --password-stdin (#582)", () => {
+	async function storedEntry(cdbPath: string, target: string, user: string) {
+		const file = parseWinBoxCdb(await readFile(cdbPath));
+		if (file.mode !== "open") {
+			throw new Error("expected an open CDB fixture");
+		}
+		return decodeWinBoxCdbEntries(file).find(
+			(entry) => entry.target === target && entry.user === user,
+		);
+	}
+
+	test("example 63 add --password-stdin stores the piped value minus one trailing newline", async () => {
+		const cdbPath = await copyCdbFixture("example-63-add-password-stdin");
+		const result = await runCliProcess({
+			args: [
+				"devices",
+				"add",
+				"192.0.2.77",
+				"--user",
+				"robot",
+				"--password-stdin",
+				"--cdb-file",
+				cdbPath,
+				"--json",
+			],
+			stdin: "piped pw\n",
+		});
+		expect(result.exitCode).toBe(0);
+		expect(JSON.parse(result.stdoutText).ok).toBe(true);
+		const entry = await storedEntry(cdbPath, "192.0.2.77", "robot");
+		expect(entry?.password).toBe("piped pw");
+		expect(entry?.savedPassword).toBe(true);
+	});
+
+	test("example 64 set --password-stdin strips a trailing CRLF and leaves other fields", async () => {
+		const cdbPath = await copyCdbFixture("example-64-set-password-stdin");
+		const result = await runCliProcess({
+			args: [
+				"devices",
+				"set",
+				"192.0.2.5",
+				"--password-stdin",
+				"--cdb-file",
+				cdbPath,
+				"--json",
+			],
+			stdin: "rotated\r\n",
+		});
+		expect(result.exitCode).toBe(0);
+		const entry = await storedEntry(cdbPath, "192.0.2.5", "admin");
+		expect(entry?.password).toBe("rotated");
+		expect(entry?.group).toBe("prod-edge");
+		expect(entry?.comment).toBe("core router");
+	});
+
+	test("example 65 empty stdin is input/empty-stdin and writes nothing", async () => {
+		const cdbPath = await copyCdbFixture("example-65-empty-password-stdin");
+		const before = await readFile(cdbPath);
+		for (const stdin of ["", "\n"]) {
+			const result = await runCliProcess({
+				args: [
+					"devices",
+					"set",
+					"192.0.2.5",
+					"--password-stdin",
+					"--cdb-file",
+					cdbPath,
+					"--json",
+				],
+				stdin,
+			});
+			expect(result.exitCode).toBe(1);
+			const envelope = JSON.parse(result.stderrText) as {
+				error: { code: string };
+			};
+			expect(envelope.error.code).toBe("input/empty-stdin");
+		}
+		expect(await readFile(cdbPath)).toEqual(before);
+		expect(await listBackups(cdbPath)).toEqual([]);
+	});
+
+	test("example 67 non-UTF-8 or BOM-prefixed stdin is input/invalid-stdin and writes nothing", async () => {
+		const cdbPath = await copyCdbFixture("example-67-invalid-password-stdin");
+		const before = await readFile(cdbPath);
+		for (const stdin of [
+			Buffer.from([0x70, 0x77, 0xff, 0x0a]),
+			Buffer.from([0xef, 0xbb, 0xbf, 0x70, 0x77, 0x0a]),
+		]) {
+			const result = await runCliProcess({
+				args: [
+					"devices",
+					"set",
+					"192.0.2.5",
+					"--password-stdin",
+					"--cdb-file",
+					cdbPath,
+					"--json",
+				],
+				stdin,
+			});
+			expect(result.exitCode).toBe(1);
+			const envelope = JSON.parse(result.stderrText) as {
+				error: { code: string };
+			};
+			expect(envelope.error.code).toBe("input/invalid-stdin");
+		}
+		expect(await readFile(cdbPath)).toEqual(before);
+		expect(await listBackups(cdbPath)).toEqual([]);
+	});
+
+	test("example 66 --password cannot consume --password-stdin as its value", async () => {
+		const cdbPath = await copyCdbFixture("example-66-password-stdin-value");
+		const before = await readFile(cdbPath);
+		for (const sub of ["add", "set"]) {
+			const result = await runCliProcess({
+				args: [
+					"devices",
+					sub,
+					"192.0.2.5",
+					"--password",
+					"--password-stdin",
+					"--cdb-file",
+					cdbPath,
+					"--json",
+				],
+				stdin: "stdin-secret\n",
+			});
+			expect(result.exitCode).toBe(1);
+			expect(JSON.parse(result.stderrText).error.code).toBe(
+				"usage/conflicting-flags",
+			);
+			expect(result.stderrText).not.toContain("stdin-secret");
+			expect(result.stdoutText).not.toContain("stdin-secret");
+			expect(await readFile(cdbPath)).toEqual(before);
+			expect(await listBackups(cdbPath)).toEqual([]);
+		}
+	});
+
+	test("example 66 --password with --password-stdin is usage/conflicting-flags", async () => {
+		const cdbPath = await copyCdbFixture("example-66-password-conflict");
+		const before = await readFile(cdbPath);
+		const result = await runCliProcess({
+			args: [
+				"devices",
+				"set",
+				"192.0.2.5",
+				"--password",
+				"argv-secret",
+				"--password-stdin",
+				"--cdb-file",
+				cdbPath,
+				"--json",
+			],
+			stdin: "stdin-secret\n",
+		});
+		expect(result.exitCode).toBe(1);
+		const envelope = JSON.parse(result.stderrText) as {
+			error: { code: string };
+		};
+		expect(envelope.error.code).toBe("usage/conflicting-flags");
+		expect(result.stderrText).not.toContain("argv-secret");
+		expect(result.stderrText).not.toContain("stdin-secret");
+		expect(await readFile(cdbPath)).toEqual(before);
 	});
 });
