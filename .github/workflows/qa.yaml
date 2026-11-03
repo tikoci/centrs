@@ -182,7 +182,12 @@ jobs:
     # 35015436683 mid-suite with every assertion green. The version-keyed image
     # cache makes the cold download a once-per-release event; this absorbs it
     # when it does happen instead of losing the whole leg's signal (GH#352).
-    timeout-minutes: 35
+    # 50, not 35: each test file boots its own CHR (~25s), and by 2026-11-02 the
+    # warm-cache suite alone took ~34 minutes. Three new files pushed it past 35
+    # and all four legs of release run 41580906765 were cancelled on the last
+    # file with every assertion green. That left the accumulate job without any
+    # leg artifacts.
+    timeout-minutes: 50
     # The matrix axis is the recency-aware active set resolved by resolve-matrix
     # (released channels always + any pre-release at/ahead of stable). Only the
     # released channels are *must-pass*: a beta flake on a pre-release leg (e.g.
