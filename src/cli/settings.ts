@@ -191,6 +191,14 @@ function parseSettingsCliArgs(args: readonly string[]): SettingsCliArgs {
 		result.value = rest[1];
 	}
 
+	// A blank <attr> is the caller's input, so reject it here; after parsing,
+	// an untyped throw is reported as internal/* (#587).
+	if (result.attr !== undefined && result.attr.trim() === "") {
+		throw new Error(
+			`\`centrs settings ${result.subcommand}\` requires a non-empty <attr>.`,
+		);
+	}
+
 	return result;
 }
 

@@ -583,6 +583,8 @@ describe("centrs settings text output", () => {
 		expect(fromDefault.stdout.split("\n")[0]).toBe(
 			"ssh-key: (unset) [source: default (ssh-key)]",
 		);
+		expect(fromDefault.stdout).toContain("\nTips:\n");
+		expect(fromDefault.stdout).toContain("[tip/comment-kv-may-override]");
 
 		// Same line `print <attr>` renders for the same key.
 		const printed = await runSettings(

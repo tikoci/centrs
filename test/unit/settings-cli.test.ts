@@ -63,4 +63,18 @@ describe("settings CLI error classification (#587)", () => {
 		expect(result.stderr).toContain("[input/invalid-command]");
 		expect(result.stderr).toContain("centrs settings --help");
 	});
+
+	test.each([
+		[["get", ""]],
+		[["get", "  "]],
+		[["set", "", "7"]],
+		[["print", ""]],
+		[["reset", ""]],
+	])("a blank <attr> is the caller's input: %j", async (args) => {
+		const result = await runWithFailingStdout(args);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain("[input/invalid-command]");
+		expect(result.stderr).toContain("non-empty <attr>");
+		expect(result.stderr).not.toContain("internal/");
+	});
 });
