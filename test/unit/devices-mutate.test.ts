@@ -995,7 +995,12 @@ describe("devices init", () => {
 			const cdbFile = join(dir, "workspace", "nested", "winbox.cdb");
 			const result = await initCdb({ cdbFile, env: {} });
 			expect(result.ok).toBe(true);
-			expect(result.data).toEqual({ cdbFile, created: true, recordCount: 0 });
+			expect(result.data).toEqual({
+				cdbFile,
+				created: true,
+				encrypted: false,
+				recordCount: 0,
+			});
 			expect(result.meta.operation?.command).toBe("init");
 			if (posixModes) {
 				expect((await stat(cdbFile)).mode & 0o777).toBe(0o600);

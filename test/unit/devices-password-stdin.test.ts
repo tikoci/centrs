@@ -4,7 +4,7 @@ import { CentrsError } from "../../src/errors.ts";
 import { runCliCaptured } from "./cli-capture.ts";
 
 // `devices add`/`set --password-stdin` (#582). The real fd-0 read is exercised
-// by the subprocess tier (`test/integration/devices.test.ts`, examples 56-59);
+// by the subprocess tier (`test/integration/devices.test.ts`, examples 60-63);
 // this file covers the newline/empty/TTY rules through the read seam and the
 // argv refusals, which fire before stdin is touched.
 
@@ -91,6 +91,7 @@ describe("devices --password-stdin argv rules", () => {
 	test("subcommands other than add/set refuse --password-stdin", async () => {
 		const cases: string[][] = [
 			["init"],
+			["encrypt"],
 			["list"],
 			["show", "192.0.2.5"],
 			["groups"],

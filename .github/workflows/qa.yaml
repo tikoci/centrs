@@ -175,14 +175,15 @@ jobs:
     name: CHR • ${{ matrix.routeros_channel }}${{ inputs.routeros_version && format(' • {0}', inputs.routeros_version) || '' }}
     needs: resolve-matrix
     runs-on: ubuntu-latest
-    # 35, not 25: a leg whose image cache missed pays for one cold download from
-    # download.mikrotik.com first, and MikroTik serves runners at ~0.19-0.23 MB/s
-    # — 4 to 8 minutes for a 43 MB image, plus the 300s a first attempt can burn
-    # timing out inside it. That is what cancelled the `development` leg of run
-    # 35015436683 mid-suite with every assertion green. The version-keyed image
-    # cache makes the cold download a once-per-release event; this absorbs it
-    # when it does happen instead of losing the whole leg's signal (GH#352).
-    timeout-minutes: 35
+    # Budget = warm-cache suite + one cold image download. Each test file boots
+    # its own CHR (~25s, GH#612), so the warm suite alone was ~34 minutes by
+    # 2026-11-02; at 35 that cancelled every leg of release run 41580906765 on its
+    # last file with every assertion green. A leg whose image cache missed also
+    # pays for one cold download from download.mikrotik.com (~0.2 MB/s to
+    # runners: 4-8 minutes for a 43 MB image, plus up to 300s for a timed-out
+    # first attempt). The version-keyed image cache makes that a once-per-release
+    # event; the headroom absorbs it instead of losing the leg's signal (GH#352).
+    timeout-minutes: 50
     # The matrix axis is the recency-aware active set resolved by resolve-matrix
     # (released channels always + any pre-release at/ahead of stable). Only the
     # released channels are *must-pass*: a beta flake on a pre-release leg (e.g.

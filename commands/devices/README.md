@@ -360,7 +360,8 @@ runs produce stable diffs.
 ## Subcommands
 
 ```text
-centrs devices init                     # create an empty CDB at the resolved path
+centrs devices init [--encrypt]         # create an empty CDB at the resolved path
+centrs devices encrypt [--no-backup]    # explicitly encrypt an existing open CDB
 centrs devices list [--group G] [--where attr=value]
                     [--near lat,lon,radius] [--bbox south,west,north,east]
                     [--format json|yaml|text]
@@ -390,9 +391,11 @@ clack-style prompt used by `@tikoci/quickchr`); it is **not** a separate
 field-editing verb, and invoking it today returns `usage/not-implemented`. There
 is no `update`.
 
-- `init` creates an empty open CDB at the resolved path (`--cdb-file`,
+- `init` creates an empty CDB (open by default, encrypted with `--encrypt`)
+  at the resolved path (`--cdb-file`,
   `CENTRS_CDB_FILE`, or the default), with parent directories and mode `0600`.
-  It never overwrites: on an existing, readable CDB it succeeds with a
+  It never overwrites: on an existing, readable CDB matching the encryption
+  requirement it succeeds with a
   `cdb/file-exists` warning and writes nothing. An explicit path is created only
   by `init`; every other subcommand reports `cdb/not-found` for it (typo
   protection), and that error names `init`.
@@ -485,6 +488,52 @@ can edit it too. Precedence is per-field: args → env → device record →
 - On the CLI/API it can supply creds even for a target with no CDB record. On
   **MCP** it never widens the allowlist — an unregistered target is still
   rejected; `__default__` only fills missing creds for a registered device.
+
+## CDB encryption lifecycle (#558)
+
+Start encrypted with `devices init --encrypt`, or start open for a lab and run
+`devices encrypt` when moving to production. Both require a non-empty
+`--cdb-password` / `CENTRS_CDB_PASSWORD`. A password alone does not change the
+mode of initialization or ordinary writes. The library exports
+`initCdb({ encrypt: true, cdbPassword, cdbFile })` and
+`encryptCdb({ cdbPassword, cdbFile })`; both use the shared settings precedence.
+
+Encrypted initialization keeps atomic no-clobber creation and mode `0600`.
+Initialization returns `data.encrypted` for both newly created and existing
+files. Competing encrypted initializers with different passwords fail closed:
+the loser gets `cdb/decrypt-failed` when it cannot unlock the winner's file.
+An existing open CDB refuses `init --encrypt`; conversion must be explicit.
+An existing encrypted CDB is verified with the supplied password and left alone.
+Conversion requires an existing readable CDB, preserves its records and unknown
+fields, uses a fresh salt and atomic replacement, and keeps its file mode.
+`data` reports `cdbFile`, `encrypted: true`, `changed`, `recordCount`, and the
+new `backupPath` when conversion occurred. Default text output reports
+`encrypted` or `verified encrypted ... (unchanged)`, the record count, and
+the backup path when created, followed by the plaintext-backup warning.
+Already-encrypted conversion verifies
+the password and returns `changed: false` without rewriting or rotating it.
+
+**Backups remain sensitive.** Conversion retains every existing backup and
+creates a plaintext snapshot of the original; it does not run backup retention.
+The `cdb/plaintext-backups` warning accompanies conversion, including no-op runs:
+only the active file is protected. Handle backups according to your own retention
+policy; centrs neither encrypts nor deletes them during conversion. Subsequent
+ordinary writes still use the normal five-backup retention below.
+`--no-backup` (library: `skipBackup: true`) skips the new plaintext snapshot, so
+no fresh plaintext copy is written; earlier backups are still retained and the
+warning still applies to them. Without the snapshot, a forgotten password cannot
+be recovered.
+
+`init` and `encrypt` act on the CDB file, not on records: they accept only
+`--cdb-file`, `--cdb-password`, `--format`/`--json`, plus `--encrypt` (`init`)
+or `--no-backup` (`encrypt`). Any other flag is `input/invalid-command`
+instead of being silently ignored.
+
+Close WinBox and other CDB writers before conversion. If they share this path,
+they must reopen it using the CDB password; a stale writer can overwrite the
+conversion. Atomic replacement does not provide concurrent-writer transactions
+(#581). Password rotation and decryption are outside this slice. WinBox manual
+interoperability verification remains open (see Residual risks).
 
 ## CDB write strategy
 

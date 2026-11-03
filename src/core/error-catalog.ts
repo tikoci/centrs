@@ -54,6 +54,15 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 			"The encrypted CDB could not be decrypted (wrong or missing password).",
 	},
 	{
+		code: "cdb/encrypt-failed",
+		summary: "The CDB could not be rewritten with encryption.",
+	},
+	{
+		code: "cdb/plaintext-backups",
+		summary:
+			"CDB backups may still contain plaintext credentials after encryption.",
+	},
+	{
 		code: "cdb/empty-group",
 		summary:
 			"The named CDB group contains no records: a warning for a read, an error for a write-shaped fan-out.",
@@ -95,7 +104,8 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "cdb/password-required",
-		summary: "The CDB is encrypted; a --cdb-password is required to read it.",
+		summary:
+			"A CDB password is required for decryption or explicit encryption.",
 	},
 	{
 		code: "cdb/reserved-key",

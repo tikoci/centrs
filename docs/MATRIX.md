@@ -189,7 +189,9 @@ Wire, auth, TCP/UDP, and CI caveats live in `commands/btest/README.md` and the
 Live `explain` (#236) is `CHR-passed` on REST and native API: the #491
 foundation, #492's describe and completion facets, and #225's live value types,
 with every applicable example green on stable and long-term CHR. Issue #90
-owns the remaining sequencing, including #507 context grounding.
+owns the remaining sequencing, including #507's context surface. Its bounded
+submission matrix is grounded (#574); context selection and binding behavior
+remain follow-up work.
 
 **First: `explain`** (maintainer decision 2026-10-16 on
 [#90](https://github.com/tikoci/centrs/issues/90)). In order: make the
@@ -253,8 +255,8 @@ applicable examples pass on CHR via `bun run test:integration`.
 
 Open offline follow-ups remain explicit but do not reopen the verified baseline.
 Issue #211 made an unlisted absolute bare path abstain (rule F, R14); rule
-P's closed-world reading is still not adopted (#372). #272 owns
-non-authoritative `.scratch/` citation cleanup. Issues #350 (the broad
+P's closed-world reading is still not adopted (#372). The non-authoritative
+scratch citation cleanup is complete (#272, shipped in #568). Issues #350 (the broad
 optional `=`), #351 (a relative submenu brace read as a command operand)
 and #355 (`'` is not a RouterOS token) are complete. A submenu block after a navigation statement
 (`/ip⏎address { … }`) keeps the pre-#351 reading; see

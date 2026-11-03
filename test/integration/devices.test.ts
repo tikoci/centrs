@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import {
+	chmod,
 	copyFile,
 	mkdir,
 	readdir,
 	readFile,
 	rm,
+	stat,
 	writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
@@ -1995,6 +1997,7 @@ describe("centrs devices init (#376)", () => {
 		expect(JSON.parse(init.stdout).data).toEqual({
 			cdbFile: cdbPath,
 			created: true,
+			encrypted: false,
 			recordCount: 0,
 		});
 
@@ -2027,6 +2030,194 @@ describe("centrs devices init (#376)", () => {
 	});
 });
 
+describe("centrs devices encryption (#558)", () => {
+	test("examples 56-57 encrypted init and lab-to-production conversion", async () => {
+		const cdbFile = join(tempDir, `encryption-${randomUUID()}.cdb`);
+		const run = (...args: string[]) =>
+			runWithCapture(["devices", ...args, "--cdb-file", cdbFile, "--json"]);
+		const initialized = await run(
+			"init",
+			"--encrypt",
+			"--cdb-password",
+			"fixture-secret",
+		);
+		expect(initialized.exitCode).toBe(0);
+		expect(JSON.parse(initialized.stdout).data.created).toBe(true);
+		expect((await run("list")).exitCode).toBe(1);
+		expect(
+			(await run("list", "--cdb-password", "fixture-secret")).exitCode,
+		).toBe(0);
+		await rm(cdbFile);
+		expect((await run("init")).exitCode).toBe(0);
+		expect((await run("add", "192.0.2.1", "--user", "reader")).exitCode).toBe(
+			0,
+		);
+		const converted = await run("encrypt", "--cdb-password", "fixture-secret");
+		expect(converted.exitCode).toBe(0);
+		const result = JSON.parse(converted.stdout);
+		expect(result.data).toMatchObject({
+			encrypted: true,
+			changed: true,
+			recordCount: 1,
+		});
+		expect(result.warnings.map((w: { code: string }) => w.code)).toContain(
+			"cdb/plaintext-backups",
+		);
+		expect(await Bun.file(result.data.backupPath).exists()).toBe(true);
+		expect((await run("list")).exitCode).toBe(1);
+		const listed = await run("list", "--cdb-password", "fixture-secret");
+		expect(listed.exitCode).toBe(0);
+		expect(JSON.parse(listed.stdout).data[0].target).toBe("192.0.2.1");
+		expect((await run("encrypt", "--cdb-password", "wrong")).exitCode).toBe(1);
+		const again = await run("encrypt", "--cdb-password", "fixture-secret");
+		expect(JSON.parse(again.stdout).data.changed).toBe(false);
+	});
+	test("example 57 text reports conversion, backup, and verified unchanged", async () => {
+		const cdbFile = join(tempDir, `encryption-text-${randomUUID()}.cdb`);
+		await runWithCapture(["devices", "init", "--cdb-file", cdbFile]);
+		await runWithCapture([
+			"devices",
+			"add",
+			"192.0.2.1",
+			"--user",
+			"reader",
+			"--cdb-file",
+			cdbFile,
+		]);
+		const args = [
+			"devices",
+			"encrypt",
+			"--cdb-file",
+			cdbFile,
+			"--cdb-password",
+			"fixture-secret",
+		];
+		const converted = await runWithCapture(args);
+		expect(converted.exitCode).toBe(0);
+		expect(converted.stdout).toContain(`encrypted ${cdbFile}`);
+		expect(converted.stdout).toContain("records:       1");
+		const backupLine = converted.stdout
+			.split("\n")
+			.find((line) => line.startsWith("backup:        "));
+		expect(backupLine).toBeDefined();
+		expect(
+			await Bun.file(
+				backupLine?.slice("backup:        ".length) ?? "",
+			).exists(),
+		).toBe(true);
+		expect(converted.stdout).toContain("warning: [cdb/plaintext-backups]");
+		const verified = await runWithCapture(args);
+		expect(verified.exitCode).toBe(0);
+		expect(verified.stdout).toContain(
+			`verified encrypted ${cdbFile} (unchanged)`,
+		);
+		expect(verified.stdout).toContain("records:       1");
+		expect(verified.stdout).not.toContain("backup:        ");
+		expect(verified.stdout).toContain("warning: [cdb/plaintext-backups]");
+	});
+	test.skipIf(process.platform === "win32")(
+		"example 57 preserves a non-0600 POSIX mode on the CDB and backup",
+		async () => {
+			const cdbFile = join(tempDir, `encryption-mode-${randomUUID()}.cdb`);
+			await runWithCapture(["devices", "init", "--cdb-file", cdbFile]);
+			await chmod(cdbFile, 0o640);
+			const converted = await runWithCapture([
+				"devices",
+				"encrypt",
+				"--cdb-file",
+				cdbFile,
+				"--cdb-password",
+				"fixture-secret",
+				"--json",
+			]);
+			expect(converted.exitCode).toBe(0);
+			const data = JSON.parse(converted.stdout).data;
+			expect((await stat(cdbFile)).mode & 0o777).toBe(0o640);
+			expect((await stat(data.backupPath)).mode & 0o777).toBe(0o640);
+		},
+	);
+	test("example 58 refuses invalid encryption requests without mutation", async () => {
+		const cdbFile = join(tempDir, `encryption-refused-${randomUUID()}.cdb`);
+		const run = (...args: string[]) =>
+			runWithCapture(["devices", ...args, "--cdb-file", cdbFile, "--json"]);
+		for (const args of [
+			["init", "--encrypt"],
+			["encrypt"],
+			["init", "--encrypt", "--cdb-password", ""],
+		]) {
+			expect((await run(...args)).exitCode).toBe(1);
+			expect(await Bun.file(cdbFile).exists()).toBe(false);
+		}
+		expect((await run("init")).exitCode).toBe(0);
+		const original = await readFile(cdbFile);
+		expect(
+			(await run("init", "--encrypt", "--cdb-password", "fixture-secret"))
+				.exitCode,
+		).toBe(1);
+		expect(
+			(await run("list", "--encrypt", "--cdb-password", "fixture-secret"))
+				.exitCode,
+		).toBe(1);
+		expect(
+			(await run("encrypt", "unexpected", "--cdb-password", "fixture-secret"))
+				.exitCode,
+		).toBe(1);
+		// Record, selection, and provenance flags would be silently ignored by
+		// file-level subcommands, so they are refused instead.
+		for (const args of [
+			["encrypt", "--user", "reader", "--cdb-password", "fixture-secret"],
+			["encrypt", "--group", "lab", "--cdb-password", "fixture-secret"],
+			["init", "--password", "x"],
+			["init", "--via", "rest-api"],
+			["init", "--no-backup"],
+			["list", "--no-backup"],
+		]) {
+			const refused = await run(...args);
+			expect(refused.exitCode).toBe(1);
+			expect(JSON.parse(refused.stderr).error.code).toBe(
+				"input/invalid-command",
+			);
+		}
+		expect(await readFile(cdbFile)).toEqual(original);
+		expect(
+			(await readdir(dirname(cdbFile))).filter((name) =>
+				name.startsWith(`${basename(cdbFile)}.bak.`),
+			),
+		).toEqual([]);
+	});
+	test("example 59 --no-backup converts without a plaintext snapshot", async () => {
+		const cdbFile = join(tempDir, `encryption-no-backup-${randomUUID()}.cdb`);
+		const backups = async () =>
+			(await readdir(dirname(cdbFile))).filter((name) =>
+				name.startsWith(`${basename(cdbFile)}.bak.`),
+			);
+		const run = (...args: string[]) =>
+			runWithCapture(["devices", ...args, "--cdb-file", cdbFile, "--json"]);
+		expect((await run("init")).exitCode).toBe(0);
+		expect((await run("add", "192.0.2.1", "--user", "reader")).exitCode).toBe(
+			0,
+		);
+		const before = await backups();
+		expect(before).toHaveLength(1);
+		const converted = await run(
+			"encrypt",
+			"--no-backup",
+			"--cdb-password",
+			"fixture-secret",
+		);
+		expect(converted.exitCode).toBe(0);
+		const result = JSON.parse(converted.stdout);
+		expect(result.data).toMatchObject({ changed: true, recordCount: 1 });
+		expect(result.data.backupPath).toBeUndefined();
+		expect(result.warnings.map((w: { code: string }) => w.code)).toContain(
+			"cdb/plaintext-backups",
+		);
+		expect(await backups()).toEqual(before);
+		const listed = await run("list", "--cdb-password", "fixture-secret");
+		expect(JSON.parse(listed.stdout).data[0].target).toBe("192.0.2.1");
+	});
+});
+
 // `--password-stdin` (#582): the record password arrives on fd 0, never argv.
 // Subprocess tier on purpose — the in-process `runCli` capture cannot put real
 // bytes on stdin. The stored value is read back from the CDB bytes directly so
@@ -2042,8 +2233,8 @@ describe("centrs devices --password-stdin (#582)", () => {
 		);
 	}
 
-	test("example 56 add --password-stdin stores the piped value minus one trailing newline", async () => {
-		const cdbPath = await copyCdbFixture("example-56-add-password-stdin");
+	test("example 60 add --password-stdin stores the piped value minus one trailing newline", async () => {
+		const cdbPath = await copyCdbFixture("example-60-add-password-stdin");
 		const result = await runCliProcess({
 			args: [
 				"devices",
@@ -2065,8 +2256,8 @@ describe("centrs devices --password-stdin (#582)", () => {
 		expect(entry?.savedPassword).toBe(true);
 	});
 
-	test("example 57 set --password-stdin strips a trailing CRLF and leaves other fields", async () => {
-		const cdbPath = await copyCdbFixture("example-57-set-password-stdin");
+	test("example 61 set --password-stdin strips a trailing CRLF and leaves other fields", async () => {
+		const cdbPath = await copyCdbFixture("example-61-set-password-stdin");
 		const result = await runCliProcess({
 			args: [
 				"devices",
@@ -2086,8 +2277,8 @@ describe("centrs devices --password-stdin (#582)", () => {
 		expect(entry?.comment).toBe("core router");
 	});
 
-	test("example 58 empty stdin is input/empty-stdin and writes nothing", async () => {
-		const cdbPath = await copyCdbFixture("example-58-empty-password-stdin");
+	test("example 62 empty stdin is input/empty-stdin and writes nothing", async () => {
+		const cdbPath = await copyCdbFixture("example-62-empty-password-stdin");
 		const before = await readFile(cdbPath);
 		for (const stdin of ["", "\n"]) {
 			const result = await runCliProcess({
@@ -2112,8 +2303,8 @@ describe("centrs devices --password-stdin (#582)", () => {
 		expect(await listBackups(cdbPath)).toEqual([]);
 	});
 
-	test("example 59 --password with --password-stdin is usage/conflicting-flags", async () => {
-		const cdbPath = await copyCdbFixture("example-59-password-conflict");
+	test("example 63 --password with --password-stdin is usage/conflicting-flags", async () => {
+		const cdbPath = await copyCdbFixture("example-63-password-conflict");
 		const before = await readFile(cdbPath);
 		const result = await runCliProcess({
 			args: [

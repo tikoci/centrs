@@ -651,7 +651,7 @@ centrs devices add 192.0.2.1 --user robot-reader --cdb-file ./lab/winbox.cdb --j
 ```
 
 Creates missing parent directories and an empty open CDB with mode `0600`.
-`data` is `{ cdbFile, created: true, recordCount: 0 }`. The `add` then succeeds.
+`data` is `{ cdbFile, created: true, encrypted: false, recordCount: 0 }`. The `add` then succeeds.
 
 ### 55. `init` never clobbers
 
@@ -660,11 +660,66 @@ centrs devices init --cdb-file ./lab/winbox.cdb --json
 ```
 
 On an existing, readable CDB: `ok: true`, `data.created: false`,
+`data.encrypted` reports the actual encryption mode,
 `data.recordCount` is the current count, and a `cdb/file-exists` warning says
 nothing was written. As with `git init`, re-running is safe. An existing file that
 does not load fails with that load error (`cdb/parse-failed`,
 `cdb/password-required`) and is left untouched. A location that cannot be
 written fails with `cdb/create-failed`.
+
+### 56. Initialize encrypted from the start
+
+```bash
+CENTRS_CDB_PASSWORD="$CDB_SECRET" centrs devices init --encrypt --cdb-file ./prod.cdb --json
+```
+
+Creates a complete encrypted empty CDB with mode `0600`; subsequent loads require
+that password. `data.encrypted` is `true`. Re-running verifies the password
+and reports `created: false`, `encrypted: true`.
+Test: `centrs devices encryption (#558)` in `test/integration/devices.test.ts`.
+
+### 57. Convert a lab CDB to encrypted
+
+```bash
+centrs devices init --cdb-file ./lab.cdb
+centrs devices add 192.0.2.1 --user reader --cdb-file ./lab.cdb
+CENTRS_CDB_PASSWORD="$CDB_SECRET" centrs devices encrypt --cdb-file ./lab.cdb --json
+CENTRS_CDB_PASSWORD="$CDB_SECRET" centrs devices list --cdb-file ./lab.cdb --json
+```
+
+Conversion reports `encrypted: true`, `changed: true`, `recordCount: 1`, and
+`backupPath`. Records survive a password-protected reload; loading without a
+password fails. All backups remain, including the plaintext pre-conversion file;
+`cdb/plaintext-backups` warns explicitly. Repeating with the same password returns
+`changed: false`; a wrong password fails without writing. Without `--json`,
+text reports conversion or verified unchanged, the record count, and the
+plaintext snapshot path when created; the warning remains visible.
+Test: `centrs devices encryption (#558)` in `test/integration/devices.test.ts`.
+
+### 58. Encryption intent fails closed
+
+`init --encrypt` and `encrypt` refuse a missing or empty CDB password before
+creating anything. `init --encrypt` refuses an existing open CDB without changing
+it. `--encrypt` on other subcommands and positional targets on `encrypt` are
+invalid commands. Record, selection, and provenance flags (`--user`, `--group`,
+`--password`, `--via`, …) on `init`/`encrypt`, and `--no-backup` on anything but
+`encrypt`, are `input/invalid-command` rather than silently ignored. Test:
+`centrs devices encryption (#558)` in `test/integration/devices.test.ts`.
+
+### 59. Convert without a plaintext snapshot
+
+```bash
+centrs devices init --cdb-file ./lab-fresh.cdb
+centrs devices add 192.0.2.1 --user reader --cdb-file ./lab-fresh.cdb
+CENTRS_CDB_PASSWORD="$CDB_SECRET" centrs devices encrypt --no-backup --cdb-file ./lab-fresh.cdb --json
+```
+
+A fresh path, so it does not depend on example 57 having already converted
+`./lab.cdb`. Conversion reports `changed: true`, `recordCount: 1`, and no
+`backupPath`, and no new `.bak.*` file appears. The backup the `add` wrote
+is retained, so
+`cdb/plaintext-backups` still warns. Test: `centrs devices encryption (#558)`
+in `test/integration/devices.test.ts`.
 
 ## Record password on stdin
 
@@ -673,7 +728,7 @@ argv. These run as subprocesses (`test/integration/cli-process.ts`), because
 only a child process can be handed real stdin bytes. The newline, empty and TTY
 rules are also unit-tested in `test/unit/devices-password-stdin.test.ts`.
 
-### 56. `add --password-stdin` stores the piped value
+### 60. `add --password-stdin` stores the piped value
 
 ```bash
 printf 'piped pw\n' | centrs devices add 192.0.2.77 --user robot --password-stdin --cdb-file $CDB --json
@@ -682,7 +737,7 @@ printf 'piped pw\n' | centrs devices add 192.0.2.77 --user robot --password-stdi
 `ok: true`. The stored password is `piped pw`: one trailing newline is
 stripped, the inner space is kept.
 
-### 57. `set --password-stdin` strips a trailing CRLF
+### 61. `set --password-stdin` strips a trailing CRLF
 
 ```bash
 printf 'rotated\r\n' | centrs devices set 192.0.2.5 --password-stdin --cdb-file $CDB --json
@@ -690,7 +745,7 @@ printf 'rotated\r\n' | centrs devices set 192.0.2.5 --password-stdin --cdb-file 
 
 `ok: true`. The stored password is `rotated`; group and comment are unchanged.
 
-### 58. Empty stdin is refused
+### 62. Empty stdin is refused
 
 ```bash
 printf '' | centrs devices set 192.0.2.5 --password-stdin --cdb-file $CDB --json
@@ -699,7 +754,7 @@ printf '' | centrs devices set 192.0.2.5 --password-stdin --cdb-file $CDB --json
 Errors with `input/empty-stdin` (also for a lone `\n`). The CDB is not written
 and no backup is made.
 
-### 59. `--password` with `--password-stdin` conflicts
+### 63. `--password` with `--password-stdin` conflicts
 
 ```bash
 echo stdin-secret | centrs devices set 192.0.2.5 --password argv-secret --password-stdin --cdb-file $CDB --json
