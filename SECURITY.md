@@ -8,7 +8,7 @@ Please include the affected files or workflow, reproduction details, and impact.
 
 ## Scope
 
-`centrs` mediates RouterOS device access, credentials, local discovery data, and file transfer through its library, CLI, and stdio MCP server. TUI and HTTP proxy surfaces are planned; the MCP server has no network listener. Security-sensitive areas include credential import/storage, RouterOS write execution, local network discovery, file transfer, and any future daemon that binds a network port.
+`centrs` mediates RouterOS device access, credentials, and local discovery data through its library, CLI, and stdio MCP server. File transfer is available through the library and CLI. TUI and HTTP proxy surfaces are planned; the MCP server has no network listener. Security-sensitive areas include credential import/storage, RouterOS write execution, local network discovery, file transfer, and any future daemon that binds a network port.
 
 ## Credential handling
 
