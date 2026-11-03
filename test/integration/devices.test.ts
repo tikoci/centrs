@@ -2233,8 +2233,8 @@ describe("centrs devices --password-stdin (#582)", () => {
 		);
 	}
 
-	test("example 60 add --password-stdin stores the piped value minus one trailing newline", async () => {
-		const cdbPath = await copyCdbFixture("example-60-add-password-stdin");
+	test("example 63 add --password-stdin stores the piped value minus one trailing newline", async () => {
+		const cdbPath = await copyCdbFixture("example-63-add-password-stdin");
 		const result = await runCliProcess({
 			args: [
 				"devices",
@@ -2256,8 +2256,8 @@ describe("centrs devices --password-stdin (#582)", () => {
 		expect(entry?.savedPassword).toBe(true);
 	});
 
-	test("example 61 set --password-stdin strips a trailing CRLF and leaves other fields", async () => {
-		const cdbPath = await copyCdbFixture("example-61-set-password-stdin");
+	test("example 64 set --password-stdin strips a trailing CRLF and leaves other fields", async () => {
+		const cdbPath = await copyCdbFixture("example-64-set-password-stdin");
 		const result = await runCliProcess({
 			args: [
 				"devices",
@@ -2277,8 +2277,8 @@ describe("centrs devices --password-stdin (#582)", () => {
 		expect(entry?.comment).toBe("core router");
 	});
 
-	test("example 62 empty stdin is input/empty-stdin and writes nothing", async () => {
-		const cdbPath = await copyCdbFixture("example-62-empty-password-stdin");
+	test("example 65 empty stdin is input/empty-stdin and writes nothing", async () => {
+		const cdbPath = await copyCdbFixture("example-65-empty-password-stdin");
 		const before = await readFile(cdbPath);
 		for (const stdin of ["", "\n"]) {
 			const result = await runCliProcess({
@@ -2303,8 +2303,8 @@ describe("centrs devices --password-stdin (#582)", () => {
 		expect(await listBackups(cdbPath)).toEqual([]);
 	});
 
-	test("example 64 non-UTF-8 or BOM-prefixed stdin is input/invalid-stdin and writes nothing", async () => {
-		const cdbPath = await copyCdbFixture("example-64-invalid-password-stdin");
+	test("example 67 non-UTF-8 or BOM-prefixed stdin is input/invalid-stdin and writes nothing", async () => {
+		const cdbPath = await copyCdbFixture("example-67-invalid-password-stdin");
 		const before = await readFile(cdbPath);
 		for (const stdin of [
 			Buffer.from([0x70, 0x77, 0xff, 0x0a]),
@@ -2332,8 +2332,8 @@ describe("centrs devices --password-stdin (#582)", () => {
 		expect(await listBackups(cdbPath)).toEqual([]);
 	});
 
-	test("example 63 --password with --password-stdin is usage/conflicting-flags", async () => {
-		const cdbPath = await copyCdbFixture("example-63-password-conflict");
+	test("example 66 --password with --password-stdin is usage/conflicting-flags", async () => {
+		const cdbPath = await copyCdbFixture("example-66-password-conflict");
 		const before = await readFile(cdbPath);
 		const result = await runCliProcess({
 			args: [

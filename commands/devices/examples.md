@@ -728,7 +728,7 @@ argv. These run as subprocesses (`test/integration/cli-process.ts`), because
 only a child process can be handed real stdin bytes. The newline, empty and TTY
 rules are also unit-tested in `test/unit/devices-password-stdin.test.ts`.
 
-### 60. `add --password-stdin` stores the piped value
+### 63. `add --password-stdin` stores the piped value
 
 ```bash
 printf 'piped pw\n' | centrs devices add 192.0.2.77 --user robot --password-stdin --cdb-file $CDB --json
@@ -737,7 +737,7 @@ printf 'piped pw\n' | centrs devices add 192.0.2.77 --user robot --password-stdi
 `ok: true`. The stored password is `piped pw`: one trailing newline is
 stripped, the inner space is kept.
 
-### 61. `set --password-stdin` strips a trailing CRLF
+### 64. `set --password-stdin` strips a trailing CRLF
 
 ```bash
 printf 'rotated\r\n' | centrs devices set 192.0.2.5 --password-stdin --cdb-file $CDB --json
@@ -745,7 +745,7 @@ printf 'rotated\r\n' | centrs devices set 192.0.2.5 --password-stdin --cdb-file 
 
 `ok: true`. The stored password is `rotated`; group and comment are unchanged.
 
-### 62. Empty stdin is refused
+### 65. Empty stdin is refused
 
 ```bash
 printf '' | centrs devices set 192.0.2.5 --password-stdin --cdb-file $CDB --json
@@ -754,7 +754,7 @@ printf '' | centrs devices set 192.0.2.5 --password-stdin --cdb-file $CDB --json
 Errors with `input/empty-stdin` (also for a lone `\n`). The CDB is not written
 and no backup is made.
 
-### 63. `--password` with `--password-stdin` conflicts
+### 66. `--password` with `--password-stdin` conflicts
 
 ```bash
 echo stdin-secret | centrs devices set 192.0.2.5 --password argv-secret --password-stdin --cdb-file $CDB --json
@@ -762,7 +762,7 @@ echo stdin-secret | centrs devices set 192.0.2.5 --password argv-secret --passwo
 
 Errors with `usage/conflicting-flags`. Neither value appears in the error.
 
-### 64. Non-UTF-8 or BOM-prefixed stdin is refused
+### 67. Non-UTF-8 or BOM-prefixed stdin is refused
 
 ```bash
 printf 'pw\377\n' | centrs devices set 192.0.2.5 --password-stdin --cdb-file $CDB --json
