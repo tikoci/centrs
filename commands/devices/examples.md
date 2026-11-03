@@ -95,7 +95,7 @@ centrs devices show 192.0.2.5 --cdb-file $CDB --explain
 
 `data.record` is the raw `WinBoxCdbRecord` (tag/marker/tcode/value). Useful
 for diagnosing unknown-field preservation. The password field value reads
-`<redacted>` unless `--show-password` is passed (example 56).
+`<redacted>` unless `--show-password` is passed (example 60).
 
 ## groups
 
