@@ -46,7 +46,23 @@ import {
 	unknownFlagError,
 } from "./common.ts";
 
-export const devicesCommand: CliCommandMetadata = {
+/**
+ * Flags `init`/`encrypt` honor. They touch only the CDB file, never a record,
+ * so record, selection, and provenance flags would be silently ignored there.
+ */
+const CDB_FILE_FLAGS: Readonly<Record<"init" | "encrypt", readonly string[]>> =
+	{
+		init: ["--cdb-file", "--cdb-password", "--format", "--json", "--encrypt"],
+		encrypt: [
+			"--cdb-file",
+			"--cdb-password",
+			"--format",
+			"--json",
+			"--no-backup",
+		],
+	};
+
+const devicesMetadata: CliCommandMetadata = {
 	name: "devices",
 	usage:
 		"centrs devices <init|encrypt|list|show|groups|add|edit|set|remove> [args] [flags]",
@@ -73,7 +89,7 @@ export const devicesCommand: CliCommandMetadata = {
 			flag: "--cdb-password",
 			valueName: "<secret>",
 			description:
-				"Decrypt an encrypted CDB. Falls back to `CENTRS_CDB_PASSWORD`. Also used for `init --encrypt`, `encrypt`, and to re-encrypt on writes.",
+				"CDB password for encrypted reads, writes, explicit encrypted initialization and conversion. Falls back to `CENTRS_CDB_PASSWORD`; a password alone never converts an open CDB.",
 		},
 		{
 			flag: "--via",
@@ -85,7 +101,7 @@ export const devicesCommand: CliCommandMetadata = {
 			flag: "--group",
 			valueName: "<name>",
 			description:
-				"`list` filter / `add`,`edit` first-class group field for the target entry.",
+				"`list` filter / `add`,`set` first-class group field for the target entry.",
 		},
 		{
 			flag: "--where",
@@ -118,7 +134,7 @@ export const devicesCommand: CliCommandMetadata = {
 			flag: "--match",
 			valueName: "<user=…|target=…|record-type>",
 			description:
-				"`show` — disambiguate when `<router>` matches several records: `user=<name>`, `target=<addr>`, or a record-type token.",
+				"`show`,`set`,`remove` — disambiguate when `<router>` matches several records: `user=<name>`, `target=<addr>`, or a record-type token.",
 		},
 		{
 			flag: "--user",
@@ -219,6 +235,21 @@ export const devicesCommand: CliCommandMetadata = {
 	],
 };
 
+export const devicesCommand: CliCommandMetadata = {
+	...devicesMetadata,
+	subcommands: (["init", "encrypt"] as const).map((name) => ({
+		name,
+		usage: `centrs devices ${name} [flags]`,
+		summary:
+			name === "init"
+				? "Create an empty CDB at the resolved path; existing readable files are left unchanged."
+				: "Encrypt an existing CDB in place, or verify an already-encrypted file; existing backups remain unchanged.",
+		options: devicesMetadata.options.filter((option) =>
+			CDB_FILE_FLAGS[name].includes(option.flag),
+		),
+	})),
+};
+
 type DevicesSubcommand =
 	| "init"
 	| "encrypt"
@@ -279,22 +310,6 @@ interface DevicesCliArgs {
 	near?: NearPredicate;
 	bbox?: BboxPredicate;
 }
-
-/**
- * Flags `init`/`encrypt` honor. They touch only the CDB file, never a record,
- * so record, selection, and provenance flags would be silently ignored there.
- */
-const CDB_FILE_FLAGS: Readonly<Record<"init" | "encrypt", readonly string[]>> =
-	{
-		init: ["--cdb-file", "--cdb-password", "--format", "--json", "--encrypt"],
-		encrypt: [
-			"--cdb-file",
-			"--cdb-password",
-			"--format",
-			"--json",
-			"--no-backup",
-		],
-	};
 
 function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 	const parsed: DevicesCliArgs = {};
@@ -439,6 +454,8 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 	}
 
 	if (parsed.help) {
+		const sub = positional[0];
+		if (sub === "init" || sub === "encrypt") parsed.subcommand = sub;
 		return parsed;
 	}
 
@@ -804,7 +821,11 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 	try {
 		parsed = parseDevicesCliArgs(args);
 		if (parsed.help) {
-			console.log(renderCommandHelp(describeCentrs(), devicesCommand));
+			const command =
+				devicesCommand.subcommands?.find(
+					(subcommand) => subcommand.name === parsed?.subcommand,
+				) ?? devicesCommand;
+			console.log(renderCommandHelp(describeCentrs(), command));
 			return 0;
 		}
 

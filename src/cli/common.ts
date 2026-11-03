@@ -63,6 +63,7 @@ export interface CliCommandMetadata {
 	usage: string;
 	summary: string;
 	options: readonly CliCommandOption[];
+	subcommands?: readonly CliCommandMetadata[];
 }
 
 export function expectValue(

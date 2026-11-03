@@ -188,7 +188,7 @@ export const apiCommand: CliCommandMetadata = {
 		{
 			flag: "--validate / --no-validate",
 			description:
-				"Run `/console/inspect` validation before the request (default true; `--validate=false` also accepted).",
+				"Validate structured requests with `/console/inspect`; `/execute` scripts run offline analysis, then RouterOS :parse (default true; `--validate=false` disables both stages).",
 		},
 		{
 			flag: "--format",

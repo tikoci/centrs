@@ -11,7 +11,7 @@ implemented flags live in each command's `commands/<name>/README.md`.
 | Command | Summary |
 | ------- | ------- |
 | [`retrieve`](#retrieve) | Read RouterOS values through the shared core using the selected protocol. |
-| [`execute`](#execute) | Run a RouterOS read or write command via native API, REST, or mac-telnet. |
+| [`execute`](#execute) | Run a RouterOS read or write command via native API, REST, SSH, or mac-telnet. |
 | [`api`](#api) | Structured RouterOS API passthrough (gh-api style) over REST or native API. |
 | [`transfer`](#transfer) | Copy files to/from a RouterOS device and manage device files (rest/native/sftp). |
 | [`terminal`](#terminal) | Open an interactive RouterOS console (ssh or mac-telnet). |
@@ -71,7 +71,7 @@ Usage: centrs retrieve <target> <routeros-path> [flags] | centrs retrieve <targe
 
 ## execute
 
-Run a RouterOS read or write command via native API, REST, or mac-telnet.
+Run a RouterOS read or write command via native API, REST, SSH, or mac-telnet.
 
 ```text
 Usage: centrs execute <target> <command> [flags] | centrs execute <target...> -- <command> [flags] | centrs execute --host <host|url> [--] <command> [flags] | centrs execute --group <name> <command> [flags]
@@ -79,7 +79,7 @@ Usage: centrs execute <target> <command> [flags] | centrs execute <target...> --
 
 | Flag | Value | Description |
 | ---- | ----- | ----------- |
-| `--via` | &lt;native-api\|rest-api\|mac-telnet&gt; | Pin the protocol selector; no silent downgrade when set. A bare MAC target defaults to mac-telnet. |
+| `--via` | &lt;native-api\|rest-api\|ssh\|mac-telnet&gt; | Pin the protocol selector; no silent downgrade when set. A bare MAC target defaults to mac-telnet. |
 | `--group` | `<name>` | Fan out across every CDB record in the group (repeatable; de-duped by record index). |
 | `--where` | `<attr>`=`<value>` | Device-class selector over CDB facts + core fields (repeatable, AND-combined). |
 | `--near` | `<lat>`,`<lon>`,`<radius>` | Geo selector: devices whose GPS is within radius (m/km/mi/ft; bare number = km). Lat-first. |
@@ -101,7 +101,7 @@ Usage: centrs execute <target> <command> [flags] | centrs execute <target...> --
 | `--match` | &lt;user=name\|target=addr\|record-type&gt; | Pick one of several CDB records saved for `<router>` (as `devices show --match`); single target only. |
 | `--resolve` | &lt;none\|arp&gt; | Resolve a MAC-address target to an IP via the host ARP cache (default none). |
 | `--timeout` | `<duration>` | Per-request timeout (for REST, max 60s). |
-| `--validate / --no-validate` |  | Run RouterOS :parse and /console/inspect validation before execution (default true; `--validate=false` also accepted). |
+| `--validate / --no-validate` |  | Run offline analysis, then RouterOS :parse and /console/inspect validation before execution (default true; `--validate=false` disables both stages). |
 | `--yes` |  | Confirm write-shaped add/set/remove commands in non-interactive runs. |
 | `--max-results` | `<bytes>` | Fail if the rendered envelope exceeds this byte budget. |
 | `--format` | &lt;text\|json\|yaml&gt; | Output format for the CLI response. Defaults to text; use --json or --format json for the structured envelope. |
@@ -150,7 +150,7 @@ Usage: centrs api <router> <endpoint> [flags] | centrs api --host <host|url> <en
 | `--match` | &lt;user=name\|target=addr\|record-type&gt; | Pick one of several CDB records saved for `<router>` (as `devices show --match`); single target only. |
 | `--resolve` | &lt;none\|arp&gt; | Resolve a MAC-address target to an IP via the host ARP cache (default none). |
 | `--timeout` | `<duration>` | Per-request timeout (for REST, max 60s). |
-| `--validate / --no-validate` |  | Run `/console/inspect` validation before the request (default true; `--validate=false` also accepted). |
+| `--validate / --no-validate` |  | Validate structured requests with `/console/inspect`; `/execute` scripts run offline analysis, then RouterOS :parse (default true; `--validate=false` disables both stages). |
 | `--format` | &lt;json\|ndjson\|yaml\|text&gt; | Output format. Defaults to json for api; `CENTRS_FORMAT` overrides. |
 | `--json` |  | Shortcut for `--format json`. |
 | `--verbose` |  | Include additional context in text output, on stderr. |
@@ -271,15 +271,15 @@ Usage: centrs devices <init|encrypt|list|show|groups|add|edit|set|remove> [args]
 | `--encrypt` |  | `init` only — require encrypted creation with a non-empty CDB password; refuse an existing open CDB. |
 | `--no-backup` |  | `encrypt` only — skip the plaintext pre-conversion snapshot. Without that snapshot, a forgotten password cannot be recovered. |
 | `--cdb-file` | `<path>` | Override the resolved CDB path (default `~/.config/tikoci/winbox.cdb`). |
-| `--cdb-password` | `<secret>` | Decrypt an encrypted CDB. Falls back to `CENTRS_CDB_PASSWORD`. Also used for `init --encrypt`, `encrypt`, and to re-encrypt on writes. |
+| `--cdb-password` | `<secret>` | CDB password for encrypted reads, writes, explicit encrypted initialization and conversion. Falls back to `CENTRS_CDB_PASSWORD`; a password alone never converts an open CDB. |
 | `--via` | `<protocol>` | Resolve and report the protocol source for provenance examples; no network IO is performed. |
-| `--group` | `<name>` | `list` filter / `add`,`edit` first-class group field for the target entry. |
+| `--group` | `<name>` | `list` filter / `add`,`set` first-class group field for the target entry. |
 | `--where` | `<attr=value>` | `list` only — repeatable device-class filter over CDB facts (AND-combined), e.g. `--where lat=37.7749`. |
 | `--near` | `<lat>`,`<lon>`,`<radius>` | `list` only — GPS filter: devices within radius (m/km/mi/ft; bare number = km). Lat-first. |
 | `--bbox` | `<south>`,`<west>`,`<north>`,`<east>` | `list` only — GPS filter: devices inside the lat-first bounding box. |
 | `--members` |  | `groups` only — expand each group's membership. |
 | `--explain` |  | `show` only — include the raw `WinBoxCdbRecord` in `data.record` (its password field reads `<redacted>` unless `--show-password`). |
-| `--match` | &lt;user=…\|target=…\|record-type&gt; | `show` — disambiguate when `<router>` matches several records: `user=<name>`, `target=<addr>`, or a record-type token. |
+| `--match` | &lt;user=…\|target=…\|record-type&gt; | `show`,`set`,`remove` — disambiguate when `<router>` matches several records: `user=<name>`, `target=<addr>`, or a record-type token. |
 | `--user` | `<name>` | `add`,`set` — first-class CDB user field. |
 | `--password` | `<secret>` | `add`,`set` — first-class CDB password field. |
 | `--password-stdin` |  | `add`,`set` — read the record password from stdin (one trailing newline stripped) so it never rides argv. Conflicts with `--password`. |
@@ -297,6 +297,38 @@ Usage: centrs devices <init|encrypt|list|show|groups|add|edit|set|remove> [args]
 | `--gps` | `<lat>`,`<lon>`[,`<altitude>`[,`<altitude-type>`]] | `add`,`set` — combined lat,lon[,altitude[,altitude-type]] convenience (lat-first; missing altitude-type defaults MSL). |
 | `--force` |  | `add` only — overwrite the existing (target, user) entry. |
 | `--strict` |  | `add`,`set` — reject unknown comment kv keys instead of warning. |
+| `--format` | &lt;text\|json\|yaml&gt; | Output format for the CLI response. |
+| `--json` |  | Shortcut for `--format json`. |
+
+### devices init
+
+Create an empty CDB at the resolved path; existing readable files are left unchanged.
+
+```text
+Usage: centrs devices init [flags]
+```
+
+| Flag | Value | Description |
+| ---- | ----- | ----------- |
+| `--encrypt` |  | `init` only — require encrypted creation with a non-empty CDB password; refuse an existing open CDB. |
+| `--cdb-file` | `<path>` | Override the resolved CDB path (default `~/.config/tikoci/winbox.cdb`). |
+| `--cdb-password` | `<secret>` | CDB password for encrypted reads, writes, explicit encrypted initialization and conversion. Falls back to `CENTRS_CDB_PASSWORD`; a password alone never converts an open CDB. |
+| `--format` | &lt;text\|json\|yaml&gt; | Output format for the CLI response. |
+| `--json` |  | Shortcut for `--format json`. |
+
+### devices encrypt
+
+Encrypt an existing CDB in place, or verify an already-encrypted file; existing backups remain unchanged.
+
+```text
+Usage: centrs devices encrypt [flags]
+```
+
+| Flag | Value | Description |
+| ---- | ----- | ----------- |
+| `--no-backup` |  | `encrypt` only — skip the plaintext pre-conversion snapshot. Without that snapshot, a forgotten password cannot be recovered. |
+| `--cdb-file` | `<path>` | Override the resolved CDB path (default `~/.config/tikoci/winbox.cdb`). |
+| `--cdb-password` | `<secret>` | CDB password for encrypted reads, writes, explicit encrypted initialization and conversion. Falls back to `CENTRS_CDB_PASSWORD`; a password alone never converts an open CDB. |
 | `--format` | &lt;text\|json\|yaml&gt; | Output format for the CLI response. |
 | `--json` |  | Shortcut for `--format json`. |
 
