@@ -94,7 +94,8 @@ centrs devices show 192.0.2.5 --cdb-file $CDB --explain
 ```
 
 `data.record` is the raw `WinBoxCdbRecord` (tag/marker/tcode/value). Useful
-for diagnosing unknown-field preservation.
+for diagnosing unknown-field preservation. The password field value reads
+`<redacted>` unless `--show-password` is passed (example 60).
 
 ## groups
 
@@ -720,3 +721,43 @@ A fresh path, so it does not depend on example 57 having already converted
 is retained, so
 `cdb/plaintext-backups` still warns. Test: `centrs devices encryption (#558)`
 in `test/integration/devices.test.ts`.
+
+## Record password in output
+
+`show`, `add` and `set` withhold the stored record password by default, in text
+and JSON and in the library envelopes (#551). Every entry carries
+`passwordSet: boolean`; `--show-password` (library: `showPassword: true`) opts in.
+`passwordSet` is not the WinBox `savedPassword` flag. MCP never returns the
+password and has no opt-in.
+
+### 60. `show` withholds the password and reports `passwordSet`
+
+```bash
+centrs devices show 192.0.2.5 --cdb-file $CDB --explain --json
+centrs devices show 192.0.2.5 --cdb-file $CDB
+```
+
+`data.entry` has `passwordSet: true` and no `password` key. The `--explain`
+record's password field (tag 3) reads `<redacted>`. Text prints
+`password:      (set, hidden)`, or `(not set)` for an empty password.
+
+### 61. `--show-password` returns the password on `show`, `add` and `set`
+
+```bash
+centrs devices show 192.0.2.5 --cdb-file $CDB --show-password --json
+centrs devices add 198.51.100.57 --user writer --password pw57 --cdb-file $CDB --json
+centrs devices set 198.51.100.57 --group lab --cdb-file $CDB --show-password --json
+```
+
+`show` returns `data.entry.password: "secret"`. The `add` without the flag
+returns `passwordSet: true` and no `password`; the `set` with it returns
+`data.entry.password: "pw57"`.
+
+### 62. `--show-password` is refused outside `show` / `add` / `set`
+
+```bash
+centrs devices list --cdb-file $CDB --show-password --json
+```
+
+`input/invalid-command` with `error.context: { subcommand: "list", flag:
+"--show-password" }`, the same refusal other subcommand-scoped flags use.

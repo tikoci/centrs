@@ -94,8 +94,16 @@ export interface DevicesListItem {
 	location?: DeviceLocation;
 }
 
+/**
+ * A CDB record as `devices show` / `add` / `set` return it. The record password
+ * is withheld by default (#551): `passwordSet` says whether one is stored, and
+ * only {@link DevicesShowItemWithPassword} (the `showPassword: true` opt-in)
+ * carries the value. Not to be confused with `savedPassword`, the WinBox
+ * "keep password" flag.
+ */
 export interface DevicesShowItem extends DevicesListItem {
-	password: string;
+	/** True when the record stores a non-empty password. Always present. */
+	passwordSet: boolean;
 	comment: string;
 	commentMirror: string;
 	profile: string;
@@ -103,6 +111,11 @@ export interface DevicesShowItem extends DevicesListItem {
 	romonAgent: string;
 	savedPassword: boolean;
 	flags: number;
+}
+
+/** {@link DevicesShowItem} plus the cleartext record password (`showPassword: true`). */
+export interface DevicesShowItemWithPassword extends DevicesShowItem {
+	password: string;
 }
 
 export interface DevicesGroupSummary {
@@ -614,10 +627,19 @@ export async function loadCdb(options: LoadCdbOptions): Promise<LoadedCdb> {
 	for (const entry of entries) {
 		const tags = unknownTcodeTags(entry.record);
 		if (tags.length > 0) {
+			// `passwordSet` reports the password centrs decoded and would dial
+			// with. When the undecoded tail may hold one, say so here rather than
+			// let `passwordSet: false` read as certain.
+			const mayContainPassword =
+				passwordBearingRawTailIndex(entry.record) !== -1;
 			warnings.push({
 				code: "cdb/unknown-field",
-				message: `Entry ${entry.target || "(unnamed)"} contains ${tags.length} field(s) with unknown tcodes; preserved verbatim.`,
-				context: { target: entry.target, tags },
+				message: `Entry ${entry.target || "(unnamed)"} contains ${tags.length} field(s) with unknown tcodes; preserved verbatim.${mayContainPassword ? " The undecoded bytes may contain the record password, so passwordSet may under-report it." : ""}`,
+				context: {
+					target: entry.target,
+					tags,
+					...(mayContainPassword ? { mayContainPassword: true } : {}),
+				},
 			});
 		}
 	}
@@ -794,12 +816,23 @@ export interface ShowDeviceArgs {
 	 */
 	match?: string;
 	env?: Record<string, string | undefined>;
+	/**
+	 * Return the record password in cleartext (`--show-password`). Default
+	 * `false`: the entry carries `passwordSet` and no `password`, and the
+	 * `explain` record has its password field value replaced.
+	 */
+	showPassword?: boolean;
 }
 
-export interface DevicesShowEnvelopeData {
-	entry: DevicesShowItem;
+export interface DevicesShowEnvelopeData<
+	Entry extends DevicesShowItem = DevicesShowItem,
+> {
+	entry: Entry;
 	record?: WinBoxCdbRecord;
 }
+
+/** Placeholder written over a withheld password in an `explain` record. */
+export const REDACTED_PASSWORD_VALUE = "<redacted>";
 
 /**
  * Canonical form for `<router>` comparison: a MAC is normalized (case /
@@ -931,26 +964,148 @@ function describeMatches(matches: readonly EntryMatch[]): {
 	}));
 }
 
+/**
+ * The raw CDB record `<router>` resolves to, password included. INTERNAL: for
+ * callers that dial or gate on the record (the resolver, the MCP allowlist),
+ * never for output. It is deliberately absent from `src/index.ts`; the public
+ * {@link showDevice} envelope withholds the password by default (#551).
+ */
+export interface DeviceRecordLookup {
+	entry: WinBoxCdbEntry;
+	cdbRecordIndex: number;
+	/** CDB load warnings plus the record's comment-kv / `via` warnings. */
+	warnings: DevicesWarning[];
+	tips: Tip[];
+	target: EnvelopeTargetMeta;
+}
+
+/**
+ * Resolve `<router>` to its raw CDB record (see {@link DeviceRecordLookup}).
+ * Same matcher, `--match` selection and errors as {@link showDevice}.
+ */
+export function lookupDeviceRecord(
+	args: Omit<ShowDeviceArgs, "explain" | "showPassword">,
+): DeviceRecordLookup {
+	const match = requireSingleMatch(args.cdb.entries, args.target, args.match);
+	const resolved = resolveDeviceShowTargetMeta(match.entry, match.index, args);
+	return {
+		entry: match.entry,
+		cdbRecordIndex: match.index,
+		warnings: [...args.cdb.warnings, ...resolved.warnings],
+		tips: credentialsMissingTips(match.entry, args.cdb.entries),
+		target: resolved.target,
+	};
+}
+
+export function showDevice(
+	args: ShowDeviceArgs & { showPassword: true },
+): CentrsSuccessEnvelope<
+	DevicesShowEnvelopeData<DevicesShowItemWithPassword>,
+	DevicesOperationMeta
+>;
+export function showDevice(
+	args: ShowDeviceArgs,
+): CentrsSuccessEnvelope<DevicesShowEnvelopeData, DevicesOperationMeta>;
 export function showDevice(
 	args: ShowDeviceArgs,
 ): CentrsSuccessEnvelope<DevicesShowEnvelopeData, DevicesOperationMeta> {
-	const match = requireSingleMatch(args.cdb.entries, args.target, args.match);
+	const found = lookupDeviceRecord(args);
+	const showPassword = args.showPassword === true;
 	const data: DevicesShowEnvelopeData = {
-		entry: entryToShowItem(match.entry, match.index),
+		entry: projectShowItem(
+			entryToShowItem(found.entry, found.cdbRecordIndex),
+			showPassword,
+		),
 	};
 	if (args.explain) {
-		data.record = match.entry.record;
+		data.record = showPassword
+			? found.entry.record
+			: redactRecordPassword(found.entry.record);
 	}
-
-	const resolved = resolveDeviceShowTargetMeta(match.entry, match.index, args);
 
 	return {
 		ok: true,
 		data,
-		warnings: [...args.cdb.warnings, ...resolved.warnings],
-		tips: credentialsMissingTips(match.entry, args.cdb.entries),
-		meta: devicesMeta("show", args.cdb.settings, resolved.target),
+		warnings: found.warnings,
+		tips: found.tips,
+		meta: devicesMeta("show", args.cdb.settings, found.target),
 	};
+}
+
+/**
+ * The shared output redaction for a device entry (#551): drop `password`, keep
+ * `passwordSet`. The CLI, the library envelopes and MCP all return entries
+ * through this, so they withhold the secret the same way.
+ */
+export function redactDeviceEntry(
+	entry: DevicesShowItemWithPassword,
+): DevicesShowItem {
+	const { password, ...rest } = entry;
+	return { ...rest, passwordSet: password.length > 0 };
+}
+
+function projectShowItem(
+	entry: DevicesShowItemWithPassword,
+	showPassword: boolean,
+): DevicesShowItem {
+	return showPassword ? entry : redactDeviceEntry(entry);
+}
+
+/**
+ * Replace the password field value in an `explain` record. The record is a
+ * debugging view of the CDB bytes; it must not become a side door around the
+ * entry redaction.
+ */
+function redactRecordPassword(record: WinBoxCdbRecord): WinBoxCdbRecord {
+	const tailIndex = passwordBearingRawTailIndex(record);
+	if (tailIndex === -1 && !record.fields.some(isPasswordField)) {
+		return record;
+	}
+	return {
+		...record,
+		fields: record.fields.map((field, index) => {
+			if (index === tailIndex) {
+				const length =
+					field.value instanceof Uint8Array ? field.value.length : 0;
+				return { ...field, value: redactedRawTailValue(length) };
+			}
+			return isPasswordField(field)
+				? { ...field, value: REDACTED_PASSWORD_VALUE }
+				: field;
+		}),
+	};
+}
+
+/**
+ * Index of a `rawTail` field whose bytes may hold the password, or -1. The
+ * decoder folds everything after an unknown tcode into one opaque tail, so
+ * when no decoded password field (tag 3) precedes the tail, the password — if
+ * the record has one — is somewhere inside those bytes (or the tail is tag 3
+ * itself).
+ */
+function passwordBearingRawTailIndex(record: WinBoxCdbRecord): number {
+	for (const [index, field] of record.fields.entries()) {
+		if (field.rawTail) {
+			return index;
+		}
+		if (field.tag === winBoxCdbFieldTag.password) {
+			return -1;
+		}
+	}
+	return -1;
+}
+
+function redactedRawTailValue(length: number): string {
+	return `<redacted: ${length} bytes, may contain password>`;
+}
+
+function isPasswordField(field: WinBoxCdbField): boolean {
+	return (
+		field.tag === winBoxCdbFieldTag.password &&
+		!field.rawTail &&
+		typeof field.value === "string" &&
+		field.value.length > 0
+	);
 }
 
 function entryToListItem(
@@ -1006,7 +1161,7 @@ interface ResolvedDeviceTargetMeta {
 function resolveDeviceShowTargetMeta(
 	entry: WinBoxCdbEntry,
 	cdbRecordIndex: number,
-	args: ShowDeviceArgs,
+	args: Pick<ShowDeviceArgs, "target" | "via" | "env">,
 ): ResolvedDeviceTargetMeta {
 	const parsed = parseCommentKv(entry.comment);
 	const warnings: DevicesWarning[] = parsed.warnings.map((warning) => ({
@@ -1122,14 +1277,15 @@ function parseProtocolOption(
 function entryToShowItem(
 	entry: WinBoxCdbEntry,
 	cdbRecordIndex: number,
-): DevicesShowItem {
-	const item: DevicesShowItem = {
+): DevicesShowItemWithPassword {
+	const item: DevicesShowItemWithPassword = {
 		target: entry.target,
 		recordType: entry.recordType,
 		recordTypeName: recordTypeName(entry.recordType),
 		group: entry.group,
 		user: entry.user,
 		password: entry.password,
+		passwordSet: entry.password.length > 0,
 		session: entry.session,
 		comment: entry.comment,
 		commentMirror: entry.commentMirror,
@@ -1200,7 +1356,9 @@ export function listGroups(
  * resulting record (absent for `remove`); `preservedUnknownTags` lists any
  * unknown/`rawTail` field tags carried over verbatim from the prior record.
  */
-export interface DevicesMutationData {
+export interface DevicesMutationData<
+	Entry extends DevicesShowItem = DevicesShowItem,
+> {
 	action: "add" | "edit" | "set" | "remove";
 	target: string;
 	cdbRecordIndex: number;
@@ -1209,13 +1367,13 @@ export interface DevicesMutationData {
 	backupPath?: string;
 	prunedBackups: readonly string[];
 	preservedUnknownTags?: readonly number[];
-	entry?: DevicesShowItem;
+	/** The resulting record; the password is withheld unless `showPassword`. */
+	entry?: Entry;
 }
 
-export type DevicesMutationEnvelope = CentrsSuccessEnvelope<
-	DevicesMutationData,
-	DevicesOperationMeta
->;
+export type DevicesMutationEnvelope<
+	Entry extends DevicesShowItem = DevicesShowItem,
+> = CentrsSuccessEnvelope<DevicesMutationData<Entry>, DevicesOperationMeta>;
 
 const KNOWN_FIELD_TAGS = new Set<number>(Object.values(winBoxCdbFieldTag));
 
@@ -1583,8 +1741,16 @@ export interface AddDeviceArgs {
 	force?: boolean;
 	strict?: boolean;
 	writeOptions?: WriteWinBoxCdbOptions;
+	/** Return the stored password in `data.entry` (`--show-password`). Default `false`. */
+	showPassword?: boolean;
 }
 
+export function addDevice(
+	args: AddDeviceArgs & { showPassword: true },
+): Promise<DevicesMutationEnvelope<DevicesShowItemWithPassword>>;
+export function addDevice(
+	args: AddDeviceArgs,
+): Promise<DevicesMutationEnvelope>;
 export async function addDevice(
 	args: AddDeviceArgs,
 ): Promise<DevicesMutationEnvelope> {
@@ -1665,7 +1831,10 @@ export async function addDevice(
 		args.target,
 		cdbRecordIndex,
 		existing !== undefined,
-		entryToShowItem(decodeWinBoxCdbEntry(record), cdbRecordIndex),
+		projectShowItem(
+			entryToShowItem(decodeWinBoxCdbEntry(record), cdbRecordIndex),
+			args.showPassword === true,
+		),
 		preserved,
 		warnings,
 	);
@@ -1686,6 +1855,8 @@ export interface SetDeviceArgs {
 	savedPassword?: boolean;
 	strict?: boolean;
 	writeOptions?: WriteWinBoxCdbOptions;
+	/** Return the stored password in `data.entry` (`--show-password`). Default `false`. */
+	showPassword?: boolean;
 }
 
 /**
@@ -1695,6 +1866,12 @@ export interface SetDeviceArgs {
  * {@link requireSingleMatch}; a missing target throws `cdb/not-found-target`.
  * Unchanged fields and the comment's free-form prose are preserved verbatim.
  */
+export function setDevice(
+	args: SetDeviceArgs & { showPassword: true },
+): Promise<DevicesMutationEnvelope<DevicesShowItemWithPassword>>;
+export function setDevice(
+	args: SetDeviceArgs,
+): Promise<DevicesMutationEnvelope>;
 export async function setDevice(
 	args: SetDeviceArgs,
 ): Promise<DevicesMutationEnvelope> {
@@ -1771,7 +1948,10 @@ export async function setDevice(
 		args.target,
 		match.index,
 		true,
-		entryToShowItem(decodeWinBoxCdbEntry(record), match.index),
+		projectShowItem(
+			entryToShowItem(decodeWinBoxCdbEntry(record), match.index),
+			args.showPassword === true,
+		),
 		preserved,
 		warnings,
 	);
@@ -2068,6 +2248,7 @@ function renderMutationText(lines: string[], data: DevicesMutationData): void {
 	}
 	if (data.entry) {
 		lines.push(`user:          ${data.entry.user || "-"}`);
+		lines.push(passwordLine(data.entry));
 		lines.push(`group:         ${data.entry.group || "-"}`);
 		lines.push(`comment:       ${data.entry.comment || "-"}`);
 	}
@@ -2104,6 +2285,7 @@ function renderShowText(lines: string[], data: DevicesShowEnvelopeData): void {
 	lines.push(`record-type:   ${entry.recordTypeName} (${entry.recordType})`);
 	lines.push(`cdb-index:     ${entry.cdbRecordIndex}`);
 	lines.push(`user:          ${entry.user || "-"}`);
+	lines.push(passwordLine(entry));
 	lines.push(`saved-password: ${entry.savedPassword ? "yes" : "no"}`);
 	lines.push(`group:         ${entry.group || "-"}`);
 	lines.push(`profile:       ${entry.profile || "-"}`);
@@ -2129,9 +2311,27 @@ function renderShowText(lines: string[], data: DevicesShowEnvelopeData): void {
 	}
 }
 
+/**
+ * The `password:` text line. The cleartext value appears only when the entry
+ * carries it (`--show-password`); otherwise it reads `(set, hidden)` or
+ * `(not set)`.
+ */
+function passwordLine(entry: DevicesShowItem): string {
+	const shown = (entry as Partial<DevicesShowItemWithPassword>).password;
+	if (typeof shown === "string") {
+		// An empty password reads `(not set)`, never `-`, which is a valid password.
+		return `password:      ${shown === "" ? "(not set)" : shown}`;
+	}
+	return `password:      ${entry.passwordSet ? "(set, hidden)" : "(not set)"}`;
+}
+
 function describeField(field: WinBoxCdbField): string {
 	const head = `tag=${field.tag} marker=0x${field.marker.toString(16).padStart(2, "0")} tcode=0x${field.tcode.toString(16).padStart(2, "0")}`;
 	if (field.rawTail) {
+		if (typeof field.value === "string") {
+			// Withheld by `redactRecordPassword`: the tail may hold the password.
+			return `${head} rawTail ${field.value}`;
+		}
 		const bytes = field.value instanceof Uint8Array ? field.value : null;
 		const preview = bytes
 			? Array.from(bytes.subarray(0, 16))

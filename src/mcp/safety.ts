@@ -11,10 +11,10 @@
  */
 
 import {
-	type DevicesShowItem,
+	type DeviceRecordLookup,
 	type LoadedCdb,
 	loadCdb,
-	showDevice,
+	lookupDeviceRecord,
 } from "../devices.ts";
 import { CentrsError } from "../errors.ts";
 import type { McpWritePolicy } from "../mcp.ts";
@@ -63,7 +63,7 @@ export async function loadAllowlistCdb(
  * MCP-specific framing of "this device is not on the allowlist", pointing at
  * `centrs_devices add` rather than leaking the CLI's `cdb/not-found-target`.
  *
- * Matches with {@link showDevice}, the matcher the core resolver dials with
+ * Matches with {@link lookupDeviceRecord}, the matcher the core resolver dials with
  * (target, `identity=`, `mac=`, `ip=`), so the record whose write policy is
  * checked here is the record the call then runs against (#444). A name that
  * matches more than one record fails `identity/ambiguous` rather than taking
@@ -75,9 +75,9 @@ export function resolveRegisteredTarget(
 ): RegisteredTarget {
 	// Before the lookup, whose refusal echoes the target (#478).
 	assertNoTargetPassword(target);
-	let entry: DevicesShowItem;
+	let found: DeviceRecordLookup;
 	try {
-		entry = showDevice({ cdb, target }).data.entry;
+		found = lookupDeviceRecord({ cdb, target });
 	} catch (error) {
 		// Preserve registered identities; mask credential-shaped lookup failures.
 		if (redactTargetInput(target) !== target) {
@@ -105,11 +105,12 @@ export function resolveRegisteredTarget(
 		}
 		throw error;
 	}
+	const { entry } = found;
 	return {
 		target: entry.target,
 		user: entry.user,
 		group: entry.group,
-		recordIndex: entry.cdbRecordIndex,
+		recordIndex: found.cdbRecordIndex,
 		writePolicy: readWritePolicy(entry.comment),
 	};
 }

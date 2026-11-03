@@ -63,8 +63,6 @@ export interface McpOperationMeta {
  */
 type McpEnvelope = CentrsEnvelope;
 
-type EnvelopeWithData = CentrsEnvelope<unknown> & { data?: unknown };
-
 /**
  * Build a minimal centrs error envelope for failures that happen in the MCP
  * adapter itself (allowlist rejections, policy denials) — before or instead of
@@ -109,39 +107,6 @@ function requireConfirm(tool: string, confirmed: boolean | undefined): void {
 				"Re-submit the MCP tool call with confirm=true after verifying the target and requested CDB change.",
 		});
 	}
-}
-
-function redactEntry(entry: unknown): unknown {
-	if (typeof entry !== "object" || entry === null) {
-		return entry;
-	}
-	const { password, ...rest } = entry as Record<string, unknown>;
-	return {
-		...rest,
-		passwordSet: typeof password === "string" ? password.length > 0 : undefined,
-	};
-}
-
-function redactDeviceSecrets(envelope: McpEnvelope): McpEnvelope {
-	if (!envelope.ok) {
-		return envelope;
-	}
-	const withData = envelope as EnvelopeWithData;
-	const data = withData.data;
-	if (typeof data !== "object" || data === null) {
-		return envelope;
-	}
-	const deviceData = data as { entry?: unknown };
-	if (deviceData.entry === undefined) {
-		return envelope;
-	}
-	return {
-		...envelope,
-		data: {
-			...data,
-			entry: redactEntry(deviceData.entry),
-		},
-	};
 }
 
 // --- centrs_explain ---------------------------------------------------------
@@ -630,6 +595,9 @@ export async function handleDevices(
 				context: { op: args.op },
 			});
 		}
+		// `show`/`add`/`set` entries come back with the password withheld and
+		// `passwordSet` in its place: core redacts by default and MCP never
+		// passes `showPassword` (#551).
 		switch (args.op) {
 			case "list":
 				return listDevices({
@@ -643,29 +611,25 @@ export async function handleDevices(
 				return listGroups({ cdb, withMembers: true });
 			case "show": {
 				const target = requireDevicesTarget(args, "show");
-				return redactDeviceSecrets(
-					showDevice({ cdb, target, env: config.env }),
-				);
+				return showDevice({ cdb, target, env: config.env });
 			}
 			case "add": {
 				requireConfirm("centrs_devices op=add", args.confirm);
 				const target = requireDevicesTarget(args, "add");
-				return redactDeviceSecrets(
-					await addDevice({
-						cdb,
-						target,
-						recordType: resolveRecordType(args.recordType),
-						user: args.user,
-						password: args.password,
-						group: args.group,
-						profile: args.profile,
-						session: args.session,
-						comment: args.comment,
-						commentKvUpdates: buildGeoUpdates(args),
-						savedPassword: args.savedPassword,
-						force: args.force,
-					}),
-				);
+				return await addDevice({
+					cdb,
+					target,
+					recordType: resolveRecordType(args.recordType),
+					user: args.user,
+					password: args.password,
+					group: args.group,
+					profile: args.profile,
+					session: args.session,
+					comment: args.comment,
+					commentKvUpdates: buildGeoUpdates(args),
+					savedPassword: args.savedPassword,
+					force: args.force,
+				});
 			}
 			case "edit":
 				// The interactive editor has no MCP analogue; modify via op=set.
@@ -673,20 +637,18 @@ export async function handleDevices(
 			case "set": {
 				requireConfirm("centrs_devices op=set", args.confirm);
 				const target = requireDevicesTarget(args, "set");
-				return redactDeviceSecrets(
-					await setDevice({
-						cdb,
-						target,
-						updates: [...buildGeoUpdates(args), ...(args.updates ?? [])],
-						user: args.user,
-						password: args.password,
-						group: args.group,
-						profile: args.profile,
-						session: args.session,
-						savedPassword: args.savedPassword,
-						strict: args.strict,
-					}),
-				);
+				return await setDevice({
+					cdb,
+					target,
+					updates: [...buildGeoUpdates(args), ...(args.updates ?? [])],
+					user: args.user,
+					password: args.password,
+					group: args.group,
+					profile: args.profile,
+					session: args.session,
+					savedPassword: args.savedPassword,
+					strict: args.strict,
+				});
 			}
 			case "remove": {
 				requireConfirm("centrs_devices op=remove", args.confirm);

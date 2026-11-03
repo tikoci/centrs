@@ -12,7 +12,7 @@
  * Boundaries this module is careful about:
  *   - The CDB is loaded + decrypted ONCE for the whole expansion.
  *   - A positional is matched against the already-loaded entries with
- *     {@link showDevice} (the identity matcher), NOT `resolveCdb` — `resolveCdb`
+ *     {@link lookupDeviceRecord} (the identity matcher), NOT `resolveCdb` — `resolveCdb`
  *     re-loads the CDB and, when a `__default__` record exists, returns a
  *     synthetic resolution for ANY unmatched target, which would collide two
  *     distinct ad-hoc literals on the default record's index. A non-matching
@@ -30,8 +30,8 @@
 import {
 	type LoadedCdb,
 	loadCdb,
+	lookupDeviceRecord,
 	resolveDevicesSettings,
-	showDevice,
 } from "../devices.ts";
 import { CentrsError } from "../errors.ts";
 import {
@@ -282,8 +282,8 @@ export async function expandSelection(
 	for (const positional of selection.positionals) {
 		assertNoTargetPassword(positional);
 		try {
-			const shown = showDevice({ cdb, target: positional });
-			indices.add(shown.data.entry.cdbRecordIndex);
+			const shown = lookupDeviceRecord({ cdb, target: positional });
+			indices.add(shown.cdbRecordIndex);
 		} catch (error) {
 			// Preserve registered identities; mask credential-shaped lookup failures.
 			if (redactTargetInput(positional) !== positional) {
