@@ -450,6 +450,10 @@ is no `update`.
 
 - Exactly one trailing newline (`\n` or `\r\n`) is stripped, so `echo pw |`
   works. Any other whitespace is part of the password.
+- The rest must be valid UTF-8 with no leading byte-order mark; otherwise it
+  is `input/invalid-stdin`. The CDB stores record strings as UTF-8 and drops a
+  leading BOM on read, so either would store a different credential than the
+  bytes piped in.
 - Empty input (nothing, or only that one newline) is `input/empty-stdin`.
   Clearing a stored password stays a deliberate `--password ""`, never an empty
   pipe.

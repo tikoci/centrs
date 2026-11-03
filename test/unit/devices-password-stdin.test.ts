@@ -4,7 +4,7 @@ import { CentrsError } from "../../src/errors.ts";
 import { runCliCaptured } from "./cli-capture.ts";
 
 // `devices add`/`set --password-stdin` (#582). The real fd-0 read is exercised
-// by the subprocess tier (`test/integration/devices.test.ts`, examples 60-63);
+// by the subprocess tier (`test/integration/devices.test.ts`, examples 60-64);
 // this file covers the newline/empty/TTY rules through the read seam and the
 // argv refusals, which fire before stdin is touched.
 
@@ -23,10 +23,11 @@ async function readError(
 }
 
 describe("readPasswordStdin", () => {
-	const piped = (text: string) => ({
+	const pipedBytes = (bytes: Uint8Array) => ({
 		isTty: false,
-		read: async () => text,
+		read: async () => bytes,
 	});
+	const piped = (text: string) => pipedBytes(new TextEncoder().encode(text));
 
 	test("strips exactly one trailing \\n", async () => {
 		expect(await readPasswordStdin(piped("pw\n"))).toBe("pw");
@@ -52,13 +53,41 @@ describe("readPasswordStdin", () => {
 		}
 	});
 
+	test("keeps multi-byte UTF-8 intact", async () => {
+		expect(await readPasswordStdin(piped("pw-\u00fc\u20ac\n"))).toBe(
+			"pw-\u00fc\u20ac",
+		);
+	});
+
+	test("malformed UTF-8 is input/invalid-stdin, never replaced or echoed", async () => {
+		// 0xff is never valid UTF-8; 0xc3 alone is a truncated 2-byte sequence.
+		for (const bytes of [
+			Uint8Array.of(0x70, 0x77, 0xff, 0x0a),
+			Uint8Array.of(0x70, 0x77, 0xc3),
+		]) {
+			const error = await readError(pipedBytes(bytes));
+			expect(error.code).toBe("input/invalid-stdin");
+			expect(error.summary).toContain("not valid UTF-8");
+			expect(JSON.stringify(error.context)).not.toContain("pw");
+		}
+	});
+
+	test("a leading byte-order mark is input/invalid-stdin, not silently dropped", async () => {
+		const bom = Uint8Array.of(0xef, 0xbb, 0xbf, 0x70, 0x77, 0x0a);
+		const error = await readError(pipedBytes(bom));
+		expect(error.code).toBe("input/invalid-stdin");
+		expect(error.summary).toContain("byte-order mark");
+		// A U+FEFF after the first character is ordinary text and is kept.
+		expect(await readPasswordStdin(piped("p\uFEFFw\n"))).toBe("p\uFEFFw");
+	});
+
 	test("a TTY stdin is refused with usage/stdin-is-tty without reading", async () => {
 		let read = false;
 		const error = await readError({
 			isTty: true,
 			read: async () => {
 				read = true;
-				return "pw\n";
+				return new TextEncoder().encode("pw\n");
 			},
 		});
 		expect(error.code).toBe("usage/stdin-is-tty");

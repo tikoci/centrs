@@ -206,6 +206,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 			"The RouterOS path is malformed: not slash-prefixed, a segment that is not a menu name, or characters a REST URL would reinterpret.",
 	},
 	{
+		code: "input/invalid-stdin",
+		summary:
+			"A flag that reads its value from stdin (e.g. `--password-stdin`) received bytes that are not valid UTF-8 text, or began with a byte-order mark.",
+	},
+	{
 		code: "input/invalid-target",
 		summary: "The target string is invalid for the requested operation.",
 	},

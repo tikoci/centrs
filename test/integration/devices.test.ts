@@ -2303,6 +2303,35 @@ describe("centrs devices --password-stdin (#582)", () => {
 		expect(await listBackups(cdbPath)).toEqual([]);
 	});
 
+	test("example 64 non-UTF-8 or BOM-prefixed stdin is input/invalid-stdin and writes nothing", async () => {
+		const cdbPath = await copyCdbFixture("example-64-invalid-password-stdin");
+		const before = await readFile(cdbPath);
+		for (const stdin of [
+			Buffer.from([0x70, 0x77, 0xff, 0x0a]),
+			Buffer.from([0xef, 0xbb, 0xbf, 0x70, 0x77, 0x0a]),
+		]) {
+			const result = await runCliProcess({
+				args: [
+					"devices",
+					"set",
+					"192.0.2.5",
+					"--password-stdin",
+					"--cdb-file",
+					cdbPath,
+					"--json",
+				],
+				stdin,
+			});
+			expect(result.exitCode).toBe(1);
+			const envelope = JSON.parse(result.stderrText) as {
+				error: { code: string };
+			};
+			expect(envelope.error.code).toBe("input/invalid-stdin");
+		}
+		expect(await readFile(cdbPath)).toEqual(before);
+		expect(await listBackups(cdbPath)).toEqual([]);
+	});
+
 	test("example 63 --password with --password-stdin is usage/conflicting-flags", async () => {
 		const cdbPath = await copyCdbFixture("example-63-password-conflict");
 		const before = await readFile(cdbPath);

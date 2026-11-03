@@ -761,3 +761,14 @@ echo stdin-secret | centrs devices set 192.0.2.5 --password argv-secret --passwo
 ```
 
 Errors with `usage/conflicting-flags`. Neither value appears in the error.
+
+### 64. Non-UTF-8 or BOM-prefixed stdin is refused
+
+```bash
+printf 'pw\377\n' | centrs devices set 192.0.2.5 --password-stdin --cdb-file $CDB --json
+printf '\357\273\277pw\n' | centrs devices set 192.0.2.5 --password-stdin --cdb-file $CDB --json
+```
+
+Both error with `input/invalid-stdin`: the first is not valid UTF-8, the second
+starts with a byte-order mark. The bytes are not echoed, the CDB is not written
+and no backup is made.

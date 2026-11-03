@@ -20,7 +20,8 @@ part of this section.
 - `devices add`/`set --password-stdin` reads the record password from stdin,
   so automation can write a credential without it showing in argv or `ps`
   (#582). One trailing `\n` or `\r\n` is stripped. Empty input is
-  `input/empty-stdin`, a terminal on stdin is `usage/stdin-is-tty`, and
+  `input/empty-stdin`, non-UTF-8 bytes or a leading byte-order mark are
+  `input/invalid-stdin`, a terminal on stdin is `usage/stdin-is-tty`, and
   combining it with `--password` is `usage/conflicting-flags`. Other `devices`
   subcommands refuse the flag.
 - `explain` offers a non-applied repair tip for pasted console prompts

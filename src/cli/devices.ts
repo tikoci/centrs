@@ -695,15 +695,25 @@ function resolveProfile(parsed: DevicesCliArgs): string | undefined {
 export interface PasswordStdinSource {
 	/** Whether stdin is a terminal (defaults to `process.stdin.isTTY`). */
 	isTty?: boolean;
-	/** Read all of stdin as text (defaults to `Bun.stdin.text()`). */
-	read?: () => Promise<string>;
+	/** Read all of stdin as raw bytes (defaults to `Bun.stdin.bytes()`). */
+	read?: () => Promise<Uint8Array>;
 }
+
+// `fatal` rejects malformed UTF-8 instead of substituting U+FFFD; `ignoreBOM`
+// keeps a leading U+FEFF visible so it can be refused rather than dropped.
+const stdinPasswordDecoder = new TextDecoder("utf-8", {
+	fatal: true,
+	ignoreBOM: true,
+});
 
 /**
  * Read a record password for `devices add`/`set --password-stdin` (#582).
  *
- * Exactly one trailing `\n` or `\r\n` is stripped so `echo pw | …` works;
- * any other whitespace is part of the password. A TTY stdin is refused rather
+ * Exactly one trailing `\n` or `\r\n` is stripped (at the byte level) so
+ * `echo pw | …` works; any other whitespace is part of the password. The rest
+ * must be valid UTF-8 without a leading byte-order mark: the CDB stores record
+ * strings as UTF-8 and drops a leading BOM when it reads them back, so either
+ * would silently store a credential different from the bytes piped in. A TTY stdin is refused rather
  * than prompted (interactive prompting is #160), and empty input is refused so
  * clearing a stored password stays the deliberate `--password ""`. The value is
  * never placed in an error summary, remediation, or context.
@@ -722,13 +732,15 @@ export async function readPasswordStdin(
 			context: { flag: "--password-stdin" },
 		});
 	}
-	const raw = await (source.read ?? (() => Bun.stdin.text()))();
-	const value = raw.endsWith("\r\n")
-		? raw.slice(0, -2)
-		: raw.endsWith("\n")
-			? raw.slice(0, -1)
-			: raw;
-	if (value === "") {
+	const raw = await (source.read ?? (() => Bun.stdin.bytes()))();
+	const end = raw.length;
+	const trimmed =
+		end >= 2 && raw[end - 2] === 0x0d && raw[end - 1] === 0x0a
+			? raw.subarray(0, end - 2)
+			: end >= 1 && raw[end - 1] === 0x0a
+				? raw.subarray(0, end - 1)
+				: raw;
+	if (trimmed.length === 0) {
 		throw new CentrsError({
 			code: "input/empty-stdin",
 			summary: "`--password-stdin` received an empty password on stdin.",
@@ -736,6 +748,23 @@ export async function readPasswordStdin(
 				'Pipe a non-empty password to stdin. To clear a stored password on purpose, use `centrs devices set <target> --password ""`.',
 			context: { flag: "--password-stdin" },
 		});
+	}
+	const invalid = (reason: string) =>
+		new CentrsError({
+			code: "input/invalid-stdin",
+			summary: `\`--password-stdin\` received ${reason}.`,
+			remediation:
+				"Pipe the password as UTF-8 text with no byte-order mark (e.g. `printf '%s' \"$PW\" | centrs devices set <target> --password-stdin`). Re-save a file written by an editor as UTF-8 without BOM.",
+			context: { flag: "--password-stdin", byteLength: trimmed.length },
+		});
+	let value: string;
+	try {
+		value = stdinPasswordDecoder.decode(trimmed);
+	} catch {
+		throw invalid("bytes that are not valid UTF-8");
+	}
+	if (value.startsWith("\uFEFF")) {
+		throw invalid("a leading byte-order mark (U+FEFF)");
 	}
 	return value;
 }
