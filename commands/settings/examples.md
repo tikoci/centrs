@@ -406,3 +406,20 @@ XDG_CONFIG_HOME=$SETTINGS_DIR centrs settings print --cdb-file /tmp/does-not-exi
 device configured" rather than `cdb/not-found`, since reporting settings
 should not require a CDB to exist at all). `data.defaultDevice = {
 configured: false }`.
+
+## Text output
+
+### 33. Get renders one entry in text mode, like print
+
+```bash
+XDG_CONFIG_HOME=$SETTINGS_DIR CENTRS_MAX_RESULTS=7 centrs settings get CENTRS_MAX_RESULTS
+XDG_CONFIG_HOME=$SETTINGS_DIR centrs settings get ssh-key
+```
+
+`ok: true`, exit 0. Text mode prints the single entry as one line in the
+same `key: value [source: kind (key)]` format `print` uses, under the
+canonical attr name whichever spelling was asked for: `max-results: 7
+[source: env (CENTRS_MAX_RESULTS)]`, then `ssh-key: (unset) [source:
+default (ssh-key)]` followed by its `Tips:` footer. `get`'s `data` is the bare
+entry, so the JSON envelope names the key in `meta.operation.attr`. A
+credential-shaped key renders `(redacted)`, never the secret.

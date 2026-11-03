@@ -64,6 +64,7 @@ async function runSettings(
 	args: readonly string[],
 	xdgConfigHome: string,
 	extraEnv: Record<string, string> = {},
+	options: { json?: boolean } = {},
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
 	const keys: Record<string, string> = {
 		XDG_CONFIG_HOME: xdgConfigHome,
@@ -75,7 +76,8 @@ async function runSettings(
 		process.env[key] = keys[key] as string;
 	}
 	try {
-		return await runWithCapture(["settings", ...args, "--json"]);
+		const formatArgs = options.json === false ? [] : ["--json"];
+		return await runWithCapture(["settings", ...args, ...formatArgs]);
 	} finally {
 		for (const key of Object.keys(keys)) {
 			if (previous[key] === undefined) {
@@ -555,5 +557,55 @@ describe("centrs settings __default__ boundary", () => {
 		expect(result.exitCode).toBe(0);
 		const body = JSON.parse(result.stdout);
 		expect(body.data.defaultDevice).toEqual({ configured: false });
+	});
+});
+
+describe("centrs settings text output", () => {
+	test("example 33: get renders one entry in text mode, like print", async () => {
+		const dir = await freshDir("get-text");
+		const text = { json: false };
+
+		const fromEnv = await runSettings(
+			["get", "CENTRS_MAX_RESULTS"],
+			dir,
+			{ CENTRS_MAX_RESULTS: "7" },
+			text,
+		);
+		expect(fromEnv.exitCode).toBe(0);
+		expect(fromEnv.stderr).toBe("");
+		expect(fromEnv.stdout).toBe(
+			"max-results: 7 [source: env (CENTRS_MAX_RESULTS)]",
+		);
+
+		const fromDefault = await runSettings(["get", "ssh-key"], dir, {}, text);
+		expect(fromDefault.exitCode).toBe(0);
+		expect(fromDefault.stderr).toBe("");
+		expect(fromDefault.stdout.split("\n")[0]).toBe(
+			"ssh-key: (unset) [source: default (ssh-key)]",
+		);
+
+		// Same line `print <attr>` renders for the same key.
+		const printed = await runSettings(
+			["print", "max-results"],
+			dir,
+			{ CENTRS_MAX_RESULTS: "7" },
+			text,
+		);
+		expect(printed.stdout).toBe(fromEnv.stdout);
+
+		const secret = await runSettings(
+			["get", "cdb-password"],
+			dir,
+			{ CENTRS_CDB_PASSWORD: "hunter2" },
+			text,
+		);
+		expect(secret.exitCode).toBe(0);
+		expect(secret.stdout).toBe(
+			"cdb-password: (redacted) [source: env (CENTRS_CDB_PASSWORD)]",
+		);
+		expect(secret.stdout).not.toContain("hunter2");
+
+		const json = await runSettings(["get", "CENTRS_MAX_RESULTS"], dir);
+		expect(JSON.parse(json.stdout).meta.operation.attr).toBe("max-results");
 	});
 });

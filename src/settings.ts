@@ -50,6 +50,11 @@ export type SettingsCommand = "print" | "get" | "set" | "reset";
 export interface SettingsOperationMeta {
 	command: SettingsCommand;
 	settingsFile: string;
+	/**
+	 * The canonical attr name `get` resolved (`ssh-key` for `CENTRS_SSH_KEY`).
+	 * `get`'s `data` is the bare entry, so this is the only place that names it.
+	 */
+	attr?: string;
 }
 
 export type SettingsEnvelope<Data> = CentrsEnvelope<
@@ -65,12 +70,16 @@ export type SettingsErrorEnvelope = CentrsErrorEnvelope<SettingsOperationMeta>;
 function settingsMeta(
 	command: SettingsCommand,
 	settingsFile: string,
+	attr?: string,
 ): EnvelopeMeta<SettingsOperationMeta> {
 	return {
 		target: {},
 		via: null,
 		settings: {},
-		operation: { command, settingsFile },
+		operation:
+			attr === undefined
+				? { command, settingsFile }
+				: { command, settingsFile, attr },
 	};
 }
 
@@ -832,7 +841,7 @@ export async function settingsGet(
 		data,
 		warnings: [],
 		tips,
-		meta: settingsMeta("get", settingsFile),
+		meta: settingsMeta("get", settingsFile, lookup.def.attr),
 	};
 }
 
@@ -1001,6 +1010,12 @@ function formatValue(value: SettingsValue | null): string {
 	return String(value);
 }
 
+/** One `key: value [source: kind (key)]` line, shared by `print` and `get`. */
+function formatEntryLine(key: string, entry: SettingsKeyEntry): string {
+	const sourceKey = entry.source.key ? ` (${entry.source.key})` : "";
+	return `${key}: ${formatValue(entry.value)} [source: ${entry.source.kind}${sourceKey}]`;
+}
+
 function renderSettingsSuccessText(
 	envelope: SettingsSuccessEnvelope<unknown>,
 ): string {
@@ -1008,16 +1023,16 @@ function renderSettingsSuccessText(
 	const command = envelope.meta.operation?.command;
 	const data = envelope.data as Record<string, unknown>;
 
-	if (command === "print" || command === "get") {
+	if (command === "get") {
+		// `get`'s data is one bare entry, not a key→entry map (#587).
+		const attr = envelope.meta.operation?.attr ?? "(unknown)";
+		lines.push(formatEntryLine(attr, data as unknown as SettingsKeyEntry));
+	} else if (command === "print") {
 		for (const [key, entry] of Object.entries(data)) {
 			if (key === "unrecognized" || key === "defaultDevice") {
 				continue;
 			}
-			const typed = entry as SettingsKeyEntry;
-			const sourceKey = typed.source.key ? ` (${typed.source.key})` : "";
-			lines.push(
-				`${key}: ${formatValue(typed.value)} [source: ${typed.source.kind}${sourceKey}]`,
-			);
+			lines.push(formatEntryLine(key, entry as SettingsKeyEntry));
 		}
 		const unrecognized = data["unrecognized"] as
 			| readonly SettingsUnrecognizedEntry[]

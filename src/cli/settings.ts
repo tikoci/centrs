@@ -249,12 +249,26 @@ export async function runSettingsCli(args: readonly string[]): Promise<number> {
 	} catch (error) {
 		const format = parsed?.format ?? inferSettingsFormat(args);
 		const settingsFile = defaultSettingsPath(envSnapshot ?? Bun.env);
-		const centrsError = asCentrsError(error, {
-			code: "input/invalid-command",
-			summary: error instanceof Error ? error.message : String(error),
-			remediation:
-				"Use `centrs settings --help` to inspect the supported subcommands and flags.",
-		});
+		const summary = error instanceof Error ? error.message : String(error);
+		// Only argument parsing reports the caller's input. Once the arguments
+		// parsed, an untyped throw (a core or renderer fault) is a centrs bug,
+		// not something `--help` can fix (#587).
+		const centrsError = asCentrsError(
+			error,
+			parsed === undefined
+				? {
+						code: "input/invalid-command",
+						summary,
+						remediation:
+							"Use `centrs settings --help` to inspect the supported subcommands and flags.",
+					}
+				: {
+						code: "internal/settings-failed",
+						summary,
+						remediation:
+							"This is a centrs bug; re-run with `--json` and report the command and the error.",
+					},
+		);
 		const envelope = buildSettingsErrorEnvelope(
 			parsed?.subcommand ?? "print",
 			settingsFile,
