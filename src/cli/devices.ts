@@ -120,6 +120,11 @@ export const devicesCommand: CliCommandMetadata = {
 			description: "`add`,`set` — first-class CDB password field.",
 		},
 		{
+			flag: "--password-stdin",
+			description:
+				"`add`,`set` — read the record password from stdin (one trailing newline stripped) so it never rides argv. Conflicts with `--password`.",
+		},
+		{
 			flag: "--profile",
 			valueName: "<name>",
 			description: "`add`,`set` — named WinBox profile (Workspace).",
@@ -234,6 +239,7 @@ interface DevicesCliArgs {
 	match?: string;
 	user?: string;
 	password?: string;
+	passwordStdin?: boolean;
 	profile?: string;
 	profileNone?: boolean;
 	profileOwn?: boolean;
@@ -306,6 +312,9 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 				break;
 			case "--password":
 				parsed.password = expectValue(args, ++index, arg);
+				break;
+			case "--password-stdin":
+				parsed.passwordStdin = true;
 				break;
 			case "--profile":
 				parsed.profile = expectValue(args, ++index, arg);
@@ -444,6 +453,25 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 			remediation:
 				"Store GPS with `centrs devices add`/`set` (e.g. `--gps <lat>,<lon>`); query it with `centrs devices list --where lat=…` / `--near`.",
 			context: { subcommand: sub, flag: geoFlag },
+		});
+	}
+
+	if (parsed.passwordStdin && sub !== "add" && sub !== "set") {
+		throw new CentrsError({
+			code: "input/invalid-command",
+			summary: `\`--password-stdin\` is not supported by \`centrs devices ${sub}\`.`,
+			remediation:
+				"`--password-stdin` writes a record password with `centrs devices add`/`set` (e.g. `printf '%s' \"$PW\" | centrs devices set <target> --password-stdin`).",
+			context: { subcommand: sub, flag: "--password-stdin" },
+		});
+	}
+	if (parsed.passwordStdin && parsed.password !== undefined) {
+		throw new CentrsError({
+			code: "usage/conflicting-flags",
+			summary: "`--password` and `--password-stdin` cannot be used together.",
+			remediation:
+				"Pass the record password one way: `--password-stdin` with the value on stdin (keeps it out of argv and `ps`), or `--password <secret>`.",
+			context: { subcommand: sub, flags: ["--password", "--password-stdin"] },
 		});
 	}
 
@@ -606,6 +634,55 @@ function resolveProfile(parsed: DevicesCliArgs): string | undefined {
 	return parsed.profile;
 }
 
+/** Seams for {@link readPasswordStdin}; production reads the real fd 0. */
+export interface PasswordStdinSource {
+	/** Whether stdin is a terminal (defaults to `process.stdin.isTTY`). */
+	isTty?: boolean;
+	/** Read all of stdin as text (defaults to `Bun.stdin.text()`). */
+	read?: () => Promise<string>;
+}
+
+/**
+ * Read a record password for `devices add`/`set --password-stdin` (#582).
+ *
+ * Exactly one trailing `\n` or `\r\n` is stripped so `echo pw | …` works;
+ * any other whitespace is part of the password. A TTY stdin is refused rather
+ * than prompted (interactive prompting is #160), and empty input is refused so
+ * clearing a stored password stays the deliberate `--password ""`. The value is
+ * never placed in an error summary, remediation, or context.
+ */
+export async function readPasswordStdin(
+	source: PasswordStdinSource = {},
+): Promise<string> {
+	const isTty = source.isTty ?? process.stdin.isTTY === true;
+	if (isTty) {
+		throw new CentrsError({
+			code: "usage/stdin-is-tty",
+			summary:
+				"`--password-stdin` reads the password from stdin, but stdin is a terminal.",
+			remediation:
+				"Pipe the password in (e.g. `printf '%s' \"$PW\" | centrs devices set <target> --password-stdin`) or redirect it from a file with `< pw.txt`. Interactive prompting is not supported.",
+			context: { flag: "--password-stdin" },
+		});
+	}
+	const raw = await (source.read ?? (() => Bun.stdin.text()))();
+	const value = raw.endsWith("\r\n")
+		? raw.slice(0, -2)
+		: raw.endsWith("\n")
+			? raw.slice(0, -1)
+			: raw;
+	if (value === "") {
+		throw new CentrsError({
+			code: "input/empty-stdin",
+			summary: "`--password-stdin` received an empty password on stdin.",
+			remediation:
+				'Pipe a non-empty password to stdin. To clear a stored password on purpose, use `centrs devices set <target> --password ""`.',
+			context: { flag: "--password-stdin" },
+		});
+	}
+	return value;
+}
+
 export async function runDevicesCli(args: readonly string[]): Promise<number> {
 	let parsed: DevicesCliArgs | undefined;
 	let envSnapshot: Record<string, string | undefined> | undefined;
@@ -617,6 +694,12 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 		}
 
 		envSnapshot = Bun.env;
+		// Read stdin before touching the CDB so a TTY or empty pipe fails fast
+		// without loading (or decrypting) anything. Only add/set get here with
+		// the flag; the parser refuses it on every other subcommand.
+		const password = parsed.passwordStdin
+			? await readPasswordStdin()
+			: parsed.password;
 		if (parsed.subcommand === "init") {
 			const envelope = await initCdb({
 				cdbFile: parsed.cdbFile,
@@ -677,7 +760,7 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 					target: parsed.target,
 					recordType,
 					user: parsed.user,
-					password: parsed.password,
+					password,
 					group: parsed.group,
 					profile: resolveProfile(parsed),
 					session: parsed.session,
@@ -708,7 +791,7 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 						...(parsed.kvArgs ?? []).map(parseKvArg),
 					],
 					user: parsed.user,
-					password: parsed.password,
+					password,
 					group: parsed.group,
 					profile: resolveProfile(parsed),
 					session: parsed.session,

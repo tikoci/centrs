@@ -280,6 +280,7 @@ Usage: centrs devices <init|list|show|groups|add|edit|set|remove> [args] [flags]
 | `--match` | &lt;user=…\|target=…\|record-type&gt; | `show` — disambiguate when `<router>` matches several records: `user=<name>`, `target=<addr>`, or a record-type token. |
 | `--user` | `<name>` | `add`,`set` — first-class CDB user field. |
 | `--password` | `<secret>` | `add`,`set` — first-class CDB password field. |
+| `--password-stdin` |  | `add`,`set` — read the record password from stdin (one trailing newline stripped) so it never rides argv. Conflicts with `--password`. |
 | `--profile` | `<name>` | `add`,`set` — named WinBox profile (Workspace). |
 | `--profile-none` |  | `add`,`set` — write the WinBox `<none>` profile sentinel. |
 | `--profile-own` |  | `add`,`set` — write the WinBox `<own>` profile sentinel. |

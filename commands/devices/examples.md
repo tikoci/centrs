@@ -665,3 +665,44 @@ nothing was written. As with `git init`, re-running is safe. An existing file th
 does not load fails with that load error (`cdb/parse-failed`,
 `cdb/password-required`) and is left untouched. A location that cannot be
 written fails with `cdb/create-failed`.
+
+## Record password on stdin
+
+`--password-stdin` (#582) reads the record password from fd 0 so it never rides
+argv. These run as subprocesses (`test/integration/cli-process.ts`), because
+only a child process can be handed real stdin bytes. The newline, empty and TTY
+rules are also unit-tested in `test/unit/devices-password-stdin.test.ts`.
+
+### 56. `add --password-stdin` stores the piped value
+
+```bash
+printf 'piped pw\n' | centrs devices add 192.0.2.77 --user robot --password-stdin --cdb-file $CDB --json
+```
+
+`ok: true`. The stored password is `piped pw`: one trailing newline is
+stripped, the inner space is kept.
+
+### 57. `set --password-stdin` strips a trailing CRLF
+
+```bash
+printf 'rotated\r\n' | centrs devices set 192.0.2.5 --password-stdin --cdb-file $CDB --json
+```
+
+`ok: true`. The stored password is `rotated`; group and comment are unchanged.
+
+### 58. Empty stdin is refused
+
+```bash
+printf '' | centrs devices set 192.0.2.5 --password-stdin --cdb-file $CDB --json
+```
+
+Errors with `input/empty-stdin` (also for a lone `\n`). The CDB is not written
+and no backup is made.
+
+### 59. `--password` with `--password-stdin` conflicts
+
+```bash
+echo stdin-secret | centrs devices set 192.0.2.5 --password argv-secret --password-stdin --cdb-file $CDB --json
+```
+
+Errors with `usage/conflicting-flags`. Neither value appears in the error.

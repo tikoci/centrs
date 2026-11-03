@@ -17,6 +17,12 @@ part of this section.
 
 ### Added
 
+- `devices add`/`set --password-stdin` reads the record password from stdin,
+  so automation can write a credential without it showing in argv or `ps`
+  (#582). One trailing `\n` or `\r\n` is stripped. Empty input is
+  `input/empty-stdin`, a terminal on stdin is `usage/stdin-is-tty`, and
+  combining it with `--password` is `usage/conflicting-flags`. Other `devices`
+  subcommands refuse the flag.
 - `--match user=<name>|target=<addr>|<record-type>` on `retrieve`, `execute`,
   `api`, `transfer`, `terminal` and `btest client` picks one of several CDB
   records saved for the same `<router>` (#583), as `devices show --match`
