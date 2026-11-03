@@ -10,13 +10,17 @@ Each stable version has one section. Work in progress goes under
 `## X.Y.Z — next`, which is what `@next` installs (`X.Y.Z-next.N`); the stable
 release dates that heading. A `-next.N` build has no section of its own.
 
-## 0.1.9 — next
+## 0.1.9 — 2026-11-03
 
-In progress on npm tag `next`. The `0.1.9-next.0` cut (2026-10-13) carried
-part of this section.
+The `0.1.9-next.0` preview cut (2026-10-13) carried part of this section.
 
 ### Added
 
+- `explain` publishes a syntactic statement tree (#497, #522): statement
+  `id`/`parent`, substitution `owner`, and block ownership/index links let
+  consumers locate nested source without inferring ancestry from spans.
+  Stored script and callback bodies remain opaque; ownership does not claim
+  execution or lexical inheritance.
 - `devices add`/`set --password-stdin` reads the record password from stdin,
   so automation can write a credential without it showing in argv or `ps`
   (#582). One trailing `\n` or `\r\n` is stripped. Empty input is
@@ -124,6 +128,9 @@ part of this section.
 
 ### Changed
 
+- Bun 1.4.4 is the minimum supported version (`engines.bun: >=1.4.4 <2`, was
+  `>=1.3.11 <2`). The CI/release/Pages `packageManager` pin, Docker image and
+  `@types/bun` now use 1.4.4 together (0.1.8 shipped on 1.3.14; #438).
 - **Breaking:** `devices show`, `add` and `set` no longer print the record password
   (#551). Text and JSON carry `passwordSet: boolean` instead, and
   `--show-password` on those three subcommands opts back in; other subcommands
@@ -221,9 +228,7 @@ part of this section.
   `/cmr/upgrade/trigger`, `/cmr/upgrade/job/run-next`) are pinned as writes in
   every spelling, over `execute`, `api` and MCP `mcp=ro`. On 7.26beta1 a
   controller login with only `read` + `api` can run them (#456).
-- CI, release, Pages and the Docker image run Bun 1.4.2 (was 1.3.14), the
-  version local development already used; `@types/bun` moves with it (#438).
-  `engines.bun` stays `>=1.3.11 <2`. The `typescript` peer stays `^6.0.3`:
+- The `typescript` peer stays `^6.0.3`:
   the source passes `tsc --noEmit` under TypeScript 7.0.2, but typedoc 0.28 (the
   API reference build) supports TypeScript up to 6.0.x only.
 - QA records a CHR leg in `qa-history` only when its test step passed or
@@ -241,6 +246,24 @@ part of this section.
 
 ### Fixed
 
+- Help now lists SSH for `execute --via`, the offline analyzer before device
+  validation for `execute` and `api /execute`, and `devices --match` on
+  `show`/`set`/`remove`. `devices --group` names `add`/`set`, and
+  `devices init --help` / `encrypt --help` show only the flags they accept.
+  The generated CLI reference includes both file-command help sections.
+- Offline `explain` withdraws unsupported readings of unlisted bare paths
+  and space-for-`=` arguments (#211, #350), distinguishes command operands
+  from menu blocks (#496), and correctly reads `where` arrays, column-0
+  array comments and nested relative submenu blocks (#502, #503, #351).
+- Offline `explain` rejects CHR-grounded group, operator, escape, variable,
+  name and glued-token faults (#505, #511, #506, #518), including unquoted
+  `?`, backticks, second argument `=` and non-ASCII bytes (#358, #371).
+  Quoted values and accepted controls retain their supported readings.
+  A stray top-level `}` or `]` warns `discarded-close` and marks the
+  unread tail; the execution gate refuses it because RouterOS would discard
+  part of the submitted script (#504).
+- `explain` block spans use analyzed UTF-8 byte offsets, matching statements
+  and tokens even after Unicode text (#523, #524).
 - `settings get <attr>` works in text mode (#587). It crashed reading
   `typed.source` because the text renderer treated `get`'s single entry as
   `print`'s key-to-entry map; `--json` was unaffected. It now prints one
@@ -368,6 +391,16 @@ part of this section.
 
 ### Maintenance
 
+- QA allows 50 minutes per CHR leg so the full integration suite can finish
+  (#611).
+- The explain corpus uses schema 5 and one reader, with pinned channel
+  sessions, a regenerated highlight slice and a wiresage conformance gate
+  (#498, #514, #515). Bounded-execution tests use deterministic structural
+  work guards instead of depth-cap timing (#521).
+- The explain contract records proposed topic checks and related live reads
+  (#493), the CHR-grounded context submission matrix (#574), and import
+  verbose dry-run behavior (#520). These are design/grounding evidence;
+  `--context`, topic checks and contextual reads are not shipped CLI options.
 - Releases are one dispatch from `main` (#484, #485). `@next` publishes
   `X.Y.Z-next.<run_number>` with no commit, PR or tag, and reuses main's QA
   run on the commit instead of sweeping every channel again. `@latest` creates

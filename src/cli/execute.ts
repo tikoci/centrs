@@ -58,11 +58,11 @@ export const executeCommand: CliCommandMetadata = {
 	usage:
 		"centrs execute <target> <command> [flags] | centrs execute <target...> -- <command> [flags] | centrs execute --host <host|url> [--] <command> [flags] | centrs execute --group <name> <command> [flags]",
 	summary:
-		"Run a RouterOS read or write command via native API, REST, or mac-telnet.",
+		"Run a RouterOS read or write command via native API, REST, SSH, or mac-telnet.",
 	options: [
 		{
 			flag: "--via",
-			valueName: "<native-api|rest-api|mac-telnet>",
+			valueName: "<native-api|rest-api|ssh|mac-telnet>",
 			description:
 				"Pin the protocol selector; no silent downgrade when set. A bare MAC target defaults to mac-telnet.",
 		},
@@ -141,7 +141,7 @@ export const executeCommand: CliCommandMetadata = {
 		{
 			flag: "--validate / --no-validate",
 			description:
-				"Run RouterOS :parse and /console/inspect validation before execution (default true; `--validate=false` also accepted).",
+				"Run offline analysis, then RouterOS :parse, plus `/console/inspect` for structured commands over native API/REST (default true; `--validate=false` disables both stages).",
 		},
 		{
 			flag: "--yes",

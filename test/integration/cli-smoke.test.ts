@@ -54,6 +54,41 @@ describe("CLI smoke (real subprocess, no network)", () => {
 		expect(res.stdoutText.toLowerCase()).toContain("devices");
 	});
 
+	test("devices file-command help is scoped without opening a CDB", async () => {
+		for (const subcommand of ["init", "encrypt"]) {
+			const res = await runCliProcess({
+				args: ["devices", subcommand, "--help"],
+				env: { CENTRS_CDB_FILE: "missing/help-only.cdb" },
+			});
+			expect(res.exitCode).toBe(0);
+			expect(res.stderrText).toBe("");
+			expect(res.stdoutText).toContain(
+				`Usage: centrs devices ${subcommand} [flags]`,
+			);
+			expect(res.stdoutText).toContain("--cdb-file");
+			expect(res.stdoutText).toContain("--cdb-password");
+			expect(res.stdoutText).toContain("--format");
+			expect(res.stdoutText).toContain("--json");
+			expect(res.stdoutText).toContain(
+				subcommand === "init" ? "--encrypt" : "--no-backup",
+			);
+			for (const flag of [
+				"--user",
+				"--password",
+				"--password-stdin",
+				"--show-password",
+				"--group",
+				"--match",
+				"--via",
+				"--where",
+				"--gps",
+				subcommand === "init" ? "--no-backup" : "--encrypt",
+			]) {
+				expect(res.stdoutText).not.toContain(flag);
+			}
+		}
+	});
+
 	test("an unknown command is the invalid-command error", async () => {
 		const res = await runCliProcess({ args: ["definitely-not-a-command"] });
 		expect(res.exitCode).toBe(1);

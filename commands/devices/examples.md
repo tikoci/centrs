@@ -815,3 +815,19 @@ printf '\357\273\277pw\n' | centrs devices set 192.0.2.5 --password-stdin --cdb-
 Both error with `input/invalid-stdin`: the first is not valid UTF-8, the second
 starts with a byte-order mark. The bytes are not echoed, the CDB is not written
 and no backup is made.
+
+## File-command help
+
+### 68. `init` and `encrypt` show only their accepted flags
+
+```bash
+centrs devices init --help
+centrs devices encrypt --help
+```
+
+Both exit 0 without reading or writing a CDB. Each shows its own usage, the
+CDB path/password and output flags, plus `--encrypt` for `init` or
+`--no-backup` for `encrypt`. Record and selection flags are absent, including
+`--user`, `--password-stdin`, `--show-password`, `--group` and `--match`.
+Test: `devices file-command help is scoped without opening a CDB` in
+`test/integration/cli-smoke.test.ts` (network-free).

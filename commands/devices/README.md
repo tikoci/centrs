@@ -310,32 +310,27 @@ is no group-definition record. A group is the set of all entries whose
 `group` value matches by exact, case-sensitive string compare. An entry with
 `group=""` belongs to no group.
 
-`--group <G>` on any command resolves to the membership set and fans out.
+`--group <G>` on a router-facing fan-out command resolves to the membership set.
 `discover --save` writes MNDP records with `group=discovered`
 unless the caller supplies another group.
 
 ### Promotion (discovered → managed)
 
 There is no `promote` verb. Moving one device out of `group=discovered` and
-giving it credentials is `devices set <t> --new-group prod --user … --password
-…`. A **bulk** promotion (a whole discovered class at once) is the same call with
-a target selector picking the records:
+giving it credentials uses `set` on that target:
 
 ```bash
-devices set --group discovered --new-group prod \
-  --user admin --password … --force
+centrs devices set <target> --group prod --user admin --password …
 ```
 
-`--group` (and `--where`/`--all`/positionals) always **selects** which records to
-modify; `--new-group` always **writes** the group field. The two are distinct
-flags, so there is no select-vs-set overload — this resolves the former wrinkle.
-(Code follow-up: the CLI still overloads `--group` as the `add`/`set` field
-setter today; `examples.md` reflects that current flag until the `--new-group`
-split lands.)
+On `devices add`/`set`, `--group` writes the first-class group field; on
+`devices list` it filters. Bulk `set`/`remove` selection and a separate
+`--new-group` flag remain designed, not implemented. Both mutations currently
+require one target, with `--match` to disambiguate saved records.
 
 ## Fanout (multi-target invocations)
 
-Any command may receive multiple positional targets, one or more `--group`
+Router-facing fan-out commands may receive multiple positional targets, one or more `--group`
 flags, `--all`, `--default`, `--where <attr>=<value>` (device-class), and/or the
 geo selectors `--near <lat>,<lon>,<radius>` / `--bbox <south>,<west>,<north>,<east>`
 (see "Geo query" above) — see `docs/CONSTITUTION.md` (Target selection grammar).
@@ -365,24 +360,24 @@ centrs devices encrypt [--no-backup]    # explicitly encrypt an existing open CD
 centrs devices list [--group G] [--where attr=value]
                     [--near lat,lon,radius] [--bbox south,west,north,east]
                     [--format json|yaml|text]
-centrs devices show <target> [--explain] [--via <protocol>] [--match <type>]
+centrs devices show <target> [--explain] [--via <protocol>] [--match <selector>]
                     [--show-password]
 centrs devices groups [--members]
-centrs devices discover [--timeout 15s] [--group G]      # = discover --save (save implied)
-centrs devices add <target> [--user U] [--password P|--password-stdin] [--new-group G]
+centrs devices discover [--timeout 15s] [--group G]      # designed, not implemented; use `centrs discover --save`
+centrs devices add <target> [--user U] [--password P|--password-stdin] [--group G]
                              [--profile P|--profile-none|--profile-own]
                              [--session S] [--comment "text k=v"]
                              [--record-type ipAdmin|ipUser|macTarget|...]
                              [--gps lat,lon[,altitude[,altitude-type]]]
                              [--lat D] [--lon D] [--altitude M] [--altitude-type MSL|AGL]
                              [--show-password]
-centrs devices set  <selector…> [--user U] [--password P|--password-stdin] [--new-group G]
+centrs devices set  <target> [--match <selector>] [--user U] [--password P|--password-stdin] [--group G]
                              [--profile P|--profile-none|--profile-own]
                              [--session S] [k=v ...]
                              [--gps lat,lon[,altitude[,altitude-type]]]
                              [--lat D] [--lon D] [--altitude M] [--altitude-type MSL|AGL]
                              [--show-password]
-centrs devices remove <selector…>
+centrs devices remove <target> [--match <selector>]
 centrs devices edit <target>            # future: clack/TUI wizard
 ```
 
@@ -426,18 +421,17 @@ is no `update`.
   existing `(target, user)` it errors `cdb/already-exists` unless `--force`
   overwrites; the same `target` under a *different* `--user` is a new record,
   not a collision.
-- `set` modifies existing record(s). First-class fields change via flags
-  (`--user`, `--password`, `--new-group`, `--profile[-none|-own]`, `--session`);
-  comment lookup/override keys change via `k=v` positionals. **Which** records to
-  modify is the target selector — positionals, `--group`, `--where`, `--all`
-  (constitution: target selection) — so `--group` here *selects* and
-  `--new-group` *writes* the group field (no overload). Against a missing target
-  it errors `cdb/not-found-target`; a multi-record `set` needs `--force`. Writing
+- `set` modifies one matched record. First-class fields change via flags
+  (`--user`, `--password`, `--group`, `--profile[-none|-own]`, `--session`);
+  comment lookup/override keys change via `k=v` positionals. The positional
+  target and optional `--match` select the record. Against a missing target
+  it errors `cdb/not-found-target`. Writing
   a first-class field name as a `k=v` positional (e.g. `user=x`) stays refused
   with `cdb/reserved-key` — the flag is the only path. Unknown comment keys warn
   (`cdb/unknown-option`), or error under `--strict`.
-- `remove` (aliases `rm`, `delete`) removes a single entry. Group-wide deletes
-  (`--group G`) require `--force` (writes are large).
+- `remove` (aliases `rm`, `delete`) removes one matched entry. The positional
+  target and optional `--match` select the record; group-wide deletion is not
+  implemented.
 
 ### Record password channels
 
@@ -563,7 +557,9 @@ be recovered.
 `init` and `encrypt` act on the CDB file, not on records: they accept only
 `--cdb-file`, `--cdb-password`, `--format`/`--json`, plus `--encrypt` (`init`)
 or `--no-backup` (`encrypt`). Any other flag is `input/invalid-command`
-instead of being silently ignored.
+instead of being silently ignored. `devices init --help` and
+`devices encrypt --help` show only those accepted flags; the same metadata
+generates their sections in [`docs/CLI.md`](../../docs/CLI.md).
 
 Close WinBox and other CDB writers before conversion. If they share this path,
 they must reopen it using the CDB password; a stale writer can overwrite the

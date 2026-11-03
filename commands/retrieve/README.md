@@ -583,5 +583,5 @@ reach green is forbidden. See `docs/CONSTITUTION.md` for the full done rule.
 - **ssh / mac-telnet / romon / winbox-terminal** — execute surfaces, not
   retrieve surfaces.
 - **tips** — when a `<router>` fails to resolve against an empty CDB, retrieve
-  emits the same `tip/no-devices` advice as `devices list`, steering toward
-  `centrs devices discover` and `centrs settings`.
+  emits `tip/no-devices`, steering toward `centrs discover --save` and
+  `centrs devices add`.

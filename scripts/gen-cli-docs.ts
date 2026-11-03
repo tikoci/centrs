@@ -64,14 +64,17 @@ function tableCell(text: string): string {
 		.join("`");
 }
 
-function renderCommand(command: (typeof cliCommands)[number]): string {
+function renderCommand(
+	command: (typeof cliCommands)[number],
+	parent?: string,
+): string {
 	const rows = command.options.map((option) => {
 		const flag = tableCell(`\`${option.flag}\``);
 		const value = option.valueName ? tableCell(option.valueName) : "";
 		return `| ${flag} | ${value} | ${tableCell(option.description)} |`;
 	});
 	return [
-		`## ${command.name}`,
+		parent ? `### ${parent} ${command.name}` : `## ${command.name}`,
 		"",
 		command.summary,
 		"",
@@ -82,6 +85,10 @@ function renderCommand(command: (typeof cliCommands)[number]): string {
 		"| Flag | Value | Description |",
 		"| ---- | ----- | ----------- |",
 		...rows,
+		...(command.subcommands ?? []).flatMap((subcommand) => [
+			"",
+			renderCommand(subcommand, command.name),
+		]),
 	].join("\n");
 }
 
@@ -105,7 +112,7 @@ function renderReference(): string {
 		"| ------- | ------- |",
 		...index,
 		"",
-		cliCommands.map(renderCommand).join("\n\n"),
+		cliCommands.map((command) => renderCommand(command)).join("\n\n"),
 		"",
 	].join("\n");
 }

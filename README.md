@@ -4,21 +4,21 @@
 CLI (with an MCP server; TUI and HTTP proxy frontends planned) for talking to
 MikroTik RouterOS devices through a regularized, validated interface.
 
-Preview builds are published on npm. To try the current offline analyzer without
-installing centrs or connecting to a router:
+Stable releases are published on npm under `latest`. To try the offline
+analyzer without installing centrs or connecting to a router:
 
 ```bash
-bunx @tikoci/centrs@next explain '/ip/address print' --json
+bunx @tikoci/centrs@latest explain '/ip/address print' --json
 ```
 
-Use `bunx @tikoci/centrs@next --help` to inspect the full preview CLI, and
-`bunx @tikoci/centrs@next --version` (`-V`; `--json` for an envelope) to print
+Use `bunx @tikoci/centrs@latest --help` to inspect the release CLI, and
+`bunx @tikoci/centrs@latest --version` (`-V`; `--json` for an envelope) to print
 the exact version for scripts and field reports. The dist-tag follows standard
-SemVer semantics: a plain version (`0.1.8`) publishes to `latest` and carries
-`next` forward with it, while a `next` build (`0.1.9-next.23`) publishes to
+SemVer semantics: a plain version (`0.1.9`) publishes to `latest` and carries
+`next` forward with it, while a `next` build (`0.1.10-next.23`) publishes to
 `next` only and never moves `latest`. A `next` build is described by the
-`## 0.1.9 — next` section of [`CHANGELOG.md`](CHANGELOG.md). So `@next` is the
-leading edge and can equal `@latest` between cuts —
+next version's `## X.Y.Z — next` section of [`CHANGELOG.md`](CHANGELOG.md).
+So `@next` is the leading edge and can equal `@latest` between cuts —
 `npm view @tikoci/centrs dist-tags` is the authority.
 
 The full flag reference for every command is generated from the CLI metadata
@@ -63,7 +63,7 @@ product; without them this would just be a worse `curl`.
 | Command    | Purpose |
 | ---------- | ------- |
 | `retrieve` | Read RouterOS state over REST/native API. `--follow` keeps a menu's rows current over native API (snapshot, then a line per change; NDJSON); `--sample <interval>` re-reads it on a timer for counters; `--query` filters on the router with the `print where` grammar; `--wait` retries until a read succeeds (or an optional `--until` condition holds), up to a deadline. SNMP OID/MIB reads are planned. |
-| `execute`  | Run RouterOS CLI-shaped read/write commands (add/set/remove) over native API/REST/L2 surfaces. |
+| `execute`  | Run RouterOS CLI-shaped read/write commands (add/set/remove) over native API, REST, SSH or MAC-Telnet. |
 | `api`      | Structured RouterOS API passthrough (gh-api style): one command per operation, structured in/out, can write, over REST or native API. Follow changes with `api … <menu>/listen`; `--stream` streams any command's replies (native API; NDJSON). |
 | `terminal` | Open an interactive console, primarily SSH or MAC-Telnet. |
 | `transfer` | Upload, download and manage device files over REST/native API or SFTP; `upload` and `download` are shortcuts. |
@@ -225,8 +225,8 @@ GitHub issues it links are the roadmap.
 
 Requirements:
 
-- Bun 1.3.11 or newer (CI runs the `packageManager` version in `package.json`;
-  Bun 2.x not yet validated).
+- Bun 1.4.4 or newer within 1.x (`engines.bun`: `>=1.4.4 <2`; CI runs the
+  `packageManager` version in `package.json`; Bun 2.x not yet validated).
 - Git.
 - `uv`, only for `bun run lint:actions` (zizmor workflow audit).
 - For integration tests: QEMU plus `@tikoci/quickchr` (handles CHR image
