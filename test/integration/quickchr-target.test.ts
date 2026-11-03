@@ -255,7 +255,7 @@ describeFast("--quickchr targets against CHR (#134)", () => {
 			// transfer Q2: the sftp gate. Either the descriptor advertises a usable
 			// batch-capable SSH auth mode and the list actually runs over sftp
 			// (never a silent fallback to REST, never a dropped key), or the gate
-			// fails typed (quickchr/unsupported-via, exit 1) — never a prompt.
+			// fails typed (quickchr/ssh-auth-unavailable, exit 1) — never a prompt.
 			const tq2 = await run([
 				"transfer",
 				"--quickchr",
@@ -283,7 +283,7 @@ describeFast("--quickchr targets against CHR (#134)", () => {
 				expect(tq2.exit).toBe(1);
 				const tq2Env = parse(tq2.err);
 				expect(tq2Env.ok).toBe(false);
-				expect(tq2Env.error?.code).toBe("quickchr/unsupported-via");
+				expect(tq2Env.error?.code).toBe("quickchr/ssh-auth-unavailable");
 			}
 
 			// terminal TQ1 (#610): one `--quickchr` opens an ssh console. The

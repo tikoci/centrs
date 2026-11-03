@@ -568,7 +568,7 @@ list succeeds over sftp: `meta.via=ssh` (the protocol id, as in every sftp
 transfer), `meta.target.source.kind=provider`,
 `meta.settings.insecure` provider-sourced, and the key path (when one is
 handed over) carried as a provider-sourced `sshKey`. Otherwise the envelope is
-`ok: false` with `error.code=quickchr/unsupported-via` and exit code 1 — a
+`ok: false` with `error.code=quickchr/ssh-auth-unavailable` and exit code 1 — a
 typed gate, **never** a password prompt and never a silent fallback to REST.
 
 ## CDB record `via=` (#591)

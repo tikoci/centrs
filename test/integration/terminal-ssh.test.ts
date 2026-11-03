@@ -7,7 +7,8 @@
  * drives the **real `centrs terminal` binary** through the subprocess harness
  * (`./cli-process.ts`): the piped stdin stands in for typed keystrokes, and the
  * device's response is read off stdout. Maps `commands/terminal/examples.md`
- * (TS1–TS2). Grounded on CHR 7.23.1; REST is the source of truth.
+ * (TS1–TS2, TS5) and the no-key quickchr path (TQ3). Grounded on CHR 7.23.1;
+ * REST is the source of truth.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -153,6 +154,71 @@ describeFast("terminal over ssh (host ssh relay)", () => {
 				`terminal --host exit ${ts5.exitCode}; stderr=${ts5.stderrText}`,
 			).toContain(`name: ${identity}`);
 
+			// TQ3 (#610) — this harness boots WITHOUT quickchr secure login, so the
+			// descriptor vouches for no SSH key: `terminal --quickchr` fails typed
+			// (never a password prompt), and the remediation's bring-your-own-key
+			// path — install a key over a non-SSH service, dial the endpoint from
+			// the error context — opens the console with no prompt either.
+			const tq3 = await runCliProcess({
+				args: ["terminal", "--quickchr", chr.name, "--json"],
+				env: { CENTRS_SKIP_ENV_FILE: "1" },
+			});
+			expect(tq3.exitCode).toBe(1);
+			expect(tq3.stdoutText).toBe("");
+			const tq3Error = JSON.parse(tq3.stderrText).error as {
+				code: string;
+				remediation: string;
+				context: { host: string; port: number; username: string };
+			};
+			expect(tq3Error.code).toBe("quickchr/ssh-auth-unavailable");
+			expect(tq3Error.remediation).toContain("--secure-login");
+			expect(tq3Error.context.port).toBe(chr.sshPort);
+			const ownKey = join(tmp, "own");
+			await keygen(ownKey);
+			const ownPub = (await Bun.file(`${ownKey}.pub`).text()).trim();
+			const install = await runCliProcess({
+				args: [
+					"execute",
+					"--quickchr",
+					chr.name,
+					`/user/ssh-keys/add user=${tq3Error.context.username} key="${ownPub}"`,
+					"--yes",
+					"--json",
+				],
+				env: { CENTRS_SKIP_ENV_FILE: "1" },
+			});
+			expect(
+				install.exitCode,
+				`ssh-keys/add stderr=${install.stderrText}`,
+			).toBe(0);
+			const tq3Direct = await runCliProcess({
+				args: [
+					"terminal",
+					"--host",
+					tq3Error.context.host,
+					"--port",
+					String(tq3Error.context.port),
+					"--username",
+					tq3Error.context.username,
+					"--ssh-key",
+					ownKey,
+					"--insecure",
+				],
+				stdin: "/system/identity/print\n/quit\n",
+				env: {
+					CENTRS_SKIP_ENV_FILE: "1",
+					// Prove no prompt is involved: with no agent and no askpass, a
+					// password fallback would fail rather than succeed.
+					SSH_AUTH_SOCK: "",
+					SSH_ASKPASS_REQUIRE: "never",
+				},
+				killAfterMs: 60_000,
+			});
+			expect(
+				collapsePrintWrapping(tq3Direct.stdoutText),
+				`terminal own-key exit ${tq3Direct.exitCode}; stderr=${tq3Direct.stderrText}`,
+			).toContain(`name: ${identity}`);
+
 			const resource = asRecord(await chr.rest("/system/resource"));
 			await recordIntegrationEvidence({
 				suite: "terminal over ssh (host ssh relay)",
@@ -163,7 +229,7 @@ describeFast("terminal over ssh (host ssh relay)", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: [1, 2, "TS5"],
+				exampleIds: [1, 2, "TS5", "TQ3"],
 			});
 		} finally {
 			await chr.destroy();

@@ -171,7 +171,7 @@ describe("resolveTerminalRequest --quickchr (#610)", () => {
 		expect(looked).toBe(false);
 	});
 
-	test("an SSH endpoint without a verified key is quickchr/unsupported-via (no ambient agent login)", async () => {
+	test("an SSH endpoint without a verified key is quickchr/ssh-auth-unavailable (no ambient agent login)", async () => {
 		await expect(
 			resolveTerminalRequest({ quickchr: "lab" }, noEnv, {
 				resolveQuickchr: quickchrResolution({
@@ -187,7 +187,7 @@ describe("resolveTerminalRequest --quickchr (#610)", () => {
 					},
 				}),
 			}),
-		).rejects.toMatchObject({ code: "quickchr/unsupported-via" });
+		).rejects.toMatchObject({ code: "quickchr/ssh-auth-unavailable" });
 	});
 
 	test("the no-key remediation names terminal routes, not rest-api/native-api", async () => {
@@ -211,13 +211,23 @@ describe("resolveTerminalRequest --quickchr (#610)", () => {
 			(caught: unknown) => caught as CentrsError,
 		);
 		expect(error).toBeInstanceOf(CentrsError);
-		expect(error.code).toBe("quickchr/unsupported-via");
-		expect(error.remediation).toContain("quickchr start lab --secure-login");
+		expect(error.code).toBe("quickchr/ssh-auth-unavailable");
+		expect(error.remediation).toContain("--secure-login");
 		expect(error.remediation).toContain(
-			"centrs terminal --host 127.0.0.1 --port 9122 --username admin",
+			`centrs execute --quickchr lab '/user/ssh-keys/add user=admin key="<public key>"' --yes`,
 		);
+		expect(error.remediation).toContain(
+			"centrs terminal --host 127.0.0.1 --port 9122 --username admin --ssh-key <private key> --insecure",
+		);
+		// No terminal-incapable alternative, and no password-prompt route.
 		expect(error.remediation).not.toContain("rest-api");
-		expect(error.context).toMatchObject({ command: "terminal", via: "ssh" });
+		expect(error.remediation).not.toContain("prompt");
+		expect(error.context).toMatchObject({
+			command: "terminal",
+			via: "ssh",
+			port: 9122,
+			username: "admin",
+		});
 	});
 
 	test("the --via mac-telnet remediation points back at ssh", async () => {

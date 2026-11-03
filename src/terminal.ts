@@ -325,7 +325,8 @@ async function resolveQuickchrTerminal(
  * suggests the machine's other live services (`--via rest-api` / `native-api`),
  * none of which has a terminal capability, so terminal names what does work:
  * the default ssh, a machine provisioned with a managed key, or a direct
- * `--host` console where the host `ssh` may prompt on the TTY.
+ * `--host` console with the caller's own key — never a password prompt, which
+ * an agent cannot answer.
  */
 function terminalQuickchrConnection(
 	resolution: QuickchrResolution,
@@ -336,17 +337,22 @@ function terminalQuickchrConnection(
 	} catch (error) {
 		if (
 			!(error instanceof CentrsError) ||
-			error.code !== "quickchr/unsupported-via"
+			(error.code !== "quickchr/unsupported-via" &&
+				error.code !== "quickchr/ssh-auth-unavailable")
 		) {
 			throw error;
 		}
 		const machine = resolution.name;
-		const ssh = resolution.services.ssh;
 		let remediation: string;
-		if (via !== "ssh") {
+		if (error.code === "quickchr/ssh-auth-unavailable") {
+			const { host, port, username } = (error.context ?? {}) as {
+				host?: string;
+				port?: number;
+				username?: string;
+			};
+			remediation = `quickchr provisions a verified key only on a machine's first boot with \`--secure-login\` (\`quickchr add/start --secure-login\`); recreate the machine that way. Or install your own key (\`centrs execute --quickchr ${machine} '/user/ssh-keys/add user=${username} key="<public key>"' --yes\`) and open the console directly: \`centrs terminal --host ${host} --port ${port} --username ${username} --ssh-key <private key> --insecure\`.`;
+		} else if (via !== "ssh") {
 			remediation = `quickchr forwards no ${via} service; drop \`--via ${via}\` so the terminal uses the machine's ssh endpoint.`;
-		} else if (ssh?.available) {
-			remediation = `Start the machine with a managed SSH key (\`quickchr start ${machine} --secure-login\` on its first boot provisions and verifies one), or open the console directly with \`centrs terminal --host ${ssh.host} --port ${ssh.port} --username ${ssh.auth.username}\`, where the host \`ssh\` may prompt for the password.`;
 		} else {
 			remediation = `The machine reports no live ssh service; check it with \`quickchr inspect ${machine}\`.`;
 		}

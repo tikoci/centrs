@@ -456,17 +456,58 @@ function unsupportedVia(
 }
 
 /**
+ * The machine forwards SSH, but quickchr vouches for no key centrs can hand to
+ * a batch client (#610). Distinct from {@link unsupportedVia} so an agent can
+ * branch on "this machine needs a managed key" without parsing prose: the fix
+ * is on the machine (quickchr's first-boot `--secure-login`), not the `--via`.
+ * The context carries the endpoint facts an agent needs to build a direct
+ * `--host` call with its own key — never a password, which is not read here.
+ */
+function sshAuthUnavailable(
+	resolution: QuickchrResolution,
+	endpoint: { host: string; port: number },
+	auth: SshEndpointAuth | undefined,
+): CentrsError {
+	const machine = resolution.name;
+	const username = auth?.username ?? "admin";
+	const otherServices = (
+		Object.entries(resolution.services) as [
+			RouterOsProtocol,
+			AnyServiceEndpoint,
+		][]
+	)
+		.filter(([id, service]) => id !== "ssh" && service.available)
+		.map(([id]) => id);
+	return new CentrsError({
+		code: "quickchr/ssh-auth-unavailable",
+		summary: `quickchr machine "${machine}" forwards SSH but has no verified SSH key, and centrs never password-prompts for a provider target.`,
+		remediation: `quickchr provisions a verified key only on a machine's first boot with \`--secure-login\` (\`quickchr add/start --secure-login\`, or \`QuickCHR.start({ secureLogin: true })\`); recreate the machine that way. Or install your own key (\`centrs execute --quickchr ${machine} '/user/ssh-keys/add user=${username} key="<public key>"' --yes\`) and target the endpoint directly: \`--host ${endpoint.host} --port ${endpoint.port} --username ${username} --ssh-key <private key> --insecure\`.${otherServices.length > 0 ? ` Commands that do not need SSH can use \`--via ${otherServices.join("` / `--via ")}\`.` : ""}`,
+		context: {
+			machine,
+			via: "ssh",
+			host: endpoint.host,
+			port: endpoint.port,
+			username,
+			modes: auth?.modes ?? [],
+			batchModes: auth?.batchModes ?? [],
+			availableServices: otherServices,
+		},
+	});
+}
+
+/**
  * Materialize the connection facts for one chosen `--via` from a resolved
  * quickchr machine — the named-live-provider consumption seam (#134 Phase 4).
  * Substitutes for `resolveTarget`/`resolveAuth`: host/port/TLS/auth come ONLY
  * from the descriptor's per-service endpoint (never the CDB, env, or the
  * `__default__` ladder), stamped with `provider` provenance.
  *
- * Failure modes are all `quickchr/unsupported-via`, never a silent fallback:
- * a `--via` the descriptor does not forward (quickchr v1 forwards
- * `rest-api`/`native-api`/`ssh` only), an endpoint quickchr marked
- * unavailable, or an SSH endpoint with no batch-capable (non-interactive)
- * auth — centrs must not password-prompt mid-fan-out.
+ * Failure modes are typed, never a silent fallback: a `--via` the descriptor
+ * does not forward (quickchr v1 forwards `rest-api`/`native-api`/`ssh` only)
+ * or an endpoint quickchr marked unavailable is `quickchr/unsupported-via`; an
+ * SSH endpoint with no batch-capable (non-interactive) auth is
+ * `quickchr/ssh-auth-unavailable` — centrs must not password-prompt
+ * mid-fan-out.
  */
 export function quickchrConnection(
 	resolution: QuickchrResolution,
@@ -553,12 +594,7 @@ function buildConnection(
 		// field access or letting the SSH client fall back to ambient config.
 		const auth = endpoint.auth as SshEndpointAuth | undefined;
 		if (auth === undefined || !hasUsableSshAuth(auth)) {
-			throw unsupportedVia(
-				resolution,
-				via,
-				"the SSH endpoint has no usable batch-capable (non-interactive) auth mode, and centrs never password-prompts for a provider target",
-				{ modes: auth?.modes ?? [], batchModes: auth?.batchModes ?? [] },
-			);
+			throw sshAuthUnavailable(resolution, endpoint, auth);
 		}
 		return {
 			target,

@@ -322,7 +322,7 @@ describe("quickchrConnection (per-`--via` consumption, #134 Phase 4)", () => {
 		);
 	});
 
-	test("ssh with no batch-capable auth mode → quickchr/unsupported-via (sftp gate)", async () => {
+	test("ssh with no batch-capable auth mode → quickchr/ssh-auth-unavailable (sftp gate)", async () => {
 		const descriptor = descriptorFor("lab");
 		(
 			descriptor.services.ssh as { auth: { batchModes: string[] } }
@@ -333,13 +333,26 @@ describe("quickchrConnection (per-`--via` consumption, #134 Phase 4)", () => {
 		);
 		const error = expectThrowCode(
 			() => quickchrConnection(resolution, "ssh"),
-			"quickchr/unsupported-via",
+			"quickchr/ssh-auth-unavailable",
 		);
-		// The alternatives never re-suggest the `--via` that just failed.
+		// The fix is on the machine, and the context carries the endpoint facts
+		// a caller needs for a direct `--host` call with its own key.
+		expect(error.context).toMatchObject({
+			machine: "lab",
+			via: "ssh",
+			host: expect.any(String),
+			port: expect.any(Number),
+			username: expect.any(String),
+			batchModes: [],
+		});
+		expect(error.remediation).toContain("--secure-login");
+		expect(error.remediation).toContain("/user/ssh-keys/add");
+		// Other services are named for commands that need no SSH; ssh is not.
 		expect(error.context?.["availableServices"]).toEqual(["rest-api"]);
+		expect(error.remediation).toContain("`--via rest-api`");
 	});
 
-	test("ssh private-key batch mode WITHOUT a key path → quickchr/unsupported-via (no ambient fallback)", async () => {
+	test("ssh private-key batch mode WITHOUT a key path → quickchr/ssh-auth-unavailable (no ambient fallback)", async () => {
 		const descriptor = descriptorFor("lab");
 		const sshAuth = descriptor.services.ssh as {
 			auth: { privateKeyPath?: string; batchModes: string[] };
@@ -354,7 +367,7 @@ describe("quickchrConnection (per-`--via` consumption, #134 Phase 4)", () => {
 		);
 		const error = expectThrowCode(
 			() => quickchrConnection(resolution, "ssh"),
-			"quickchr/unsupported-via",
+			"quickchr/ssh-auth-unavailable",
 		);
 		// The unusable ssh endpoint is not advertised as an alternative either.
 		expect(error.context?.["availableServices"]).toEqual(["rest-api"]);

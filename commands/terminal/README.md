@@ -75,12 +75,16 @@ bypassed for them. Terminal-specific points:
   `BatchMode=yes`, but the descriptor's SSH endpoint must pass the same gate
   execute and sftp enforce: a batch-verified `privateKeyPath`. The terminal logs
   in with `-i <key> -o IdentitiesOnly=yes`. An endpoint without one is
-  `quickchr/unsupported-via` rather than an ambient-agent login or a password
-  prompt for a credential quickchr holds. quickchr provisions that key only for
-  a machine first booted with `--secure-login` (the `secure-login` setting);
-  for any other machine the error names that, plus a direct
-  `terminal --host 127.0.0.1 --port <ssh port>` console where the host `ssh`
-  may prompt. Host-key checking is relaxed by
+  [`quickchr/ssh-auth-unavailable`](../../docs/errors/quickchr/ssh-auth-unavailable.md),
+  never an ambient-agent login or a password prompt (an agent cannot answer
+  one). quickchr provisions that key only for a machine first booted with
+  `--secure-login` (the `secure-login` setting;
+  [tikoci/quickchr#253](https://github.com/tikoci/quickchr/issues/253) tracks
+  adding one later). For any other machine the error names that, plus a
+  bring-your-own-key route: install a key with `execute --quickchr`, then
+  `terminal --host 127.0.0.1 --port <ssh port> --username <user> --ssh-key <key>
+  --insecure`, with the endpoint facts in the error context (TQ3). Host-key
+  checking is relaxed by
   provenance for the ephemeral VM (`transport/provider-trust`, carried in
   `resolveTerminalRequest().warnings`; the CLI streams device bytes, not an
   envelope).

@@ -33,6 +33,19 @@ no section of its own.
 
 ## 0.1.10 — next
 
+### Changed
+
+- A `--quickchr` machine that forwards SSH but has no verified SSH key now
+  fails with `quickchr/ssh-auth-unavailable` instead of
+  `quickchr/unsupported-via`, for `execute --via ssh`, `transfer --via sftp`
+  and `terminal`. Callers that branched on `unsupported-via` for this case
+  must match the new code. Its context carries `host`, `port`, `username`,
+  `modes`, `batchModes` and `availableServices`. Its remediation names
+  quickchr's first-boot `--secure-login`, or installing your own key and
+  dialing the endpoint with `--host`/`--ssh-key`, never a password prompt.
+  `unsupported-via` now means only a service the machine does not forward or
+  marked unavailable.
+
 ### Fixed
 
 - `terminal --quickchr <name>` opens an ssh console to one running quickchr
@@ -40,8 +53,7 @@ no section of its own.
   `usage/fanout-not-supported`. Host, port, user, and key come from the
   machine's descriptor; the session logs in with quickchr's verified managed key,
   which quickchr provisions for a machine first booted with `--secure-login`.
-  Without that key the error is `quickchr/unsupported-via`, and its remediation
-  names `--secure-login` and a direct `--host` console.
+  Without that key the error is the new `quickchr/ssh-auth-unavailable` (below).
   A repeated `--quickchr` is still `usage/fanout-not-supported`. A `<router>`
   positional or a direct override flag with it is `usage/conflicting-flags`.
   `--via mac-telnet` is `quickchr/unsupported-via`.
