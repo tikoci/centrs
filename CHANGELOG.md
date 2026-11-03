@@ -31,6 +31,21 @@ no section of its own.
   Clarify that WinBox profile/session fields are preserved only, `devices edit`
   is reserved, and stable releases advance both npm dist-tags.
 
+## 0.1.10 — next
+
+### Fixed
+
+- `terminal --quickchr <name>` opens an ssh console to one running quickchr
+  machine (#610). It used to reject even a single name as
+  `usage/fanout-not-supported`. Host, port, user, and key come from the
+  machine's descriptor; the session logs in with quickchr's verified managed key,
+  which quickchr provisions for a machine first booted with `--secure-login`.
+  Without that key the error is `quickchr/unsupported-via`, and its remediation
+  names `--secure-login` and a direct `--host` console.
+  A repeated `--quickchr` is still `usage/fanout-not-supported`. A `<router>`
+  positional or a direct override flag with it is `usage/conflicting-flags`.
+  `--via mac-telnet` is `quickchr/unsupported-via`.
+
 ## 0.1.9 — 2026-11-03
 
 The `0.1.9-next.0` preview cut (2026-10-13) carried part of this section.

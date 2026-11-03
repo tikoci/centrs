@@ -149,6 +149,37 @@ There's no `<router>` and no `--via`. The host-only target selects ssh, as a
 host `<router>` does, with no CDB lookup. stdout contains the device identity,
 checked as in TS1.
 
+## quickchr targets (TQ1–TQ2, #610)
+
+`$NAME` is the machine name of a running quickchr-managed CHR. Covered by
+`test/integration/quickchr-target.test.ts`, which shares that suite's CHR boot.
+The no-CHR error paths (repeat, positional, override conflicts, unknown machine)
+are unit tests in `test/unit/terminal.test.ts`.
+
+### TQ1. Open an ssh console on a quickchr machine (batch relay)
+
+```bash
+printf '%s\n' '/system/identity/print' ':put ("ssh-user=" . [/user/active/get [find where via="ssh"] name])' '/quit' | centrs terminal --quickchr $NAME
+```
+
+No `--via`, host, port, user, or key: the descriptor's SSH endpoint supplies
+them, and the session logs in with quickchr's batch-verified managed key (the
+harness boots the CHR with quickchr `secureLogin`, which provisions one).
+stdout contains the device identity (checked as in TS1) and
+`ssh-user=<descriptor user>`, RouterOS's own record of who holds the login. After
+`/quit` and stdin EOF the process exits, and the router's `/user/active` lists
+no ssh session.
+
+### TQ2. `--via mac-telnet` on a quickchr target → `quickchr/unsupported-via`
+
+```bash
+centrs terminal --quickchr $NAME --via mac-telnet --json
+```
+
+Envelope on stderr: `ok: false`, `error.code="quickchr/unsupported-via"`, exit
+`1`, no bytes on stdout. quickchr v1 forwards no mac-telnet service, and centrs
+never swaps a pinned `--via` for ssh.
+
 ## MAC target over `--via ssh` resolution (behavior note — not a numbered CHR example)
 
 This path resolves a MAC to an IP and, on the unresolved / no-opt-in branch,

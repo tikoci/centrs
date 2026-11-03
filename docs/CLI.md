@@ -201,7 +201,7 @@ Usage: centrs transfer <router>|--host <host> upload <local> [remote] | download
 Open an interactive RouterOS console (ssh or mac-telnet).
 
 ```text
-Usage: centrs terminal <router> [flags] | centrs terminal --host <host> [flags]
+Usage: centrs terminal <router> [flags] | centrs terminal --host <host> [flags] | centrs terminal --quickchr <name> [flags]
 ```
 
 | Flag | Value | Description |
@@ -209,6 +209,7 @@ Usage: centrs terminal <router> [flags] | centrs terminal --host <host> [flags]
 | `--via` | `<method>` | Transport: `ssh` (host target, default) or `mac-telnet` (MAC target, default for a MAC). rest/native have no terminal capability. |
 | `--host` | `<host>` | ssh: the host to dial (the target when no `<router>` is given; no CDB lookup). mac-telnet: the UDP delivery host (default L2 broadcast). |
 | `--port` | `<port>` | Override the port: ssh default 22, mac-telnet default 20561. |
+| `--quickchr` | `<name>` | Open an ssh console to one running quickchr machine; host/port/user/key come from its descriptor. Once only; not with `<router>`, --host, --port, --username, --password, --ssh-key or --match. |
 | `--username / --user / -u` | `<name>` | RouterOS username (aliases --user, -u). Falls back to CENTRS_USERNAME. |
 | `--password` | `<secret>` | RouterOS password. Falls back to CENTRS_PASSWORD. |
 | `--source-mac` | `<mac>` | mac-telnet: explicit in-packet source MAC (overrides egress resolution). |

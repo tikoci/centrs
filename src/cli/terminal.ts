@@ -38,7 +38,7 @@ import { selectionFlagTokens } from "./selection.ts";
 export const terminalCommand: CliCommandMetadata = {
 	name: "terminal",
 	usage:
-		"centrs terminal <router> [flags] | centrs terminal --host <host> [flags]",
+		"centrs terminal <router> [flags] | centrs terminal --host <host> [flags] | centrs terminal --quickchr <name> [flags]",
 	summary: "Open an interactive RouterOS console (ssh or mac-telnet).",
 	options: [
 		{
@@ -58,6 +58,12 @@ export const terminalCommand: CliCommandMetadata = {
 			valueName: "<port>",
 			description:
 				"Override the port: ssh default 22, mac-telnet default 20561.",
+		},
+		{
+			flag: "--quickchr",
+			valueName: "<name>",
+			description:
+				"Open an ssh console to one running quickchr machine; host/port/user/key come from its descriptor. Once only; not with <router>, --host, --port, --username, --password, --ssh-key or --match.",
 		},
 		{
 			flag: "--username / --user / -u",
@@ -221,6 +227,7 @@ interface ParsedTerminal {
 export function parseTerminalCliArgs(args: readonly string[]): ParsedTerminal {
 	const flags: TerminalRequest = {};
 	const positional: string[] = [];
+	const quickchr: string[] = [];
 	let help = false;
 
 	for (let index = 0; index < args.length; index += 1) {
@@ -283,6 +290,11 @@ export function parseTerminalCliArgs(args: readonly string[]): ParsedTerminal {
 			case "--verbose":
 				flags.verbose = true;
 				break;
+			case "--quickchr":
+				// One machine is a single-target session (#610); a repeat is fan-out,
+				// rejected after the loop with the full list in context.
+				quickchr.push(expectValue(args, ++index, arg));
+				break;
 			default:
 				// A single interactive session cannot fan out: reject a target-selection
 				// flag with the shared `usage/fanout-not-supported` (mirrors `api --stream`).
@@ -307,6 +319,36 @@ export function parseTerminalCliArgs(args: readonly string[]): ParsedTerminal {
 	if (help) {
 		return { help: true, request: {} };
 	}
+	if (quickchr.length > 1) {
+		throw new CentrsError({
+			code: "usage/fanout-not-supported",
+			summary:
+				"`centrs terminal` is a single interactive session and cannot open several quickchr machines at once.",
+			remediation:
+				"Pass `--quickchr <name>` once; use `execute` / `api` with repeated `--quickchr` for multi-machine commands.",
+			context: {
+				flag: "--quickchr",
+				capability: "terminal",
+				machines: quickchr,
+			},
+		});
+	}
+	if (quickchr.length === 1) {
+		// A named-live-provider is exclusive (constitution, Resolution providers):
+		// a <router> positional is a second target source.
+		if (positional.length > 0) {
+			throw new CentrsError({
+				code: "usage/conflicting-flags",
+				summary:
+					"`--quickchr` is exclusive: a command targets quickchr machines or CDB/literal targets, not both.",
+				remediation:
+					"Drop the positional target (or the `--quickchr` flag) so the terminal has one target source.",
+				context: { quickchr: [...quickchr], positionals: positional.length },
+			});
+		}
+		flags.quickchr = quickchr[0];
+		return { request: flags };
+	}
 	// The `--host` flag stands in for a missing `<router>` (#428), with no CDB
 	// lookup; `CENTRS_HOST` never counts.
 	const targetInput = positional[0];
@@ -315,7 +357,7 @@ export function parseTerminalCliArgs(args: readonly string[]): ParsedTerminal {
 			command: "terminal",
 			summary: "`centrs terminal` requires a <router> target.",
 			remediation:
-				"Pass the device MAC (or a CDB identity/ip) as the first argument, or name an ssh host with `--host <host>`; run `centrs terminal --help` for the shape.",
+				"Pass the device MAC (or a CDB identity/ip) as the first argument, name an ssh host with `--host <host>`, or a running quickchr machine with `--quickchr <name>`; run `centrs terminal --help` for the shape.",
 		});
 	}
 	if (targetInput) {

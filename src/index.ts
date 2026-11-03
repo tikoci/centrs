@@ -712,6 +712,7 @@ export {
 export {
 	buildSshTerminalArgv,
 	buildTerminalErrorEnvelope,
+	type ResolveTerminalOptions,
 	resolveTerminalRequest,
 	runTerminal,
 	type TerminalErrorEnvelope,

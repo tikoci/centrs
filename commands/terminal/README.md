@@ -6,7 +6,8 @@ Open an interactive RouterOS console.
 flag (`--group` / `--where` / `--all` / `--default` / `--concurrency`) is rejected
 with `usage/fanout-not-supported` — open a console to one router at a time; use
 `execute` / `api` for multi-target commands. See `docs/CONSTITUTION.md`
-(Target selection grammar). With no `<router>`, the `--host` **flag** is the
+(Target selection grammar). One `--quickchr <name>` is a single target, not a
+fan-out (#610): see *quickchr targets* below. With no `<router>`, the `--host` **flag** is the
 target (`terminal --host 192.0.2.10` opens an ssh console; no CDB lookup).
 `CENTRS_HOST` never stands in for `<router>`. mac-telnet still needs a MAC
 `<router>`, since its `--host` is only the UDP delivery endpoint.
@@ -52,6 +53,37 @@ device's, not centrs's: multi-line brace blocks (`{ … }`) do not work over
   `terminal` must error with `transport/capability-unsupported`.
 - RoMON and WinBox Terminal are execute protocol surfaces in centrs, not
   terminal routes, unless future matrix cells explicitly add terminal support.
+
+## quickchr targets (`--quickchr <name>`)
+
+`terminal --quickchr <name>` opens an ssh console to one running
+quickchr-managed CHR, resolved through the named-live-provider rules in
+`docs/CONSTITUTION.md` (Resolution providers): host, port, username, and key come
+from the machine's live descriptor; the CDB, env, and `__default__` ladder are
+bypassed for them. Terminal-specific points:
+
+- **One machine.** A repeated `--quickchr` is `usage/fanout-not-supported`; a
+  `<router>` positional with it is `usage/conflicting-flags`, as are `--host`,
+  `--port`, `--username`, `--password`, `--ssh-key`, and `--match` (checked before
+  any machine lookup).
+- **ssh only.** The default is ssh. quickchr v1 forwards no mac-telnet service,
+  so a pinned `--via mac-telnet` is `quickchr/unsupported-via`, never swapped to
+  ssh. `rest-api` / `native-api` are `transport/capability-unsupported`, as for
+  any target. An unknown or stopped machine is `quickchr/machine-not-found` /
+  `quickchr/machine-stopped`; centrs never starts a VM.
+- **Auth is the provider's verified key.** The interactive argv still omits
+  `BatchMode=yes`, but the descriptor's SSH endpoint must pass the same gate
+  execute and sftp enforce: a batch-verified `privateKeyPath`. The terminal logs
+  in with `-i <key> -o IdentitiesOnly=yes`. An endpoint without one is
+  `quickchr/unsupported-via` rather than an ambient-agent login or a password
+  prompt for a credential quickchr holds. quickchr provisions that key only for
+  a machine first booted with `--secure-login` (the `secure-login` setting);
+  for any other machine the error names that, plus a direct
+  `terminal --host 127.0.0.1 --port <ssh port>` console where the host `ssh`
+  may prompt. Host-key checking is relaxed by
+  provenance for the ephemeral VM (`transport/provider-trust`, carried in
+  `resolveTerminalRequest().warnings`; the CLI streams device bytes, not an
+  envelope).
 
 ## MAC target over SSH (`--resolve`)
 

@@ -564,7 +564,8 @@ centrs transfer --quickchr $NAME list --via sftp --json
 When the descriptor's SSH endpoint advertises a **usable** batch-capable auth
 mode (`agent-or-config`, or `private-key` together with a verified
 `privateKeyPath` — a bare `private-key` mode with no path does not count), the
-list succeeds over sftp: `meta.via=sftp`, `meta.target.source.kind=provider`,
+list succeeds over sftp: `meta.via=ssh` (the protocol id, as in every sftp
+transfer), `meta.target.source.kind=provider`,
 `meta.settings.insecure` provider-sourced, and the key path (when one is
 handed over) carried as a provider-sourced `sshKey`. Otherwise the envelope is
 `ok: false` with `error.code=quickchr/unsupported-via` and exit code 1 — a
