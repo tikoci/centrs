@@ -141,7 +141,7 @@ export const executeCommand: CliCommandMetadata = {
 		{
 			flag: "--validate / --no-validate",
 			description:
-				"Run offline analysis, then RouterOS :parse and /console/inspect validation before execution (default true; `--validate=false` disables both stages).",
+				"Run offline analysis, then RouterOS :parse, plus `/console/inspect` for structured commands over native API/REST (default true; `--validate=false` disables both stages).",
 		},
 		{
 			flag: "--yes",

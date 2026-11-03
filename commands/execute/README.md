@@ -146,8 +146,8 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
   all-strings). Unlike `jo`-style KV builders, there is no per-value
   type-forcing escape, because the device, not centrs, owns value typing.
 - On an empty-CDB resolution failure, execute (like retrieve) emits the
-  `tip/no-devices` tip, steering toward `centrs devices discover` /
-  `centrs settings`.
+  `tip/no-devices` tip, steering toward `centrs discover --save` /
+  `centrs devices add`.
 - Protocol surfaces are native API, REST, mac-telnet, and SSH. RoMON and
   WinBox Terminal are later. SNMP is retrieve-only and must reject execute.
 - For a MAC target not resolved from CDB, auto-selection defaults to

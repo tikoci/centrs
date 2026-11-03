@@ -128,9 +128,9 @@ The `0.1.9-next.0` preview cut (2026-10-13) carried part of this section.
 
 ### Changed
 
-- Bun 1.4.4 is the minimum supported version (`engines.bun: >=1.4.4 <2`).
-  The CI/release/Pages `packageManager` pin, Docker image and `@types/bun` now
-  use 1.4.4 together.
+- Bun 1.4.4 is the minimum supported version (`engines.bun: >=1.4.4 <2`, was
+  `>=1.3.11 <2`). The CI/release/Pages `packageManager` pin, Docker image and
+  `@types/bun` now use 1.4.4 together (0.1.8 shipped on 1.3.14; #438).
 - **Breaking:** `devices show`, `add` and `set` no longer print the record password
   (#551). Text and JSON carry `passwordSet: boolean` instead, and
   `--show-password` on those three subcommands opts back in; other subcommands

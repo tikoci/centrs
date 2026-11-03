@@ -363,7 +363,7 @@ centrs devices list [--group G] [--where attr=value]
 centrs devices show <target> [--explain] [--via <protocol>] [--match <selector>]
                     [--show-password]
 centrs devices groups [--members]
-centrs devices discover [--timeout 15s] [--group G]      # = discover --save (save implied)
+centrs devices discover [--timeout 15s] [--group G]      # designed, not implemented; use `centrs discover --save`
 centrs devices add <target> [--user U] [--password P|--password-stdin] [--group G]
                              [--profile P|--profile-none|--profile-own]
                              [--session S] [--comment "text k=v"]

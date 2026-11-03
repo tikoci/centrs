@@ -101,7 +101,7 @@ Usage: centrs execute <target> <command> [flags] | centrs execute <target...> --
 | `--match` | &lt;user=name\|target=addr\|record-type&gt; | Pick one of several CDB records saved for `<router>` (as `devices show --match`); single target only. |
 | `--resolve` | &lt;none\|arp&gt; | Resolve a MAC-address target to an IP via the host ARP cache (default none). |
 | `--timeout` | `<duration>` | Per-request timeout (for REST, max 60s). |
-| `--validate / --no-validate` |  | Run offline analysis, then RouterOS :parse and /console/inspect validation before execution (default true; `--validate=false` disables both stages). |
+| `--validate / --no-validate` |  | Run offline analysis, then RouterOS :parse, plus `/console/inspect` for structured commands over native API/REST (default true; `--validate=false` disables both stages). |
 | `--yes` |  | Confirm write-shaped add/set/remove commands in non-interactive runs. |
 | `--max-results` | `<bytes>` | Fail if the rendered envelope exceeds this byte budget. |
 | `--format` | &lt;text\|json\|yaml&gt; | Output format for the CLI response. Defaults to text; use --json or --format json for the structured envelope. |

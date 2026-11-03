@@ -4,15 +4,15 @@
 CLI (with an MCP server; TUI and HTTP proxy frontends planned) for talking to
 MikroTik RouterOS devices through a regularized, validated interface.
 
-Version 0.1.9 is the stable release cut. To try its offline analyzer without
-installing centrs or connecting to a router:
+Stable releases are published on npm under `latest`. To try the offline
+analyzer without installing centrs or connecting to a router:
 
 ```bash
-bunx @tikoci/centrs@0.1.9 explain '/ip/address print' --json
+bunx @tikoci/centrs@latest explain '/ip/address print' --json
 ```
 
-Use `bunx @tikoci/centrs@0.1.9 --help` to inspect the release CLI, and
-`bunx @tikoci/centrs@0.1.9 --version` (`-V`; `--json` for an envelope) to print
+Use `bunx @tikoci/centrs@latest --help` to inspect the release CLI, and
+`bunx @tikoci/centrs@latest --version` (`-V`; `--json` for an envelope) to print
 the exact version for scripts and field reports. The dist-tag follows standard
 SemVer semantics: a plain version (`0.1.9`) publishes to `latest` and carries
 `next` forward with it, while a `next` build (`0.1.10-next.23`) publishes to
@@ -225,8 +225,8 @@ GitHub issues it links are the roadmap.
 
 Requirements:
 
-- Bun 1.4.4 or newer (CI runs the `packageManager` version in `package.json`;
-  Bun 2.x not yet validated).
+- Bun 1.4.4 or newer within 1.x (`engines.bun`: `>=1.4.4 <2`; CI runs the
+  `packageManager` version in `package.json`; Bun 2.x not yet validated).
 - Git.
 - `uv`, only for `bun run lint:actions` (zizmor workflow audit).
 - For integration tests: QEMU plus `@tikoci/quickchr` (handles CHR image
