@@ -56,6 +56,7 @@ import {
 } from "./errors.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 import {
+	assertNoMatchInFanout,
 	expandSelection,
 	isDefaultRecordTarget,
 	loadEnvFileDefaults,
@@ -203,6 +204,7 @@ export async function retrieveFanout(
 	internals: RetrieveFanoutInternals = {},
 	options: RetrieveFanoutOptions = {},
 ): Promise<RetrieveFanoutEnvelope> {
+	assertNoMatchInFanout(request.match);
 	if (request.wait !== undefined)
 		throw new CentrsError({
 			code: "usage/fanout-not-supported",

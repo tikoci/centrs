@@ -118,6 +118,31 @@ past 60 KB) rather than quietly switching to sftp. `scp`, `fetch`, and `ftp` are
 explicit-only; `ftp` additionally requires `ALLOW_UNSAFE_PROTOCOLS=ftp` because
 it is cleartext.
 
+The method resolves `--via` → `CENTRS_TRANSFER_VIA` → the CDB record's `via=`
+preference → config → auto ([constitution: settings](../../docs/CONSTITUTION.md)).
+A record's `via=` names a *transport* (shared with `execute`), so transfer maps
+it to a method (#591):
+
+| CDB / `--via` transport name | Transfer method |
+| --- | --- |
+| `ssh` | `sftp` |
+| `rest-api` (also `--via rest`) | `rest` |
+| `native-api` (also `--via native`) | `native` |
+| `mac-telnet`, `romon`, `winbox-terminal`, `snmp`, `mndp`, `btest` | none — `settings/invalid-via` |
+
+`--via ssh` (and `CENTRS_TRANSFER_VIA=ssh`) is accepted as an alias of
+`sftp`. A record whose `via=` cannot carry files fails `settings/invalid-via`
+naming the record, rather than being ignored; pass `--via sftp|rest|native`
+for that transfer. A record `via=` holds a transport id: method names
+(`sftp`, `rest`, `ftp`) and unknown values are rejected when the record is
+read (`cdb/invalid-option` warning) and leave the method on auto. A record
+preference is a setting, not an auto hop: a `via=rest-api` record uploading
+more than 60 KB fails `transport/unsupported-operation` like a pinned
+`--via rest` does, and the remediation names the record. The endpoint and
+credentials still come from the same record; the mapping never selects a
+different one. A record's `port=` travels with a `--via` pin, so if the
+record's port belongs to another service, point `--port` at the pinned one.
+
 **File contents are bytes on `rest`/`native`.** RouterOS carries `/file`
 contents as raw bytes on both wires — REST puts bytes 0x80–0xff unescaped in the
 JSON string, so the body is not UTF-8 — and stores the UTF-8 encoding of every

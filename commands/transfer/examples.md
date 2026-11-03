@@ -569,3 +569,49 @@ list succeeds over sftp: `meta.via=sftp`, `meta.target.source.kind=provider`,
 handed over) carried as a provider-sourced `sshKey`. Otherwise the envelope is
 `ok: false` with `error.code=quickchr/unsupported-via` and exit code 1 — a
 typed gate, **never** a password prompt and never a silent fallback to REST.
+
+## CDB record `via=` (#591)
+
+A record's `via=` names a transport, shared with `execute`; transfer maps it
+to a method (`ssh`→`sftp`, `rest-api`→`rest`, `native-api`→`native`). `$CDB`
+holds one record for `127.0.0.1` whose comment is
+`via=ssh port=$SSH_PORT ssh-key=$KEY insecure=true`; the key is imported as
+in the sftp section. C1–C2 are covered by
+`test/integration/transfer-cdb-via.test.ts`; C3–C4 are offline error
+contracts covered by `test/unit/transfer.test.ts`
+(`resolveTransferRequest takes the CDB record's via=`).
+
+### C1. A `via=ssh` record runs execute over ssh and transfer over sftp
+
+```bash
+centrs execute 127.0.0.1 --cdb-file $CDB /system/identity/print --json
+centrs transfer 127.0.0.1 --cdb-file $CDB upload $SRC centrs-591.txt --json
+```
+
+Both `ok: true` with `meta.via="ssh"`, and no `--via` on either. The
+transfer's `meta.settings.via` is `{kind: "comment-kv", key: "record:0:via"}`.
+
+### C2. Download from the same record, with and without `--via sftp`
+
+```bash
+centrs transfer 127.0.0.1 --cdb-file $CDB download centrs-591.txt $TMP/c2-auto.txt --json
+centrs transfer 127.0.0.1 --cdb-file $CDB --via sftp download centrs-591.txt $TMP/c2-sftp.txt --json
+```
+
+Both `ok: true`, `meta.via="ssh"`; each file is byte-identical to `$SRC`.
+`--via ssh` is accepted as the same method as `--via sftp`.
+
+### C3. A record transport that cannot carry files
+
+A record with `via=mac-telnet` (or `romon`, `snmp`, `winbox-terminal`,
+`mndp`, `btest`) and no `--via`: `ok: false`, `error.code=settings/invalid-via`,
+`error.context.source="record:N:via"`, and the remediation suggests
+`--via sftp`, `--via rest` or `--via native`. An explicit `--via` wins over
+the record and the transfer proceeds.
+
+### C4. A `via=rest-api` record does not auto-hop a large upload
+
+A `via=rest-api` record uploading more than 60 KB with no `--via`:
+`ok: false`, `error.code=transport/unsupported-operation`, nothing sent. The
+remediation names `record:N:via` and suggests `--via sftp`, matching a
+pinned `--via rest`.

@@ -146,6 +146,43 @@ centrs retrieve $R /system/license --username $U --password $P --json
 centrs retrieve $R /system/resource --attribute bogus --username $U --password $P --json
 ```
 
+## Read paths dispatch only reads (#586)
+
+A read sends only a `print`/`get`, even with `--validate=false`. Covered by
+the CHR test `test/integration/read-path-guard.test.ts` (RP1–RP2, over REST
+and native-api, for `retrieve` and `api`; the router's uptime must never go
+backwards) and the offline grammar and REST-guard tests in
+`test/unit/menu-path.test.ts` (RP3).
+
+### RP1. A `#` or `?` in the path is refused before dispatch
+
+```bash
+centrs retrieve $R '/system/reboot#' --no-validate --attribute uptime --username $U --password $P --json
+centrs api $R '/system/reboot?' --validate=false --attribute uptime --username $U --password $P --json
+```
+
+Envelope: `ok: false`, `error.code=input/invalid-routeros-path`,
+`error.context.invalidSegments` names the bad segment, and nothing is sent.
+Before #586 the first line posted `/rest/system/reboot` and rebooted the CHR.
+
+### RP2. A well-formed command path is RouterOS's refusal, not a dispatch
+
+```bash
+centrs retrieve $R /system/reboot --no-validate --username $U --password $P --json
+centrs retrieve $R /system/reset-configuration --no-validate --attribute uptime --username $U --password $P --json
+```
+
+Envelope: `ok: false` with a `routeros/*` code. RouterOS answers
+`<command>/print` and a `GET` of a command with "no such command", so the
+appended `/print` is the guarantee once the path cannot cut it off.
+
+### RP3. Menu-name grammar and the REST URL guard
+
+Path segments are letters, digits and hyphens (case folds:
+`/IP/Address` is accepted). Under every REST caller, a request path with
+`?`, `#`, `\`, a control character or a `.`/`..` segment (including
+`%2e%2e` and `.%2E`) fails `input/invalid-routeros-path` before `fetch`.
+
 ## Transport / error contract
 
 ### 12. Bad credentials
@@ -821,3 +858,50 @@ centrs retrieve $R /interface --until name=missing --wait 500ms --username $U --
 One envelope goes to stdout, with `stopReason: "deadline-elapsed"`; exit 1.
 No intermediate sample frames are printed. Unit anchors cover slow validation,
 unfinished reads, cancellation and narrow retry classification.
+
+## Record selection (`--match`, #583)
+
+Covered by the named tests `MA1`–`MA3` in `test/integration/cdb-match.test.ts`
+on disposable CHR; MA4 is the offline contract in the `MA4.` tests of
+`test/unit/cdb-match.test.ts`, which drive `retrieve`/`api` through the CLI. `$CDB` holds
+two `ipAdmin` records for the same target `$R`: user `$U` with a deliberately
+wrong password, and a `read`-group user `reader` with its real password.
+The same selector works on `execute`, `api`, `transfer`, `terminal` and
+`btest client`.
+
+### MA1. Two records for one target are ambiguous
+
+```bash
+centrs retrieve $R /system/identity --cdb-file $CDB --json
+```
+
+Envelope: `ok: false`, `error.code=identity/ambiguous`, `context.matches`
+lists both records, and the remediation names `--match user=<name>`.
+
+### MA2. `--match user=` picks the record and its credentials
+
+```bash
+centrs retrieve $R /system/identity --cdb-file $CDB --match user=reader --json
+centrs execute $R /system/identity/print --cdb-file $CDB --match user=reader --json
+centrs api $R system/identity --cdb-file $CDB --match user=reader --json
+```
+
+Each is `ok: true` with `meta.target.recordIndex=1`. With
+`--match user=$U` instead, each fails `transport/auth-failed`: the decoy's
+wrong password went on the wire, so the selection is real.
+
+### MA3. A selector that matches nothing
+
+```bash
+centrs retrieve $R /system/identity --cdb-file $CDB --match user=nobody --json
+```
+
+Envelope: `ok: false`, `error.code=identity/no-match`.
+
+### MA4. `--match` is single-target and never ignored
+
+With a fan-out selection (`--group`, `--where`, `--all`, several
+positionals) or `--quickchr`, `--match` is `usage/conflicting-flags`. When no
+CDB record is in play (no CDB file, an unregistered literal host, a
+`__default__`-only fallback) it is `identity/no-match`, never a silent
+literal-host read.

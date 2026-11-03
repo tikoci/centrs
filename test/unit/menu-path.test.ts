@@ -1,6 +1,7 @@
 /**
- * #586: a `#` or `?` in a read path cut the appended `/print` off the REST URL,
- * so `retrieve '/system/reboot#' --no-validate` posted to `/rest/system/reboot`
+ * #586 (commands/retrieve/examples.md RP3): a `#` or `?` in a read path
+ * cut the appended `/print` off the REST URL, so
+ * `retrieve '/system/reboot#' --no-validate` posted to `/rest/system/reboot`
  * and rebooted a CHR 7.24.5; `api` with `--attribute` did the same. These pin
  * the menu-path grammar, the REST URL backstop, and that nothing is sent.
  */

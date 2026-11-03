@@ -48,6 +48,7 @@ import {
 import { promptForWriteConfirmation } from "./execute.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 import {
+	assertNoMatchInFanout,
 	emptyWriteSelectionError,
 	expandSelection,
 	isDefaultRecordTarget,
@@ -265,6 +266,7 @@ export async function transferFanout(
 	options: TransferFanoutOptions = {},
 ): Promise<TransferFanoutEnvelope> {
 	validateTransferRequestShape(request);
+	assertNoMatchInFanout(request.match);
 	const config = await loadEnvFileDefaults(env);
 	const selectionSummary = summarizeSelection(selection);
 	const requestSummary: TransferFanoutRequestSummary = {

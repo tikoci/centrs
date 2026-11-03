@@ -113,6 +113,20 @@ export const transferMethods = [
 ] as const;
 export type TransferMethod = (typeof transferMethods)[number];
 
+/**
+ * The transfer method a CDB record's transport preference (`via=` in its
+ * comment, shared with execute) selects (#591). A transport missing here
+ * (mac-telnet, winbox, …) cannot carry files and fails `settings/invalid-via`
+ * when the record's preference is what decided the method.
+ */
+export const transferMethodForTransport: Partial<
+	Record<RouterOsProtocol, TransferMethod>
+> = {
+	ssh: "sftp",
+	"rest-api": "rest",
+	"native-api": "native",
+};
+
 /** RouterOS `/file` contents write cap (`/file/set contents`). */
 export const REST_FILE_WRITE_CAP_BYTES = 60_000;
 /** Maximum `/file/read` chunk RouterOS accepts (`chunk-size` upper bound). */
@@ -158,6 +172,12 @@ export interface TransferRequest {
 	name?: string;
 	cdbFile?: string;
 	cdbPassword?: string;
+	/**
+	 * `--match` selector for a `<router>` several CDB records share
+	 * (`user=<name>`, `target=<addr>`, or a record type): the same selector
+	 * `devices show --match` takes. Single-target only (#583).
+	 */
+	match?: string;
 	/** `download` fan-out: directory to write one file per target into. */
 	outDir?: string;
 	/** Fan-out write gate: confirm a mutating fan-out (upload/remove/mkdir/copy). */
@@ -410,7 +430,7 @@ async function runUpload(
 		isRestFamily(resolved.method) &&
 		bytes.byteLength > REST_FILE_WRITE_CAP_BYTES
 	) {
-		throw restWriteCapError(remote, bytes.byteLength);
+		throw restWriteCapError(remote, bytes.byteLength, resolved.via);
 	}
 
 	const existing = await backend.findFile(remote);
@@ -879,13 +899,6 @@ export async function resolveTransferRequest(
 	const direction: TransferDirection =
 		request.verb === "upload" ? "upload" : "download";
 	const sizeHint = uploadSizeHint(request);
-	const { method, protocol, via } = selectTransferMethod(
-		request,
-		direction,
-		sizeHint,
-		env,
-		config,
-	);
 
 	// A quickchr target is a named-live-provider: host/port/auth come from the
 	// live descriptor, bypassing CDB and the `__default__` ladder. For
@@ -908,10 +921,21 @@ export async function resolveTransferRequest(
 					targetInput: request.targetInput,
 					cdbFile: request.cdbFile,
 					cdbPassword: request.cdbPassword,
+					match: request.match,
 				},
 				env,
 				config,
 			)));
+	// After CDB resolution: a record's `via=` preference is a layer of the
+	// method choice, mapped from transport to transfer-method names (#591).
+	const { method, protocol, via } = selectTransferMethod(
+		request,
+		direction,
+		sizeHint,
+		env,
+		config,
+		cdbResolution?.overrides.via,
+	);
 
 	const format = resolveTransferFormat(request, env, config);
 	const validate = resolveBooleanSetting(
@@ -1041,6 +1065,7 @@ export function selectTransferMethod(
 	uploadBytes: number | undefined,
 	env: Record<string, string | undefined>,
 	config: Record<string, string | undefined> = {},
+	cdbVia?: ResolvedSetting<RouterOsProtocol>,
 ): {
 	method: TransferMethod;
 	protocol: RouterOsProtocol;
@@ -1053,10 +1078,32 @@ export function selectTransferMethod(
 		"auto",
 		"via",
 		undefined,
-		undefined,
+		cdbVia === undefined
+			? undefined
+			: {
+					value: transferMethodForTransport[cdbVia.value] ?? cdbVia.value,
+					source: cdbVia.source,
+				},
 		config,
 	) as ResolvedSetting<string>;
 	const requested = via.value;
+	if (
+		via.source.kind === "comment-kv" &&
+		cdbVia !== undefined &&
+		transferMethodForTransport[cdbVia.value] === undefined
+	) {
+		throw new CentrsError({
+			code: "settings/invalid-via",
+			summary: `The CDB record prefers \`via=${cdbVia.value}\`, which cannot carry files.`,
+			remediation:
+				"Pass `--via sftp`, `--via rest` or `--via native` for this transfer (or set `CENTRS_TRANSFER_VIA`). The record's `via` stays in effect for execute.",
+			context: {
+				via: cdbVia.value,
+				source: cdbVia.source.key,
+				supported: Object.keys(transferMethodForTransport),
+			},
+		});
+	}
 
 	if (requested === "auto") {
 		// Auto: REST family carries reads and small writes; a large upload exceeds
@@ -1078,7 +1125,8 @@ export function selectTransferMethod(
 	if (requested === "native" || requested === "native-api") {
 		return { method: "native", protocol: "native-api", via };
 	}
-	if (requested === "sftp") {
+	// `ssh` is the transport name `execute` and CDB `via=` use (#591).
+	if (requested === "sftp" || requested === "ssh") {
 		return { method: "sftp", protocol: "ssh", via };
 	}
 	if (requested === "scp" || requested === "fetch") {
@@ -1772,13 +1820,30 @@ function targetExistsError(remote: string): CentrsError {
 	});
 }
 
-function restWriteCapError(remote: string, bytes: number): CentrsError {
+function restWriteCapError(
+	remote: string,
+	bytes: number,
+	via: ResolvedSetting<string>,
+): CentrsError {
+	// A pinned REST method is never hopped to sftp; name the pin so a record
+	// or env preference the caller did not type is visible (#591 review).
+	const pinnedBy =
+		via.source.kind === "comment-kv"
+			? ` The method came from the CDB record's \`via=\` (\`${via.source.key}\`).`
+			: via.source.kind === "env" || via.source.kind === "config"
+				? ` The method came from \`${via.source.key}=${via.value}\` (${via.source.kind}).`
+				: "";
 	return new CentrsError({
 		code: "transport/unsupported-operation",
 		summary: `Cannot write ${bytes} bytes to ${remote} over REST/native (60 KB cap).`,
-		remediation:
-			"Large uploads need sftp (lands with the SSH transport); the REST `/file` write cap is 60 KB.",
-		context: { remote, bytes, capBytes: REST_FILE_WRITE_CAP_BYTES },
+		remediation: `Pass \`--via sftp\` for this upload; the REST \`/file\` write cap is 60 KB.${pinnedBy}`,
+		context: {
+			remote,
+			bytes,
+			capBytes: REST_FILE_WRITE_CAP_BYTES,
+			via: via.value,
+			viaSource: via.source.key ?? via.source.kind,
+		},
 	});
 }
 

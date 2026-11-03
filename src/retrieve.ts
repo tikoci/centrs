@@ -102,6 +102,12 @@ export interface RetrieveRequest {
 	maxResultsBytes?: number;
 	cdbFile?: string;
 	cdbPassword?: string;
+	/**
+	 * `--match` selector for a `<router>` several CDB records share
+	 * (`user=<name>`, `target=<addr>`, or a record type): the same selector
+	 * `devices show --match` takes. Single-target only (#583).
+	 */
+	match?: string;
 	/** Opt-in host ARP resolution for a MAC target (`none` default, or `arp`). */
 	resolve?: string;
 	/** CDB group selector — expands to a fanout over all matching records. */
@@ -1361,6 +1367,7 @@ export async function resolveRetrieveRequest(
 			targetInput: request.targetInput,
 			cdbFile: request.cdbFile,
 			cdbPassword: request.cdbPassword,
+			match: request.match,
 		},
 		env,
 		config,

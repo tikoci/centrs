@@ -73,7 +73,7 @@ export const transferCommand: CliCommandMetadata = {
 			flag: "--via",
 			valueName: "<method>",
 			description:
-				"Pin the method: rest, native, or sftp (large transfers); scp/fetch/ftp are not built yet. Auto picks the cheapest by size/direction.",
+				"Pin the method: rest, native, or sftp (large transfers; `ssh` is an alias); scp/fetch/ftp are not built yet. Auto picks the cheapest by size/direction, after a CDB record's `via=` (ssh→sftp).",
 		},
 		{
 			flag: "--ssh-key",
@@ -163,6 +163,12 @@ export const transferCommand: CliCommandMetadata = {
 			flag: "--cdb-password",
 			valueName: "<password>",
 			description: "Decrypt an encrypted WinBox CDB file.",
+		},
+		{
+			flag: "--match",
+			valueName: "<user=name|target=addr|record-type>",
+			description:
+				"Pick one of several CDB records saved for <router> (as `devices show --match`); single target only.",
 		},
 		{
 			flag: "--validate / --no-validate",
@@ -413,6 +419,9 @@ export function parseTransferCliArgs(
 				break;
 			case "--cdb-password":
 				flags.cdbPassword = expectValue(args, ++index, arg);
+				break;
+			case "--match":
+				flags.match = expectValue(args, ++index, arg);
 				break;
 			case "--validate":
 				flags.validate = true;

@@ -98,6 +98,12 @@ export const terminalCommand: CliCommandMetadata = {
 			description: "Decrypt an encrypted WinBox CDB file.",
 		},
 		{
+			flag: "--match",
+			valueName: "<user=name|target=addr|record-type>",
+			description:
+				"Pick one of several CDB records saved for <router> (as `devices show --match`); single target only.",
+		},
+		{
 			flag: "--resolve",
 			valueName: "<none|arp>",
 			description:
@@ -258,6 +264,9 @@ export function parseTerminalCliArgs(args: readonly string[]): ParsedTerminal {
 				break;
 			case "--cdb-password":
 				flags.cdbPassword = expectValue(args, ++index, arg);
+				break;
+			case "--match":
+				flags.match = expectValue(args, ++index, arg);
 				break;
 			case "--resolve":
 				flags.resolve = expectValue(args, ++index, arg);
