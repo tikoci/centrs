@@ -269,7 +269,7 @@ Usage: centrs devices <init|encrypt|list|show|groups|add|edit|set|remove> [args]
 | Flag | Value | Description |
 | ---- | ----- | ----------- |
 | `--encrypt` |  | `init` only — require encrypted creation with a non-empty CDB password; refuse an existing open CDB. |
-| `--no-backup` |  | `encrypt` only — skip the plaintext pre-conversion snapshot. Without it, a forgotten password cannot be recovered. |
+| `--no-backup` |  | `encrypt` only — skip the plaintext pre-conversion snapshot. Without that snapshot, a forgotten password cannot be recovered. |
 | `--cdb-file` | `<path>` | Override the resolved CDB path (default `~/.config/tikoci/winbox.cdb`). |
 | `--cdb-password` | `<secret>` | Decrypt an encrypted CDB. Falls back to `CENTRS_CDB_PASSWORD`. Also used for `init --encrypt`, `encrypt`, and to re-encrypt on writes. |
 | `--via` | `<protocol>` | Resolve and report the protocol source for provenance examples; no network IO is performed. |

@@ -41,7 +41,10 @@ test("encrypted init requires explicit intent, non-empty password, and 0600; exi
 	expect(parseWinBoxCdb(original).mode).toBe("open");
 	await expect(
 		initCdb({ cdbFile, encrypt: true, cdbPassword: "secret" }),
-	).rejects.toMatchObject({ code: "input/invalid-command" });
+	).rejects.toMatchObject({
+		code: "input/invalid-command",
+		context: { cdbFile },
+	});
 	expect(await bytes(cdbFile)).toEqual(original);
 	await rm(cdbFile);
 	const result = await initCdb({

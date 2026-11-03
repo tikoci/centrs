@@ -308,10 +308,9 @@ export async function initCdb(
 		if (options.encrypt && !existing.encrypted) {
 			throw new CentrsError({
 				code: "input/invalid-command",
-				summary:
-					"An open CDB already exists; encrypted initialization wrote nothing.",
-				remediation:
-					"Use `centrs devices encrypt` to explicitly convert the existing CDB.",
+				summary: `An open CDB already exists at ${cdbFile}; encrypted initialization wrote nothing.`,
+				remediation: `Run \`centrs devices encrypt --cdb-file ${cdbFile}\` to convert the existing CDB explicitly.`,
+				context: { cdbFile },
 			});
 		}
 		return {

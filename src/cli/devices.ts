@@ -61,7 +61,7 @@ export const devicesCommand: CliCommandMetadata = {
 		{
 			flag: "--no-backup",
 			description:
-				"`encrypt` only — skip the plaintext pre-conversion snapshot. Without it, a forgotten password cannot be recovered.",
+				"`encrypt` only — skip the plaintext pre-conversion snapshot. Without that snapshot, a forgotten password cannot be recovered.",
 		},
 		{
 			flag: "--cdb-file",
