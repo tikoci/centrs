@@ -356,6 +356,12 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 				break;
 			case "--password":
 				parsed.password = expectValue(args, ++index, arg);
+				// `--password --password-stdin` would otherwise store the literal
+				// flag as the password and never read stdin. Treat it as both flags
+				// so the conflict check below refuses it.
+				if (parsed.password === "--password-stdin") {
+					parsed.passwordStdin = true;
+				}
 				break;
 			case "--password-stdin":
 				parsed.passwordStdin = true;
