@@ -7,8 +7,22 @@ Per-feature status is tracked in `docs/MATRIX.md`. Use this file for
 documenting cross-cutting shifts that affect contributors and consumers.
 
 Each stable version has one section. Work in progress goes under
-`## X.Y.Z — next`, which is what `@next` installs (`X.Y.Z-next.N`); the stable
-release dates that heading. A `-next.N` build has no section of its own.
+`## X.Y.Z — next`, which describes preview builds (`X.Y.Z-next.N`); the stable
+release dates that heading and moves both `@latest` and `@next` to that release.
+`@next` stays there until another preview is published. A `-next.N` build has
+no section of its own.
+
+## 0.1.10 — next
+
+### Maintenance
+
+- Prepare the next development cycle with package version `0.1.10-next`.
+  Preview releases publish `0.1.10-next.<run_number>` to `@next`;
+  `@latest` stays on 0.1.9 until the next stable release.
+- Align the README and security policy with shipped credential redaction,
+  CDB encryption, global preferences, and the deferred interactive setup.
+  Clarify that WinBox profile/session fields are preserved only, `devices edit`
+  is reserved, and stable releases advance both npm dist-tags.
 
 ## 0.1.9 — 2026-11-03
 

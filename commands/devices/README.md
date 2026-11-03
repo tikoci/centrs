@@ -5,7 +5,7 @@ user-facing surface over the device registry described in
 `docs/CONSTITUTION.md`. It is the only command that may *write* to the CDB.
 
 Status: `CHR-passed` for the surface described by `examples.md`. The read subset
-(`list`/`show`/`groups`) and the CDB mutation surface (`add`/`edit`/`set`/
+(`list`/`show`/`groups`) and the CDB mutation surface (`add`/`set`/
 `remove`), ambiguity / `--match`, and the provenance/override examples are green
 via `bun run test:integration` (`test/integration/devices.test.ts`,
 fixture-backed — `devices` does no network IO, so its evidence is the
