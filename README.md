@@ -72,17 +72,21 @@ product; without them this would just be a worse `curl`.
 | `explain`  | Analyze RouterOS source offline, or add read-only device evidence over REST/native API, including path schemas, completion candidates and value types. Runtime acceptance remains unproven. |
 | `devices`  | View and maintain the CDB-backed device registry (the only writer). |
 | `discover` | Discover MNDP neighbors and optionally save them into the CDB. |
-| `settings` | Manage centrs's own settings (`centrs.env`, `__default__`) and run first-time setup. |
+| `settings` | Manage centrs's global preferences (`centrs.env`) and inspect the `__default__` record. Interactive first-time setup is planned. |
 
 Each command's `commands/<name>/` directory carries its design and the
 executable example list that gates "done".
 
 ## Your WinBox address book *is* the device registry
 
-centrs deliberately has **no config store, credential vault, or inventory
-database of its own**. Instead it piggybacks on the one most RouterOS admins
+centrs deliberately has **no separate credential vault or inventory
+database**. Instead it piggybacks on the one most RouterOS admins
 already keep: the WinBox connection database (CDB), the `winbox.cdb` file that
 WinBox writes when you save a router in its address book.
+
+Global preferences live in `centrs.env`, managed by `settings`; device records
+and saved credentials stay in the CDB. See the
+[`settings` contract](commands/settings/README.md).
 
 centrs reads (and, through `devices`, writes) that same file at its well-known
 location, `~/.config/tikoci/winbox.cdb` (override with `--cdb-file` /
@@ -99,7 +103,9 @@ stores:
   the CDB. `devices show` / `add` / `set` withhold the password and report
   `passwordSet` (`--show-password` reveals it); MCP results/resources always
   redact it.
-- **`group`, `profile`, `session`, port** — used as-is.
+- **`group` and port** — used for selection and connection settings.
+  **`profile` and `session`** are preserved for WinBox compatibility; centrs
+  does not act on them.
 
 So `centrs retrieve edge1 /ip/address` works with no flags: `edge1` is looked
 up in the CDB, its credentials and address come along for the ride. A target

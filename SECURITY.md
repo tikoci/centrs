@@ -8,7 +8,22 @@ Please include the affected files or workflow, reproduction details, and impact.
 
 ## Scope
 
-`centrs` will mediate RouterOS device access, credentials, local discovery data, and optional HTTP/MCP proxy surfaces. Security-sensitive areas include credential import/cache, RouterOS write execution, local network discovery, file transfer, and any daemon that binds a network port.
+`centrs` mediates RouterOS device access, credentials, and local discovery data through its library, CLI, and stdio MCP server. File transfer is available through the library and CLI. TUI and HTTP proxy surfaces are planned; the MCP server has no network listener. Security-sensitive areas include credential import/storage, RouterOS write execution, local network discovery, file transfer, and any future daemon that binds a network port.
+
+## Credential handling
+
+Since 0.1.9, `devices show`, `add`, and `set` withhold record passwords by
+default in CLI and library output and report `passwordSet` instead (#551).
+`--show-password` (library: `showPassword: true`) explicitly reveals them;
+MCP results and resources always redact them. `--password-stdin` on
+`devices add`/`set` keeps record passwords out of process arguments.
+See the [devices contract](commands/devices/README.md#record-password-in-output).
+
+CDB encryption is explicit: `devices init --encrypt` creates an encrypted
+registry, and `devices encrypt` converts an existing open CDB. Conversion
+retains existing backups and creates a plaintext snapshot unless
+`--no-backup` is passed; that flag does not remove older backups. See the
+[encryption contract](commands/devices/README.md#cdb-encryption-lifecycle-558).
 
 ## Code scanning
 
