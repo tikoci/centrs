@@ -29,6 +29,9 @@ no section of its own.
   `startIntegrationChr({}, { reuse: true })`. A failed restore triggers one
   replacement boot, then fails closed. `CENTRS_CHR_REUSE=0` restores
   private boots everywhere.
+- Bump `@tikoci/quickchr` to `^0.5.4` (from 0.5.2). Its snapshot operations
+  get their own monitor timeouts (quickchr#80); 0.5.2's flat 5 s often cut a
+  CHR `savevm` short.
 
 ## 0.1.9 — 2026-11-03
 

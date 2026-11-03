@@ -547,25 +547,6 @@ async function waitForTcp(port: number, timeoutMs: number): Promise<void> {
 	);
 }
 
-async function waitForSnapshot(
-	chr: ChrInstance,
-	name: string,
-	timeoutMs: number,
-): Promise<boolean> {
-	const deadline = Date.now() + timeoutMs;
-	while (Date.now() < deadline) {
-		try {
-			if ((await chr.snapshot.list()).some((snap) => snap.name === name)) {
-				return true;
-			}
-		} catch {
-			// The monitor may still be busy with the savevm; ask again.
-		}
-		await Bun.sleep(1_000);
-	}
-	return false;
-}
-
 /**
  * Flush this process's stale keep-alive sockets to the CHR's REST port.
  *
@@ -628,20 +609,9 @@ export function quickChrReuseHooks(
 		async saveBaseline(chr) {
 			// quickchr's save() reads the snapshot list back and throws when the
 			// entry is missing, so a resolved save is a verified baseline.
-			try {
-				await chr.snapshot.save(BASELINE_SNAPSHOT);
-				return;
-			} catch (error) {
-				// quickchr 0.5.2 waits a fixed 5 s for any monitor reply, and a
-				// 128 MiB savevm can outlast it (measured locally) while QEMU
-				// finishes the save. Accept the baseline only once QEMU lists it.
-				if (!(await waitForSnapshot(chr, BASELINE_SNAPSHOT, 30_000))) {
-					throw error;
-				}
-				log(
-					`CHR reuse: savevm outlived quickchr's monitor timeout on ${chr.name}; baseline confirmed by snapshot list (${String(error)})`,
-				);
-			}
+			// quickchr 0.5.4+ gives savevm/loadvm their own monitor budgets
+			// (quickchr#80); 0.5.2's flat 5 s often cut a 128 MiB savevm short.
+			await chr.snapshot.save(BASELINE_SNAPSHOT);
 		},
 		async markDirty(chr) {
 			await chr.exec(`:global ${REUSE_MARKER} true`, { timeout: 10_000 });
