@@ -709,10 +709,14 @@ invalid commands. Record, selection, and provenance flags (`--user`, `--group`,
 ### 59. Convert without a plaintext snapshot
 
 ```bash
-CENTRS_CDB_PASSWORD="$CDB_SECRET" centrs devices encrypt --no-backup --cdb-file ./lab.cdb --json
+centrs devices init --cdb-file ./lab-fresh.cdb
+centrs devices add 192.0.2.1 --user reader --cdb-file ./lab-fresh.cdb
+CENTRS_CDB_PASSWORD="$CDB_SECRET" centrs devices encrypt --no-backup --cdb-file ./lab-fresh.cdb --json
 ```
 
-Conversion reports `changed: true` with no `backupPath`, and no new `.bak.*`
-file appears. Backups from earlier writes are retained, so
+A fresh path, so it does not depend on example 57 having already converted
+`./lab.cdb`. Conversion reports `changed: true`, `recordCount: 1`, and no
+`backupPath`, and no new `.bak.*` file appears. The backup the `add` wrote
+is retained, so
 `cdb/plaintext-backups` still warns. Test: `centrs devices encryption (#558)`
 in `test/integration/devices.test.ts`.
