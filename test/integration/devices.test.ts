@@ -2448,6 +2448,34 @@ describe("centrs devices --password-stdin (#582)", () => {
 		expect(await listBackups(cdbPath)).toEqual([]);
 	});
 
+	test("example 66 --password cannot consume --password-stdin as its value", async () => {
+		const cdbPath = await copyCdbFixture("example-66-password-stdin-value");
+		const before = await readFile(cdbPath);
+		for (const sub of ["add", "set"]) {
+			const result = await runCliProcess({
+				args: [
+					"devices",
+					sub,
+					"192.0.2.5",
+					"--password",
+					"--password-stdin",
+					"--cdb-file",
+					cdbPath,
+					"--json",
+				],
+				stdin: "stdin-secret\n",
+			});
+			expect(result.exitCode).toBe(1);
+			expect(JSON.parse(result.stderrText).error.code).toBe(
+				"usage/conflicting-flags",
+			);
+			expect(result.stderrText).not.toContain("stdin-secret");
+			expect(result.stdoutText).not.toContain("stdin-secret");
+			expect(await readFile(cdbPath)).toEqual(before);
+			expect(await listBackups(cdbPath)).toEqual([]);
+		}
+	});
+
 	test("example 66 --password with --password-stdin is usage/conflicting-flags", async () => {
 		const cdbPath = await copyCdbFixture("example-66-password-conflict");
 		const before = await readFile(cdbPath);

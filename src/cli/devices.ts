@@ -355,6 +355,12 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 				parsed.user = expectValue(args, ++index, arg);
 				break;
 			case "--password":
+				// Leave the stdin flag for the next iteration and mark the argv
+				// channel supplied so the conflict check below refuses both.
+				if (args[index + 1] === "--password-stdin") {
+					parsed.password = "";
+					break;
+				}
 				parsed.password = expectValue(args, ++index, arg);
 				break;
 			case "--password-stdin":

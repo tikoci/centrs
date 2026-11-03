@@ -799,9 +799,11 @@ and no backup is made.
 
 ```bash
 echo stdin-secret | centrs devices set 192.0.2.5 --password argv-secret --password-stdin --cdb-file $CDB --json
+echo stdin-secret | centrs devices set 192.0.2.5 --password --password-stdin --cdb-file $CDB --json
 ```
 
-Errors with `usage/conflicting-flags`. Neither value appears in the error.
+Both error with `usage/conflicting-flags`. Neither value appears in the error;
+`--password` cannot consume `--password-stdin` as a literal credential.
 
 ### 67. Non-UTF-8 or BOM-prefixed stdin is refused
 
