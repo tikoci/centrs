@@ -560,6 +560,7 @@ export function buildSshTerminalArgv(resolved: ResolvedTerminal): string[] {
 		...(resolved.publicKeyOnly
 			? ["-o", "PreferredAuthentications=publickey"]
 			: []),
+		"--",
 		sshUserHost(conn),
 	];
 }

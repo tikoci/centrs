@@ -168,6 +168,7 @@ export class SftpClient {
 			"-P",
 			String(this.config.port),
 			...sshCommonOptions(this.config),
+			"--",
 			sshUserHost({ ...this.config, host }),
 		];
 	}

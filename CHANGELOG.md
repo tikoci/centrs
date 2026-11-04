@@ -37,6 +37,9 @@ no section of its own.
 
 ### Fixed
 
+- Reject option-like host/username values; end ssh/sftp option parsing with
+  `--`. Host resolution also rejects DNS labels that start with a hyphen.
+
 - `terminal --quickchr <name>` opens an ssh console to one running quickchr
   machine (#610). It used to reject even a single name as
   `usage/fanout-not-supported`. Host, port, user, and key come from the
