@@ -72,16 +72,21 @@ bypassed for them. Terminal-specific points:
   any target. An unknown or stopped machine is `quickchr/machine-not-found` /
   `quickchr/machine-stopped`; centrs never starts a VM.
 - **Auth is the provider's verified key.** The interactive argv still omits
-  `BatchMode=yes`, but the descriptor's SSH endpoint must pass the same gate
-  execute and sftp enforce: a batch-verified `privateKeyPath`. The terminal logs
-  in with `-i <key> -o IdentitiesOnly=yes`. An endpoint without one is
+  `BatchMode=yes`, but the descriptor's SSH endpoint must carry a
+  batch-verified `privateKeyPath`. This is stricter than execute and sftp,
+  which also accept an `agent-or-config` batch mode: an interactive ssh with no
+  `-i` would offer ambient agent/config identities. The terminal logs in with
+  `-i <key> -o IdentitiesOnly=yes -o PreferredAuthentications=publickey`, so a
+  rejected key fails instead of falling back to a password prompt. An endpoint
+  without a key path is
   [`quickchr/ssh-auth-unavailable`](../../docs/errors/quickchr/ssh-auth-unavailable.md),
   never an ambient-agent login or a password prompt (an agent cannot answer
   one). quickchr provisions that key only for a machine first booted with
   `--secure-login` (the `secure-login` setting;
   [tikoci/quickchr#253](https://github.com/tikoci/quickchr/issues/253) tracks
   adding one later). For any other machine the error names that, plus a
-  bring-your-own-key route: install a key with `execute --quickchr`, then
+  bring-your-own-key route: install a key with `execute --quickchr --via
+  <keyInstallVia>` (a non-SSH service the machine forwards), then
   `terminal --host 127.0.0.1 --port <ssh port> --username <user> --ssh-key <key>
   --insecure`, with the endpoint facts in the error context (TQ3). Host-key
   checking is relaxed by

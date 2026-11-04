@@ -36,6 +36,9 @@ import {
 	parseResolvePolicy,
 	type QuickchrResolution,
 	quickchrConnection,
+	quickchrKeyInstallCommand,
+	quickchrKeyInstallVia,
+	quickchrSshAuthUnavailable,
 	type ResolvedAuth,
 	type ResolvedTarget,
 	resolveAuth,
@@ -127,6 +130,13 @@ interface ResolvedTerminal {
 	auth: ResolvedAuth;
 	sourceMac?: string;
 	insecure: boolean;
+	/**
+	 * Restrict ssh to public-key auth (`PreferredAuthentications=publickey`).
+	 * Set for a `--quickchr` console: the provider's managed key is the only
+	 * credential, so a rejected key fails instead of falling back to a password
+	 * or keyboard-interactive prompt.
+	 */
+	publicKeyOnly?: boolean;
 	/**
 	 * Resolution warnings: CDB record notes, or the quickchr provider-trust note
 	 * (relaxed host-key checking for the ephemeral VM). The CLI streams device
@@ -273,10 +283,12 @@ export async function resolveTerminalRequest(
  * through quickchr's public descriptor API only, and the chosen `--via` (default
  * ssh) must be a service the descriptor forwards — `--via mac-telnet` is a typed
  * `quickchr/unsupported-via`, never a swap to ssh. The SSH endpoint must carry a
- * provider-verified key (the same batch-auth gate execute/sftp enforce), so the
- * session logs in with quickchr's managed key under `IdentitiesOnly=yes` rather
- * than whatever the ambient agent offers; host-key checking is relaxed by
- * provenance for the ephemeral VM, exactly as for the batch ssh clients.
+ * provider-provisioned key path — stricter than the execute/sftp batch gate,
+ * which also accepts `agent-or-config`: an interactive ssh with no `-i` would
+ * offer ambient agent/config identities and could fall back to a password
+ * prompt. So the session logs in only with quickchr's managed key under
+ * `IdentitiesOnly=yes`; host-key checking is relaxed by provenance for the
+ * ephemeral VM, exactly as for the batch ssh clients.
  */
 async function resolveQuickchrTerminal(
 	request: TerminalRequest,
@@ -316,6 +328,7 @@ async function resolveQuickchrTerminal(
 		target: connection.target,
 		auth: connection.auth,
 		insecure: connection.insecure,
+		publicKeyOnly: true,
 		warnings: connection.warnings,
 	};
 }
@@ -333,7 +346,20 @@ function terminalQuickchrConnection(
 	via: string,
 ) {
 	try {
-		return quickchrConnection(resolution, via as RouterOsProtocol);
+		const connection = quickchrConnection(resolution, via as RouterOsProtocol);
+		if (via === "ssh" && connection.auth.sshKey === undefined) {
+			// The descriptor vouches only for `agent-or-config`; the interactive
+			// console requires the provider's own key (see resolveQuickchrTerminal).
+			// quickchrConnection succeeded, so the ssh endpoint is the available shape.
+			const ssh = resolution.services.ssh as { auth?: unknown } | undefined;
+			throw quickchrSshAuthUnavailable(
+				resolution,
+				{ host: connection.target.host, port: connection.target.port },
+				ssh?.auth as Parameters<typeof quickchrSshAuthUnavailable>[2],
+				"has no provider-provisioned SSH key for the console, and centrs does not hand an interactive session to the ambient ssh-agent, ~/.ssh/config, or a password prompt",
+			);
+		}
+		return connection;
 	} catch (error) {
 		if (
 			!(error instanceof CentrsError) ||
@@ -345,12 +371,21 @@ function terminalQuickchrConnection(
 		const machine = resolution.name;
 		let remediation: string;
 		if (error.code === "quickchr/ssh-auth-unavailable") {
-			const { host, port, username } = (error.context ?? {}) as {
+			const { host, port, username, availableServices } = (error.context ??
+				{}) as {
 				host?: string;
 				port?: number;
 				username?: string;
+				availableServices?: string[];
 			};
-			remediation = `quickchr provisions a verified key only on a machine's first boot with \`--secure-login\` (\`quickchr add/start --secure-login\`); recreate the machine that way. Or install your own key (\`centrs execute --quickchr ${machine} '/user/ssh-keys/add user=${username} key="<public key>"' --yes\`) and open the console directly: \`centrs terminal --host ${host} --port ${port} --username ${username} --ssh-key <private key> --insecure\`.`;
+			const user = username ?? "admin";
+			const installVia = quickchrKeyInstallVia(availableServices ?? []);
+			const direct = `\`centrs terminal --host ${host} --port ${port} --username ${user} --ssh-key <private key> --insecure\``;
+			remediation = `quickchr provisions a verified key only on a machine's first boot with \`--secure-login\` (\`quickchr add/start --secure-login\`); recreate the machine that way.${
+				installVia !== undefined
+					? ` Or install your own key (\`${quickchrKeyInstallCommand(machine, user, installVia)}\`) and open the console directly: ${direct}.`
+					: ` The machine forwards no REST or API service to install your own key over; with a key already on the router, open the console directly: ${direct}.`
+			}`;
 		} else if (via !== "ssh") {
 			remediation = `quickchr forwards no ${via} service; drop \`--via ${via}\` so the terminal uses the machine's ssh endpoint.`;
 		} else {
@@ -522,6 +557,9 @@ export function buildSshTerminalArgv(resolved: ResolvedTerminal): string[] {
 		"-p",
 		String(resolved.target.port),
 		...sshCommonOptions(conn),
+		...(resolved.publicKeyOnly
+			? ["-o", "PreferredAuthentications=publickey"]
+			: []),
 		sshUserHost(conn),
 	];
 }

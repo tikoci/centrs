@@ -165,7 +165,8 @@ printf '%s\n' '/system/identity/print' ':put ("ssh-user=" . [/user/active/get [f
 
 No `--via`, host, port, user, or key: the descriptor's SSH endpoint supplies
 them, and the session logs in with quickchr's batch-verified managed key (the
-harness boots the CHR with quickchr `secureLogin`, which provisions one).
+harness boots the CHR with quickchr `secureLogin`, which provisions one), with
+ssh limited to public-key auth.
 stdout contains the device identity (checked as in TS1) and
 `ssh-user=<descriptor user>`, RouterOS's own record of who holds the login. After
 `/quit` and stdin EOF the process exits, and the router's `/user/active` lists
@@ -185,7 +186,7 @@ never swaps a pinned `--via` for ssh.
 
 ```bash
 centrs terminal --quickchr $NAME --json
-centrs execute --quickchr $NAME '/user/ssh-keys/add user=<user> key="<public key>"' --yes --json
+centrs execute --quickchr $NAME --via <keyInstallVia> '/user/ssh-keys/add user=<user> key="<public key>"' --yes --json
 printf '/system/identity/print\n/quit\n' | centrs terminal --host <host> --port <port> --username <user> --ssh-key $OWN_KEY --insecure
 ```
 
@@ -194,8 +195,11 @@ printf '/system/identity/print\n/quit\n' | centrs terminal --host <host> --port 
 no SSH key. The first call's envelope on stderr is `ok: false`,
 `error.code="quickchr/ssh-auth-unavailable"`, exit `1`, no bytes on stdout; the
 remediation names `--secure-login`, and `error.context` carries
-`host`/`port`/`username`. Following the remediation, the key install over the
-machine's non-SSH service succeeds, and the direct console, filled in from that
+`host`/`port`/`username` and `keyInstallVia`: the forwarded non-SSH service
+(`native-api` first, else `rest-api`) the install command is pinned to, since
+execute's own default may not be forwarded. A machine that forwards neither
+gets no install command and no `keyInstallVia`. Following the remediation, the
+key install over that service succeeds, and the direct console, filled in from that
 context with `$OWN_KEY` (minted by the test), prints the device identity with
 no agent and no password prompt available. Covered by
 `test/integration/terminal-ssh.test.ts`.

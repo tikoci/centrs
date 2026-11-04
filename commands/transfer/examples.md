@@ -567,9 +567,13 @@ mode (`agent-or-config`, or `private-key` together with a verified
 list succeeds over sftp: `meta.via=ssh` (the protocol id, as in every sftp
 transfer), `meta.target.source.kind=provider`,
 `meta.settings.insecure` provider-sourced, and the key path (when one is
-handed over) carried as a provider-sourced `sshKey`. Otherwise the envelope is
-`ok: false` with `error.code=quickchr/ssh-auth-unavailable` and exit code 1 — a
-typed gate, **never** a password prompt and never a silent fallback to REST.
+handed over) carried as a provider-sourced `sshKey`. When the machine forwards
+SSH but its auth is not usable, the envelope is `ok: false` with
+`error.code=quickchr/ssh-auth-unavailable` and exit code 1 — a typed gate,
+**never** a password prompt and never a silent fallback to REST. When the
+descriptor has no SSH service, or marks it unavailable, the code is
+`quickchr/unsupported-via` instead: the machine has no SSH to provision a key
+for.
 
 ## CDB record `via=` (#591)
 

@@ -168,11 +168,21 @@ describeFast("terminal over ssh (host ssh relay)", () => {
 			const tq3Error = JSON.parse(tq3.stderrText).error as {
 				code: string;
 				remediation: string;
-				context: { host: string; port: number; username: string };
+				context: {
+					host: string;
+					port: number;
+					username: string;
+					keyInstallVia?: string;
+				};
 			};
 			expect(tq3Error.code).toBe("quickchr/ssh-auth-unavailable");
 			expect(tq3Error.remediation).toContain("--secure-login");
 			expect(tq3Error.context.port).toBe(chr.sshPort);
+			// The remediation pins the install to a service the machine forwards.
+			expect(tq3Error.context.keyInstallVia).toBeDefined();
+			expect(tq3Error.remediation).toContain(
+				`--via ${tq3Error.context.keyInstallVia}`,
+			);
 			const ownKey = join(tmp, "own");
 			await keygen(ownKey);
 			const ownPub = (await Bun.file(`${ownKey}.pub`).text()).trim();
@@ -181,6 +191,8 @@ describeFast("terminal over ssh (host ssh relay)", () => {
 					"execute",
 					"--quickchr",
 					chr.name,
+					"--via",
+					tq3Error.context.keyInstallVia ?? "",
 					`/user/ssh-keys/add user=${tq3Error.context.username} key="${ownPub}"`,
 					"--yes",
 					"--json",

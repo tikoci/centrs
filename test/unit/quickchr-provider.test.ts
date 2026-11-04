@@ -346,7 +346,12 @@ describe("quickchrConnection (per-`--via` consumption, #134 Phase 4)", () => {
 			batchModes: [],
 		});
 		expect(error.remediation).toContain("--secure-login");
-		expect(error.remediation).toContain("/user/ssh-keys/add");
+		// The install command is pinned to a forwarded service: native-api
+		// (execute's default) is unavailable on this machine, rest-api is live.
+		expect(error.remediation).toContain(
+			`centrs execute --quickchr lab --via rest-api '/user/ssh-keys/add user=admin key="<public key>"' --yes`,
+		);
+		expect(error.context?.["keyInstallVia"]).toBe("rest-api");
 		// Other services are named for commands that need no SSH; ssh is not.
 		expect(error.context?.["availableServices"]).toEqual(["rest-api"]);
 		expect(error.remediation).toContain("`--via rest-api`");
@@ -371,6 +376,27 @@ describe("quickchrConnection (per-`--via` consumption, #134 Phase 4)", () => {
 		);
 		// The unusable ssh endpoint is not advertised as an alternative either.
 		expect(error.context?.["availableServices"]).toEqual(["rest-api"]);
+	});
+
+	test("no non-SSH service forwarded → no key-install command, secure login only", async () => {
+		const descriptor = descriptorFor("lab");
+		(descriptor.services["rest-api"] as { available: boolean }).available =
+			false;
+		(
+			descriptor.services.ssh as { auth: { batchModes: string[] } }
+		).auth.batchModes = [];
+		const resolution = await resolveQuickchrTarget(
+			"lab",
+			moduleWith(() => ({ descriptor: async () => descriptor })),
+		);
+		const error = expectThrowCode(
+			() => quickchrConnection(resolution, "ssh"),
+			"quickchr/ssh-auth-unavailable",
+		);
+		expect(error.remediation).toContain("--secure-login");
+		expect(error.remediation).not.toContain("/user/ssh-keys/add");
+		expect(error.context?.["availableServices"]).toEqual([]);
+		expect(error.context).not.toHaveProperty("keyInstallVia");
 	});
 
 	test("ssh batch-capable via agent-or-config only → connection without sshKey", async () => {

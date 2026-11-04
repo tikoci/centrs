@@ -132,6 +132,40 @@ describe("resolveTerminalRequest --quickchr (#610)", () => {
 		expect(argv).toContain("StrictHostKeyChecking=no");
 		expect(argv.endsWith("quickchr@127.0.0.1")).toBe(true);
 		expect(argv).not.toContain("BatchMode=yes");
+		// The managed key is the only credential: no password/kbd-interactive fallback.
+		expect(argv).toContain("-o PreferredAuthentications=publickey");
+	});
+
+	test("an agent-or-config-only SSH endpoint (no key path) is quickchr/ssh-auth-unavailable — the console never uses ambient credentials", async () => {
+		const error = await resolveTerminalRequest({ quickchr: "lab" }, noEnv, {
+			resolveQuickchr: quickchrResolution({
+				available: true,
+				host: "127.0.0.1",
+				port: 9122,
+				transport: "tcp",
+				tls: false,
+				auth: {
+					username: "quickchr",
+					modes: ["agent-or-config", "password"],
+					batchModes: ["agent-or-config"],
+				},
+			}),
+		}).then(
+			() => {
+				throw new Error("expected a throw");
+			},
+			(caught: unknown) => caught as CentrsError,
+		);
+		expect(error).toBeInstanceOf(CentrsError);
+		expect(error.code).toBe("quickchr/ssh-auth-unavailable");
+		expect(error.summary).toContain("provider-provisioned SSH key");
+		expect(error.remediation).toContain("--secure-login");
+		expect(error.context).toMatchObject({
+			command: "terminal",
+			machine: "lab",
+			batchModes: ["agent-or-config"],
+			keyInstallVia: "rest-api",
+		});
 	});
 
 	test("ambient env/config connection facts are bypassed", async () => {
@@ -214,13 +248,15 @@ describe("resolveTerminalRequest --quickchr (#610)", () => {
 		expect(error.code).toBe("quickchr/ssh-auth-unavailable");
 		expect(error.remediation).toContain("--secure-login");
 		expect(error.remediation).toContain(
-			`centrs execute --quickchr lab '/user/ssh-keys/add user=admin key="<public key>"' --yes`,
+			// Pinned to a service the machine forwards (only rest-api here):
+			// execute's native-api default would fail before installing the key.
+			`centrs execute --quickchr lab --via rest-api '/user/ssh-keys/add user=admin key="<public key>"' --yes`,
 		);
 		expect(error.remediation).toContain(
 			"centrs terminal --host 127.0.0.1 --port 9122 --username admin --ssh-key <private key> --insecure",
 		);
 		// No terminal-incapable alternative, and no password-prompt route.
-		expect(error.remediation).not.toContain("rest-api");
+		expect(error.remediation).not.toContain("Commands that do not need SSH");
 		expect(error.remediation).not.toContain("prompt");
 		expect(error.context).toMatchObject({
 			command: "terminal",
@@ -411,6 +447,8 @@ describe("buildSshTerminalArgv", () => {
 		expect(argv).not.toContain("-i");
 		expect(argv.join(" ")).not.toContain("IdentitiesOnly");
 		expect(argv.at(-1)).toBe("admin@192.0.2.10");
+		// A non-provider console may still prompt for a password on the TTY.
+		expect(argv.join(" ")).not.toContain("PreferredAuthentications");
 	});
 });
 
