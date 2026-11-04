@@ -83,6 +83,12 @@ interface StartOptions {
 	 * client test forwards a host TCP port onto guest 2000 ({@link ChrPortForward}).
 	 */
 	extraPorts?: readonly ChrPortForward[];
+	/**
+	 * quickchr's managed login: a `quickchr` account plus a provisioned,
+	 * batch-verified SSH key the descriptor hands to `--quickchr` consumers.
+	 * quickchr only creates it when this is explicitly `true` at first boot.
+	 */
+	secureLogin?: boolean;
 }
 
 const routerOsChannels = [

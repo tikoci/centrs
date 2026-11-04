@@ -384,7 +384,12 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "quickchr/unsupported-via",
 		summary:
-			"The chosen `--via` has no usable service on the quickchr machine (not forwarded, unavailable, or SSH without batch-capable auth).",
+			"The chosen `--via` has no usable service on the quickchr machine (not forwarded, or marked unavailable).",
+	},
+	{
+		code: "quickchr/ssh-auth-unavailable",
+		summary:
+			"The quickchr machine forwards SSH but vouches for no verified SSH key, so no non-interactive SSH/SFTP login is possible.",
 	},
 
 	// routeros/*

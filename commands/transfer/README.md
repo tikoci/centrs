@@ -216,7 +216,7 @@ duplicate that table. Behavior notes the generated reference cannot carry:
 - `--quickchr` resolves host/port/auth from the live `@tikoci/quickchr`
   (0.4.5+, optional dependency) descriptor. `--via sftp` additionally
   requires the descriptor's SSH endpoint to advertise a batch-capable auth
-  mode, else `quickchr/unsupported-via` (never a password prompt).
+  mode, else `quickchr/ssh-auth-unavailable` (never a password prompt).
 
 ### Designed, not implemented
 
