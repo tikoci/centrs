@@ -765,3 +765,21 @@ centrs api --quickchr $NAME system/resource --json
 
 Envelope: `ok: true`, `data` is the resource object,
 `meta.target.source.kind=provider`.
+
+## Per-service CDB ports (#618)
+
+### SP1. Structured API calls use the matching service port
+
+`$CDB` holds a `127.0.0.1` record with `www-port=$WWW_PORT`,
+`api-port=$API_PORT`, `ssh-port=$SSH_PORT`, and legacy `port=1`.
+The ports are host forwards to the CHR services.
+
+```bash
+centrs api 127.0.0.1 system/identity --via rest-api --cdb-file $CDB --json
+centrs api 127.0.0.1 system/identity --via native-api --cdb-file $CDB --json
+```
+
+Both succeed; `meta.target.port` is the matching host port and
+`meta.settings.port.key` is `record:0:www-port` or `record:0:api-port`.
+Mapped to `test/integration/cdb-service-ports.test.ts` →
+`REST and native API each read their own key`.

@@ -615,3 +615,23 @@ A `via=rest-api` record uploading more than 60 KB with no `--via`:
 `ok: false`, `error.code=transport/unsupported-operation`, nothing sent. The
 remediation names `record:N:via` and suggests `--via sftp`, matching a
 pinned `--via rest`.
+
+## Per-service CDB ports (#618)
+
+### SP1. REST, native and SFTP uploads use their own service ports
+
+`$CDB` holds a `127.0.0.1` record with `www-port=$WWW_PORT`,
+`api-port=$API_PORT`, `ssh-port=$SSH_PORT`, and legacy `port=1`.
+The ports are CHR host forwards; `$KEY.pub` is imported for the saved user,
+and `$SRC` is a small local text file.
+
+```bash
+centrs transfer 127.0.0.1 --via rest --cdb-file $CDB upload $SRC centrs-618-rest.txt --json
+centrs transfer 127.0.0.1 --via native --cdb-file $CDB upload $SRC centrs-618-native.txt --json
+centrs transfer 127.0.0.1 --via sftp --ssh-key $KEY --insecure --cdb-file $CDB upload $SRC centrs-618-sftp.txt --json
+```
+
+All succeed; `meta.target.port` is the matching host port and
+`meta.settings.port.key` is `record:0:www-port`, `record:0:api-port`, or
+`record:0:ssh-port`. Mapped to `test/integration/cdb-service-ports.test.ts` →
+`transfer over REST, native and SFTP reads the matching key`.
