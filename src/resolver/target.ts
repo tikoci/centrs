@@ -628,6 +628,15 @@ export function parseHostCandidate(value: string): URL {
 	} catch (cause) {
 		throw invalidTargetError(value, cause);
 	}
+	if (url.hostname.split(".").some((label) => label.startsWith("-"))) {
+		throw new CentrsError({
+			code: "input/invalid-target",
+			summary: "A host label must not start with a hyphen.",
+			remediation:
+				"Provide an IP address or hostname whose labels do not start with `-`; correct the selected CLI, environment, CDB or provider value.",
+			context: { field: "host" },
+		});
+	}
 	if (hasScheme && url.pathname !== "/" && url.pathname !== "") {
 		throw new CentrsError({
 			code: "input/invalid-target",
