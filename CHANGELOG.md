@@ -14,6 +14,13 @@ no section of its own.
 
 ## 0.1.10 — next
 
+### Added
+
+- CDB per-service port keys `www-port`, `www-ssl-port`, `api-port`,
+  `api-ssl-port` and `ssh-port` (#618). Each is read only by the matching
+  transport and beats the legacy all-transport `port=` within the CDB tier.
+  `--port`/`CENTRS_PORT` precedence and MAC-Telnet delivery are unchanged.
+
 ### Maintenance
 
 - Prepare the next development cycle with package version `0.1.10-next`.

@@ -2,7 +2,9 @@
  * Target identity + credential resolution.
  *
  * Combines CDB identity (`./cdb.ts`), the settings precedence ladder
- * (`./settings.ts`), and the matched record's comment-kv `port` override into a
+ * (`./settings.ts`), and the matched record's comment-kv port overrides (the
+ * per-service `www-port`/`www-ssl-port`/`api-port`/`api-ssl-port`/`ssh-port`
+ * for the selected transport, else legacy `port`) into a
  * concrete transport target with per-field provenance. The result feeds
  * `EnvelopeTargetMeta` (`target.source` for the identity as a whole, plus the
  * `sources` map for each resolved field) and `meta.settings`.
@@ -22,7 +24,7 @@ import {
 	NATIVE_API_PORT,
 	NATIVE_API_TLS_PORT,
 } from "../protocols/native-api.ts";
-import type { CdbResolution } from "./cdb.ts";
+import type { CdbResolution, CommentKvOverrides } from "./cdb.ts";
 import { normalizeMac } from "./mac.ts";
 import {
 	type ResolvedSetting,
@@ -223,15 +225,30 @@ export function resolveTarget(
 		}
 	}
 	const parsedUrl = parseHostCandidate(candidate);
+	// A bare host is not an explicit `http` choice, even though URL parsing
+	// defaults it to http — only a written scheme pins the plain/TLS variant.
+	const explicitScheme = /^https:\/\//i.test(candidate)
+		? "https"
+		: /^http:\/\//i.test(candidate)
+			? "http"
+			: undefined;
+	const service = selectServicePort(
+		via,
+		cdb?.overrides.servicePorts,
+		explicitScheme,
+	);
 	const portSetting = resolveOptionalIntegerSetting(
 		input.port,
 		env,
 		ENV_PORT,
 		"port",
-		cdb?.overrides.port,
+		service?.setting ?? cdb?.overrides.port,
 		config,
 	);
-	const scheme = parsedUrl.protocol === "https:" ? "https" : "http";
+	const serviceWon = service !== undefined && portSetting === service.setting;
+	const scheme =
+		explicitScheme ??
+		(service !== undefined ? (service.tls ? "https" : "http") : "http");
 
 	const identitySource: ResolverSettingSource = arpResolvedMac
 		? { kind: "arp", key: arpResolvedMac }
@@ -264,7 +281,12 @@ export function resolveTarget(
 			(hostFromCdbRecord(hostSetting, cdb)
 				? undefined
 				: typedPort(candidate, parsedUrl));
-		if (explicitPort === NATIVE_API_PORT) {
+		// A saved `api-port=`/`api-ssl-port=` decides TLS by its name, not its
+		// number; the well-known 8728/8729 inference still applies to every
+		// other port source (CLI/env/config, legacy `port=`, a typed port).
+		if (serviceWon) {
+			tls = service.tls;
+		} else if (explicitPort === NATIVE_API_PORT) {
 			tls = false;
 		} else if (explicitPort === NATIVE_API_TLS_PORT) {
 			tls = true;
@@ -308,6 +330,43 @@ export function resolveTarget(
 		portSource,
 		sources,
 	};
+}
+
+/**
+ * The CDB per-service port key for `via`, if one applies (#618). An explicit
+ * scheme picks the plain or TLS variant and never falls through to the other;
+ * with no scheme the stored variant decides, secure first. Only valid values
+ * reach here (the CDB coercer drops invalid ones), so an invalid key counts as
+ * absent. `undefined` means "behave as before" (legacy `port=` / defaults).
+ */
+function selectServicePort(
+	via: RouterOsProtocol,
+	ports: CommentKvOverrides["servicePorts"],
+	explicitScheme: "http" | "https" | undefined,
+): { setting: ResolvedSetting<number>; tls: boolean } | undefined {
+	if (ports === undefined) {
+		return undefined;
+	}
+	if (via === "ssh") {
+		const setting = ports["ssh-port"];
+		return setting ? { setting, tls: false } : undefined;
+	}
+	const pair =
+		via === "rest-api"
+			? { plain: ports["www-port"], secure: ports["www-ssl-port"] }
+			: via === "native-api"
+				? { plain: ports["api-port"], secure: ports["api-ssl-port"] }
+				: undefined;
+	if (pair === undefined) {
+		return undefined;
+	}
+	if (explicitScheme !== "http" && pair.secure) {
+		return { setting: pair.secure, tls: true };
+	}
+	if (explicitScheme !== "https" && pair.plain) {
+		return { setting: pair.plain, tls: false };
+	}
+	return undefined;
 }
 
 /**

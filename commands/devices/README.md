@@ -123,7 +123,10 @@ resolver settings.
 | `via`           | override | Default transport for this device (`rest-api`, `native-api`, `ssh`, …). |
 | `validate`      | override | `true` / `false`. `false` is the escape hatch; CLI overrides.           |
 | `timeout`       | override | Default request timeout in ms. Per-transport caps still apply.          |
-| `port`          | override | Non-default transport port. Omitted when equal to the protocol default. |
+| `port`          | override | Legacy all-transport port (REST, native API, SSH, MAC-Telnet delivery). Prefer the per-service keys below. Omitted when equal to the protocol default. |
+| `www-port`, `www-ssl-port` | override | REST port, plain/TLS. Beats `port`. See "Per-service ports". |
+| `api-port`, `api-ssl-port` | override | Native API port, plain/TLS. Beats `port`. |
+| `ssh-port`      | override | SSH port (execute, terminal, SFTP transfer). Beats `port`. |
 | `ssh-key`       | override | Per-device private key file path for SSH transports.                    |
 | `source`        | override | Provenance marker for discovered/imported records (`mndp`, `dude`, …).  |
 | `mcp`           | override | MCP write policy for this device: `ro` (default) or `rw`. See `commands/mcp/`. |
@@ -146,6 +149,18 @@ Rules:
   error needs to mention them. It joins the comment-kv allowlist *with* the SSH
   transport (see `commands/terminal/README.md`), not before — a key path with no
   working SSH transport is the kind of half-feature we avoid.
+- **Per-service ports** are named after RouterOS `/ip/service` entries. Only
+  the transport that connects to that service reads them; MAC-Telnet reads
+  none. Within the CDB tier the matching key beats `port=`; `--port`,
+  `CENTRS_PORT` and the rest of the ladder are unchanged, so a CLI/env port still
+  wins (config `CENTRS_PORT` stays below the CDB). Plain vs TLS: an explicit
+  `http://`/`https://` in the target picks that variant and is never switched;
+  with no scheme the stored variant decides, secure first when both are stored.
+  A saved key decides TLS by its name, so `api-port=8729` is plain. A higher-tier
+  `--port` replaces only the number and keeps the saved variant's TLS, except
+  native's existing explicit 8728 (plain) / 8729 (TLS) rule. An invalid value
+  warns `cdb/invalid-option` and counts as absent. `meta.settings.port` names
+  the key that won (e.g. `record:3:www-ssl-port`).
 - Unknown keys → `cdb/unknown-option` warning. The call still succeeds.
 - Tokens are shell-word tokenized. Values with spaces require double quotes
   (`"…"`), with `\"` and `\\` escapes. `=` inside a quoted value is literal.

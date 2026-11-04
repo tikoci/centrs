@@ -37,7 +37,11 @@ import {
 } from "../devices.ts";
 import { CentrsError } from "../errors.ts";
 import { plannedProtocols, type RouterOsProtocol } from "../protocols/index.ts";
-import { parseCommentKv } from "./comment-kv.ts";
+import {
+	parseCommentKv,
+	type ServicePortKey,
+	servicePortKeys,
+} from "./comment-kv.ts";
 import { isMacAddress, normalizeMac } from "./mac.ts";
 import {
 	parseBoolean,
@@ -62,7 +66,10 @@ export interface ResolverWarning {
 /** Comment-kv overrides, coerced and tagged with `comment-kv` provenance. */
 export interface CommentKvOverrides {
 	via?: ResolvedSetting<RouterOsProtocol>;
+	/** Legacy all-transport `port=`. */
 	port?: ResolvedSetting<number>;
+	/** Per-service ports (`www-port=`, `api-ssl-port=`, …); valid values only. */
+	servicePorts?: Partial<Record<ServicePortKey, ResolvedSetting<number>>>;
 	timeoutMs?: ResolvedSetting<number>;
 	validate?: ResolvedSetting<boolean>;
 	/** Identity-source hint (e.g. `arp`); parsed but not consumed yet. */
@@ -481,12 +488,23 @@ export function coerceCommentKv(
 		};
 	}
 
-	const port = coercePort(parsed.values.port, recordIndex, warnings);
+	const port = coercePort("port", parsed.values.port, recordIndex, warnings);
 	if (port !== undefined) {
 		overrides.port = {
 			value: port,
 			source: { kind: "comment-kv", key: keyFor("port") },
 		};
+	}
+
+	for (const key of servicePortKeys) {
+		const value = coercePort(key, parsed.values[key], recordIndex, warnings);
+		if (value !== undefined) {
+			overrides.servicePorts ??= {};
+			overrides.servicePorts[key] = {
+				value,
+				source: { kind: "comment-kv", key: keyFor(key) },
+			};
+		}
 	}
 
 	const timeoutMs = coerceTimeout(parsed.values.timeout, recordIndex, warnings);
@@ -574,6 +592,7 @@ function coerceVia(
 }
 
 function coercePort(
+	key: "port" | ServicePortKey,
 	raw: string | undefined,
 	recordIndex: number,
 	warnings: ResolverWarning[],
@@ -583,7 +602,7 @@ function coercePort(
 	}
 	if (!/^\d+$/.test(raw.trim())) {
 		return invalidOption(
-			"port",
+			key,
 			raw,
 			recordIndex,
 			"expected an integer 1-65535",
@@ -593,7 +612,7 @@ function coercePort(
 	const parsed = Number.parseInt(raw.trim(), 10);
 	if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
 		return invalidOption(
-			"port",
+			key,
 			raw,
 			recordIndex,
 			"out of range 1-65535",
