@@ -831,3 +831,48 @@ CDB path/password and output flags, plus `--encrypt` for `init` or
 `--user`, `--password-stdin`, `--show-password`, `--group` and `--match`.
 Test: `devices file-command help is scoped without opening a CDB` in
 `test/integration/cli-smoke.test.ts` (network-free).
+
+## Per-service port keys (#618)
+
+### SP1. Save service ports, then remove one to use legacy `port=`
+
+The fixture record for `127.0.0.1` has `port=1` and valid host forwards in
+`www-port=$WWW_PORT`, `api-port=$API_PORT`, and `ssh-port=$SSH_PORT`.
+`test/integration/cdb-service-ports.test.ts` →
+`removing a key falls back to legacy port=` covers:
+
+```bash
+centrs devices set 127.0.0.1 api-port= --cdb-file $CDB --json
+centrs retrieve 127.0.0.1 /system/identity --via native-api --timeout 5s --cdb-file $CDB --json
+centrs retrieve 127.0.0.1 /system/identity --via rest-api --cdb-file $CDB --json
+```
+
+The deletion succeeds. Native retrieve fails connecting through legacy `port=1`,
+with `meta.settings.port.key="record:0:port"`. REST still succeeds using
+`record:0:www-port`.
+
+### SP2. Set and delete service ports with `--strict` (offline)
+
+An existing record for `192.0.2.5` has legacy `port=9000`:
+
+```bash
+centrs devices set 192.0.2.5 www-port=7080 --strict --cdb-file $CDB --json
+centrs devices set 192.0.2.5 www-port= --strict --cdb-file $CDB --json
+```
+
+Both succeed. Resolution uses 7080 after the first update and 9000 after the
+second. Mapped to `test/unit/cdb-service-ports.test.ts` →
+`set --strict, resolve, delete, resolve`.
+
+### SP3. Secure service keys select TLS (offline)
+
+```bash
+centrs devices set 192.0.2.5 www-ssl-port=7443 api-ssl-port=18729 --strict --cdb-file $CDB --json
+```
+
+With no explicit scheme, REST resolves HTTPS on 7443 and native API resolves TLS
+on 18729. An explicit `http://` selects only a plain key (`www-port` or
+`api-port`); if absent, legacy `port=` or the old defaults apply. Mapped to
+`test/unit/cdb-service-ports.test.ts` → `only the secure key stored → TLS on that port`
+and `explicit http:// picks the plain key and is never upgraded`.
+TLS service connections are not covered by the certificate-free CHR fixture.

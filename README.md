@@ -136,6 +136,7 @@ centrs reads three settings from it. The recognized keys:
 | `validate` | `true` / `false`. `false` is the escape hatch; a CLI flag still wins.   |
 | `timeout`  | Default request timeout in ms (per-transport caps still apply).         |
 | `port`     | Non-default transport port.                                            |
+| `www-port`, `www-ssl-port`, `api-port`, `api-ssl-port`, `ssh-port` | Per-service port, named after `/ip/service`. Only the matching transport reads it (REST, native API, SSH); it beats `port`, which applies to every transport. |
 | `ssh-key`  | Path to a per-device SSH private key (a path only — never key material).|
 | `source`   | Provenance marker for discovered/imported records (`mndp`, `dude`, …).  |
 | `mcp`      | MCP write policy: `ro` (default) or `rw`. See below.                    |
