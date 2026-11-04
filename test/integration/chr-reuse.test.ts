@@ -31,6 +31,15 @@ import { runCliProcess } from "./cli-process.ts";
 const describeReuse =
 	isChrIntegrationEnabled() && isChrReuseEnabled() ? describe : describe.skip;
 
+/**
+ * The replacement control boots two CHRs (~56 s on CI) to prove a path the unit
+ * tier already covers against fakes. GitHub runs it only on the scheduled QA
+ * run; local runs always include it.
+ */
+const skipReplacementControl =
+	process.env["GITHUB_EVENT_NAME"] !== undefined &&
+	process.env["GITHUB_EVENT_NAME"] !== "schedule";
+
 const PROBE_FILE = "centrs-reuse-probe";
 const DIRTY_IDENTITY = "centrs-reuse-dirty";
 
@@ -121,39 +130,43 @@ describeReuse("CHR reuse: snapshot restore against CHR (#612)", () => {
 		}
 	}, 300_000);
 
-	test("a failed loadvm discards the router and boots one replacement", async () => {
-		const logs: string[] = [];
-		const hooks = quickChrReuseHooks(
-			() => bootIntegrationChr(REUSE_BOOT_OPTIONS),
-			(message) => logs.push(message),
-		);
-		// A real loadvm against a snapshot that does not exist: QEMU refuses it,
-		// and quickchr resumes the guest before throwing.
-		const reuse = createChrReuse({
-			...hooks,
-			restoreBaseline: (chr) => chr.snapshot.load("centrs-no-such-snapshot"),
-		});
-		try {
-			const first = await reuse.acquire();
-			expect(first).toBeDefined();
-			const firstInstance = first?.instance;
-			first?.release();
+	test.skipIf(skipReplacementControl)(
+		"a failed loadvm discards the router and boots one replacement",
+		async () => {
+			const logs: string[] = [];
+			const hooks = quickChrReuseHooks(
+				() => bootIntegrationChr(REUSE_BOOT_OPTIONS),
+				(message) => logs.push(message),
+			);
+			// A real loadvm against a snapshot that does not exist: QEMU refuses it,
+			// and quickchr resumes the guest before throwing.
+			const reuse = createChrReuse({
+				...hooks,
+				restoreBaseline: (chr) => chr.snapshot.load("centrs-no-such-snapshot"),
+			});
+			try {
+				const first = await reuse.acquire();
+				expect(first).toBeDefined();
+				const firstInstance = first?.instance;
+				first?.release();
 
-			const second = await reuse.acquire();
-			expect(second).toBeDefined();
-			// A new instance from a second boot; quickchr may reuse the freed name.
-			expect(second?.instance).not.toBe(firstInstance);
-			expect(reuse.stats.boots).toBe(2);
-			expect(reuse.stats.replacements).toBe(1);
-			expect(logs.some((line) => line.includes("loadvm failed"))).toBe(true);
-			// The replacement is a usable router.
-			expect(await second?.instance.waitForBoot(30_000)).toBe(true);
-			second?.release();
+				const second = await reuse.acquire();
+				expect(second).toBeDefined();
+				// A new instance from a second boot; quickchr may reuse the freed name.
+				expect(second?.instance).not.toBe(firstInstance);
+				expect(reuse.stats.boots).toBe(2);
+				expect(reuse.stats.replacements).toBe(1);
+				expect(logs.some((line) => line.includes("loadvm failed"))).toBe(true);
+				// The replacement is a usable router.
+				expect(await second?.instance.waitForBoot(30_000)).toBe(true);
+				second?.release();
 
-			// The budget is spent: the next failed restore fails closed.
-			await expect(reuse.acquire()).rejects.toThrow(/replacement budget/);
-		} finally {
-			await reuse.dispose();
-		}
-	}, 300_000);
+				// The budget is spent: the next failed restore fails closed.
+				await expect(reuse.acquire()).rejects.toThrow(/replacement budget/);
+			} finally {
+				await reuse.dispose();
+			}
+		},
+		300_000,
+	);
 });

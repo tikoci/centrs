@@ -73,3 +73,5 @@ running. The preload removes the VM once the process ends.
   check whether a failure comes from reuse.
 
 The contract is proved on real CHR by `test/integration/chr-reuse.test.ts`.
+Its failed-restore replacement case boots twice, so on GitHub it runs only on
+the scheduled QA run. Local runs always include it.
