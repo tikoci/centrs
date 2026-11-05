@@ -401,25 +401,29 @@ export function unknownFlagError(
 		) {
 			return missingFlagValueError(name, undefined, option.valueName);
 		}
-		// An unknown `--x=y`: suggest on the base name, where the typo is.
+		// An unknown `--x=y`: suggest on the base name, where the typo is. The
+		// value is never echoed — an unknown name (a mistyped `--pasword=…`,
+		// or a `--password=…` this command lacks) may carry a credential.
+		const shown = `${name}=<value>`;
 		const suggestions = closestFlags(name, knownFlags(options));
 		const hint =
 			suggestions.length > 0 ? ` Did you mean ${suggestions.join(", ")}?` : "";
 		return new CentrsError({
 			code: "input/invalid-command",
-			summary: `Unknown ${command} flag: ${arg}.${hint}`,
+			summary: `Unknown ${command} flag: ${shown}.${hint}`,
 			remediation: `Run \`centrs ${command} --help\` to see the supported flags${suggestions.length > 0 ? " and their aliases" : ""}.`,
-			context: { flag: arg, suggestions },
+			context: { flag: shown, suggestions },
 		});
 	}
+	const shown = redactTargetInput(arg);
 	const suggestions = closestFlags(arg, knownFlags(options));
 	const hint =
 		suggestions.length > 0 ? ` Did you mean ${suggestions.join(", ")}?` : "";
 	return new CentrsError({
 		code: "input/invalid-command",
-		summary: `Unknown ${command} flag: ${arg}.${hint}`,
+		summary: `Unknown ${command} flag: ${shown}.${hint}`,
 		remediation: `Run \`centrs ${command} --help\` to see the supported flags${suggestions.length > 0 ? " and their aliases" : ""}.`,
-		context: { flag: arg, suggestions },
+		context: { flag: shown, suggestions },
 	});
 }
 

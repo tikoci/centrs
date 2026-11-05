@@ -62,12 +62,11 @@ export async function runCli(
 		if (["help", "--help", "-h"].includes(args[0] ?? "")) {
 			let index = 0;
 			while (["help", "--help", "-h"].includes(args[index] ?? "")) index += 1;
-			if (args[index] !== undefined)
-				return await runCli([
-					args[index] as string,
-					...args.slice(index + 1),
-					"--help",
-				]);
+			// Route only a command name, and put `--help` straight after it: a
+			// trailing one would land after a `--` separator and become input.
+			const command = args[index];
+			if (command !== undefined && !command.startsWith("-"))
+				return await runCli([command, "--help", ...args.slice(index + 1)]);
 		}
 		if (
 			args.length === 0 ||

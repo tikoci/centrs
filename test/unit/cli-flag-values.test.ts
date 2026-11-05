@@ -158,6 +158,21 @@ describe("shared CLI flag values (#625)", () => {
 			expect(JSON.stringify(error.toJSON())).not.toContain("canary");
 		}
 	});
+	test("unknown-flag diagnostics never echo an attached value", () => {
+		for (const [parse, token] of [
+			[parseMcpCliArgs, "--password=canary"],
+			[parseDiscoverCliArgs, "--password=canary"],
+			[parseExecuteCliArgs, "--pasword=canary"],
+			[parseExecuteCliArgs, "--bogus=http://admin:canary@127.0.0.1"],
+		] as const) {
+			const error = refusal(parse, [token]);
+			expect(error.code).toBe("input/invalid-command");
+			expect(JSON.stringify(error.toJSON())).not.toContain("canary");
+		}
+		expect(
+			refusal(parseExecuteCliArgs, ["--pasword=canary"]).context,
+		).toMatchObject({ flag: "--pasword=<value>" });
+	});
 	test("the original quickchr and host failures stay inside the CLI", () => {
 		expect(parseTerminalCliArgs(["--quickchr", "--help"]).help).toBe(true);
 		expect(refusal(parseTerminalCliArgs, ["--quickchr"]).remediation).toContain(
@@ -271,6 +286,27 @@ describe("help surface (#625)", () => {
 		const execute = await run(["execute", "--help"]);
 		for (const prefix of ["help", "--help", "-h"])
 			expect(await run([prefix, "execute"])).toEqual(execute);
+	});
+	test("a routed help prefix beats the separator", async () => {
+		const execute = await run(["execute", "--help"]);
+		expect(
+			await run([
+				"--help",
+				"execute",
+				"router",
+				"--",
+				"/system/identity/print",
+			]),
+		).toEqual(execute);
+	});
+	test("a flag after a help prefix is not routed as a command", async () => {
+		const global = await run(["--help"]);
+		for (const args of [
+			["--help", "--version"],
+			["-h", "--json"],
+			["help", "--verbose"],
+		])
+			expect(await run(args)).toEqual(global);
 	});
 	test("subcommand help survives the early scan and prefixes", async () => {
 		for (const sub of ["init", "encrypt"]) {
