@@ -34,6 +34,10 @@ reviews:
     enabled: true
     drafts: false
     auto_incremental_review: false
+    # A PR created with the `skip-review` label gets no automatic review (the
+    # `!` makes it an exclusion). `@coderabbitai review` still requests one.
+    labels:
+      - "!skip-review"
     ignore_usernames:
       - dependabot[bot]
   tools:

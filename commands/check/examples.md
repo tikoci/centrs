@@ -12,6 +12,13 @@ when the code lands, the test file is wrong; if a line passes only with
 These examples are the **target** for `CHR-passed`; the cells are `designed`
 today, so nothing here is green yet.
 
+> **Partly superseded (2026-11).** Examples 2–4 (port map, reach without
+> credentials, `--preset reach`) are pending re-specification under `devices`
+> onboarding:
+> [`docs/MATRIX.md` → Devices and onboarding](../../docs/MATRIX.md#devices-and-onboarding).
+> Do not implement them as `check` features. The health-battery examples still
+> apply.
+
 `$R` is `<host>:<rest-port>` resolved by quickchr. `$U` / `$P` are CHR
 credentials from the harness. Envelope-asserting examples pass `--json`.
 
