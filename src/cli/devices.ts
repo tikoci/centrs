@@ -41,9 +41,13 @@ import {
 } from "../index.ts";
 import {
 	type CliCommandMetadata,
+	expandEqualsArgs,
 	expectValue,
+	helpRequested,
+	inferCliFormat,
 	renderCommandHelp,
 	unknownFlagError,
+	valueFlagTokens,
 } from "./common.ts";
 
 /**
@@ -311,7 +315,27 @@ interface DevicesCliArgs {
 	bbox?: BboxPredicate;
 }
 
-function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
+export function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
+	if (helpRequested(args)) {
+		const values = valueFlagTokens(devicesCommand.options);
+		let sub: string | undefined;
+		for (let index = 0; index < args.length; index += 1) {
+			const arg = args[index];
+			if (arg === undefined) continue;
+			if (values.has(arg)) {
+				index += 1;
+				continue;
+			}
+			if (arg.startsWith("-")) continue;
+			sub = arg;
+			break;
+		}
+		return {
+			help: true,
+			...(sub === "init" || sub === "encrypt" ? { subcommand: sub } : {}),
+		};
+	}
+	args = expandEqualsArgs(args, devicesCommand.options);
 	const parsed: DevicesCliArgs = {};
 	const positional: string[] = [];
 	const suppliedFlags: string[] = [];
@@ -334,28 +358,42 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 				parsed.noBackup = true;
 				break;
 			case "--cdb-file":
-				parsed.cdbFile = expectValue(args, ++index, arg);
+				parsed.cdbFile = expectValue(
+					args,
+					++index,
+					arg,
+					devicesCommand.options,
+				);
 				break;
 			case "--cdb-password":
-				parsed.cdbPassword = expectValue(args, ++index, arg);
+				parsed.cdbPassword = expectValue(
+					args,
+					++index,
+					arg,
+					devicesCommand.options,
+				);
 				break;
 			case "--group":
-				parsed.group = expectValue(args, ++index, arg);
+				parsed.group = expectValue(args, ++index, arg, devicesCommand.options);
 				break;
 			case "--where":
 				parsed.where = [
 					...(parsed.where ?? []),
-					expectValue(args, ++index, arg),
+					expectValue(args, ++index, arg, devicesCommand.options),
 				];
 				break;
 			case "--near":
-				parsed.near = parseNear(expectValue(args, ++index, arg));
+				parsed.near = parseNear(
+					expectValue(args, ++index, arg, devicesCommand.options),
+				);
 				break;
 			case "--bbox":
-				parsed.bbox = parseBbox(expectValue(args, ++index, arg));
+				parsed.bbox = parseBbox(
+					expectValue(args, ++index, arg, devicesCommand.options),
+				);
 				break;
 			case "--via":
-				parsed.via = expectValue(args, ++index, arg);
+				parsed.via = expectValue(args, ++index, arg, devicesCommand.options);
 				break;
 			case "--members":
 				parsed.members = true;
@@ -364,13 +402,18 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 				parsed.explain = true;
 				break;
 			case "--match":
-				parsed.match = expectValue(args, ++index, arg);
+				parsed.match = expectValue(args, ++index, arg, devicesCommand.options);
 				break;
 			case "--user":
-				parsed.user = expectValue(args, ++index, arg);
+				parsed.user = expectValue(args, ++index, arg, devicesCommand.options);
 				break;
 			case "--password":
-				parsed.password = expectValue(args, ++index, arg);
+				parsed.password = expectValue(
+					args,
+					++index,
+					arg,
+					devicesCommand.options,
+				);
 				// `--password --password-stdin` would otherwise store the literal
 				// flag as the password and never read stdin. Treat it as both flags
 				// so the conflict check below refuses it.
@@ -385,7 +428,12 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 				parsed.showPassword = true;
 				break;
 			case "--profile":
-				parsed.profile = expectValue(args, ++index, arg);
+				parsed.profile = expectValue(
+					args,
+					++index,
+					arg,
+					devicesCommand.options,
+				);
 				break;
 			case "--profile-none":
 				parsed.profileNone = true;
@@ -394,36 +442,61 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 				parsed.profileOwn = true;
 				break;
 			case "--session":
-				parsed.session = expectValue(args, ++index, arg);
+				parsed.session = expectValue(
+					args,
+					++index,
+					arg,
+					devicesCommand.options,
+				);
 				break;
 			case "--comment":
-				parsed.comment = expectValue(args, ++index, arg);
+				parsed.comment = expectValue(
+					args,
+					++index,
+					arg,
+					devicesCommand.options,
+				);
 				break;
 			case "--record-type":
-				parsed.recordType = expectValue(args, ++index, arg);
+				parsed.recordType = expectValue(
+					args,
+					++index,
+					arg,
+					devicesCommand.options,
+				);
 				break;
 			case "--lat":
 			case "--latitude":
-				parsed.lat = expectValue(args, ++index, arg);
+				parsed.lat = expectValue(args, ++index, arg, devicesCommand.options);
 				break;
 			case "--lon":
 			case "--lng":
 			case "--longitude":
 			case "--long":
-				parsed.lon = expectValue(args, ++index, arg);
+				parsed.lon = expectValue(args, ++index, arg, devicesCommand.options);
 				break;
 			case "--altitude":
 			case "--alt":
 			case "--ele":
 			case "--elevation":
-				parsed.altitude = expectValue(args, ++index, arg);
+				parsed.altitude = expectValue(
+					args,
+					++index,
+					arg,
+					devicesCommand.options,
+				);
 				break;
 			case "--altitude-type":
 			case "--alt-type":
-				parsed.altitudeType = expectValue(args, ++index, arg);
+				parsed.altitudeType = expectValue(
+					args,
+					++index,
+					arg,
+					devicesCommand.options,
+				);
 				break;
 			case "--gps":
-				parsed.gps = expectValue(args, ++index, arg);
+				parsed.gps = expectValue(args, ++index, arg, devicesCommand.options);
 				break;
 			case "--force":
 				parsed.force = true;
@@ -432,7 +505,7 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 				parsed.strict = true;
 				break;
 			case "--format": {
-				const value = expectValue(args, ++index, arg);
+				const value = expectValue(args, ++index, arg, devicesCommand.options);
 				if (!devicesOutputFormats.includes(value as DevicesOutputFormat)) {
 					throw new Error(
 						`--format must be one of ${devicesOutputFormats.join(", ")}; got ${value}.`,
@@ -988,13 +1061,10 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 }
 
 function inferDevicesFormat(args: readonly string[]): DevicesOutputFormat {
-	if (args.includes("--json")) {
-		return "json";
-	}
-	const formatIndex = args.indexOf("--format");
-	const value = formatIndex >= 0 ? args[formatIndex + 1] : undefined;
-	if (value && devicesOutputFormats.includes(value as DevicesOutputFormat)) {
-		return value as DevicesOutputFormat;
-	}
-	return "text";
+	return inferCliFormat(
+		args,
+		devicesCommand.options,
+		devicesOutputFormats,
+		"text",
+	);
 }

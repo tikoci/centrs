@@ -14,7 +14,9 @@ import { runMcpStdio } from "../mcp/server.ts";
 import { loadEnvFileDefaults } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
+	expandEqualsArgs,
 	expectValue,
+	helpRequested,
 	renderCommandHelp,
 	unknownFlagError,
 } from "./common.ts";
@@ -54,6 +56,10 @@ interface McpCliArgs {
 }
 
 export function parseMcpCliArgs(args: readonly string[]): McpCliArgs {
+	if (helpRequested(args)) {
+		return { help: true };
+	}
+	args = expandEqualsArgs(args, mcpCommand.options);
 	const parsed: McpCliArgs = {};
 	for (let index = 0; index < args.length; index += 1) {
 		const arg = args[index];
@@ -69,10 +75,20 @@ export function parseMcpCliArgs(args: readonly string[]): McpCliArgs {
 				parsed.help = true;
 				break;
 			case "--cdb-file":
-				parsed.cdbFile = expectValue(args, ++index, "--cdb-file");
+				parsed.cdbFile = expectValue(
+					args,
+					++index,
+					"--cdb-file",
+					mcpCommand.options,
+				);
 				break;
 			case "--cdb-password":
-				parsed.cdbPassword = expectValue(args, ++index, "--cdb-password");
+				parsed.cdbPassword = expectValue(
+					args,
+					++index,
+					"--cdb-password",
+					mcpCommand.options,
+				);
 				break;
 			case "--allow-adhoc-targets":
 				parsed.allowAdhocTargets = true;

@@ -126,11 +126,14 @@ function parseWhereClause(raw: string): SelectionWhereClause {
  * Try to consume one selection flag at `args[index]`. Returns the new loop index
  * when consumed (the caller sets its index to this and continues), or `null`
  * when the arg is not a selection flag (the caller handles it). Mutates `acc`.
+ * `options` is the caller's full command metadata, so a single-dash flag of
+ * that command (`-u`) is refused as a selection value, not swallowed by it.
  */
 export function consumeSelectionFlag(
 	args: readonly string[],
 	index: number,
 	acc: SelectionFlags,
+	options: readonly CliCommandOption[],
 ): number | null {
 	const arg = args[index];
 	switch (arg) {
@@ -141,22 +144,24 @@ export function consumeSelectionFlag(
 			acc.default = true;
 			return index;
 		case "--group":
-			acc.groups.push(expectValue(args, index + 1, arg));
+			acc.groups.push(expectValue(args, index + 1, arg, options));
 			return index + 1;
 		case "--where":
-			acc.where.push(parseWhereClause(expectValue(args, index + 1, arg)));
+			acc.where.push(
+				parseWhereClause(expectValue(args, index + 1, arg, options)),
+			);
 			return index + 1;
 		case "--near":
-			acc.near = parseNear(expectValue(args, index + 1, arg));
+			acc.near = parseNear(expectValue(args, index + 1, arg, options));
 			return index + 1;
 		case "--bbox":
-			acc.bbox = parseBbox(expectValue(args, index + 1, arg));
+			acc.bbox = parseBbox(expectValue(args, index + 1, arg, options));
 			return index + 1;
 		case "--quickchr":
-			acc.quickchr.push(expectValue(args, index + 1, arg));
+			acc.quickchr.push(expectValue(args, index + 1, arg, options));
 			return index + 1;
 		case "--concurrency": {
-			const raw = expectValue(args, index + 1, arg);
+			const raw = expectValue(args, index + 1, arg, options);
 			const parsed = parseStrictInteger(raw);
 			if (parsed === undefined || parsed < 1) {
 				throw new CentrsError({

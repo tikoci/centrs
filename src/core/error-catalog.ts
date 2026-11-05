@@ -711,6 +711,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary: "The operation requires a non-empty --group value.",
 	},
 	{
+		code: "usage/missing-flag-value",
+		summary:
+			"A flag that needs a value was given none, or was followed by another flag.",
+	},
+	{
 		code: "usage/not-implemented",
 		summary:
 			"A recognized command form is reserved but not implemented yet (e.g. the interactive `devices edit` editor).",

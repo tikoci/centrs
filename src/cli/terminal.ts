@@ -21,7 +21,10 @@ import {
 } from "../index.ts";
 import {
 	type CliCommandMetadata,
+	expandEqualsArgs,
 	expectValue,
+	helpRequested,
+	inferCliFormat,
 	renderCommandHelp,
 	unknownFlagError,
 } from "./common.ts";
@@ -193,7 +196,8 @@ export async function runTerminalCli(args: readonly string[]): Promise<number> {
 		const format = inferRequestedFormat(args);
 		const tips = isMissingTargetError(error)
 			? await buildTargetSelectionTips({
-					cdbFile: request?.cdbFile ?? cdbFileFromArgs(args),
+					cdbFile:
+						request?.cdbFile ?? cdbFileFromArgs(args, terminalCommand.options),
 					env: Bun.env,
 				})
 			: [];
@@ -225,6 +229,10 @@ interface ParsedTerminal {
 }
 
 export function parseTerminalCliArgs(args: readonly string[]): ParsedTerminal {
+	if (helpRequested(args)) {
+		return { help: true, request: {} };
+	}
+	args = expandEqualsArgs(args, terminalCommand.options);
 	const flags: TerminalRequest = {};
 	const positional: string[] = [];
 	const quickchr: string[] = [];
@@ -241,45 +249,78 @@ export function parseTerminalCliArgs(args: readonly string[]): ParsedTerminal {
 				help = true;
 				break;
 			case "--via":
-				flags.via = expectValue(args, ++index, arg);
+				flags.via = expectValue(args, ++index, arg, terminalCommand.options);
 				break;
 			case "--host":
-				flags.host = expectValue(args, ++index, arg);
+				flags.host = expectValue(args, ++index, arg, terminalCommand.options);
 				break;
 			case "--port":
-				flags.port = Number.parseInt(expectValue(args, ++index, arg), 10);
+				flags.port = Number.parseInt(
+					expectValue(args, ++index, arg, terminalCommand.options),
+					10,
+				);
 				break;
 			case "--user":
 			case "-u":
 			case "--username":
-				flags.username = expectValue(args, ++index, arg);
+				flags.username = expectValue(
+					args,
+					++index,
+					arg,
+					terminalCommand.options,
+				);
 				break;
 			case "--password":
-				flags.password = expectValue(args, ++index, arg);
+				flags.password = expectValue(
+					args,
+					++index,
+					arg,
+					terminalCommand.options,
+				);
 				break;
 			case "--source-mac":
-				flags.sourceMac = expectValue(args, ++index, arg);
+				flags.sourceMac = expectValue(
+					args,
+					++index,
+					arg,
+					terminalCommand.options,
+				);
 				break;
 			case "--ssh-key":
-				flags.sshKey = expectValue(args, ++index, arg);
+				flags.sshKey = expectValue(args, ++index, arg, terminalCommand.options);
 				break;
 			case "--insecure":
 				flags.insecure = true;
 				break;
 			case "--cdb-file":
-				flags.cdbFile = expectValue(args, ++index, arg);
+				flags.cdbFile = expectValue(
+					args,
+					++index,
+					arg,
+					terminalCommand.options,
+				);
 				break;
 			case "--cdb-password":
-				flags.cdbPassword = expectValue(args, ++index, arg);
+				flags.cdbPassword = expectValue(
+					args,
+					++index,
+					arg,
+					terminalCommand.options,
+				);
 				break;
 			case "--match":
-				flags.match = expectValue(args, ++index, arg);
+				flags.match = expectValue(args, ++index, arg, terminalCommand.options);
 				break;
 			case "--resolve":
-				flags.resolve = expectValue(args, ++index, arg);
+				flags.resolve = expectValue(
+					args,
+					++index,
+					arg,
+					terminalCommand.options,
+				);
 				break;
 			case "--format":
-				flags.format = expectValue(args, ++index, arg);
+				flags.format = expectValue(args, ++index, arg, terminalCommand.options);
 				break;
 			case "--json":
 				flags.format = "json";
@@ -293,7 +334,7 @@ export function parseTerminalCliArgs(args: readonly string[]): ParsedTerminal {
 			case "--quickchr":
 				// One machine is a single-target session (#610); a repeat is fan-out,
 				// rejected after the loop with the full list in context.
-				quickchr.push(expectValue(args, ++index, arg));
+				quickchr.push(expectValue(args, ++index, arg, terminalCommand.options));
 				break;
 			default:
 				// A single interactive session cannot fan out: reject a target-selection
@@ -368,19 +409,12 @@ export function parseTerminalCliArgs(args: readonly string[]): ParsedTerminal {
 
 function inferRequestedFormat(
 	args: readonly string[],
-	requestFormat?: string,
 ): "text" | "json" | "yaml" {
-	const candidate =
-		requestFormat ?? formatFromArgs(args) ?? process.env["CENTRS_FORMAT"];
-	if (candidate === "json" || candidate === "yaml" || candidate === "text") {
-		return candidate;
-	}
-	return "text";
-}
-
-function formatFromArgs(args: readonly string[]): string | undefined {
-	if (args.includes("--json")) return "json";
-	if (args.includes("--yaml")) return "yaml";
-	const index = args.indexOf("--format");
-	return index !== -1 ? args[index + 1] : undefined;
+	return inferCliFormat(
+		args,
+		terminalCommand.options,
+		["text", "json", "yaml"] as const,
+		"text",
+		process.env["CENTRS_FORMAT"],
+	);
 }

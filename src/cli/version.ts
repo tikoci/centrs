@@ -12,9 +12,30 @@ import type { CentrsEnvelope } from "../core/envelope.ts";
 import { centrsVersion } from "../core/version.ts";
 import { toYaml } from "../core/yaml.ts";
 import { CentrsError, formatCentrsErrorText } from "../errors.ts";
+import {
+	type CliCommandOption,
+	expandEqualsArgs,
+	expectValue,
+} from "./common.ts";
 
 const versionFormats = ["text", "json", "yaml"] as const;
 type VersionFormat = (typeof versionFormats)[number];
+
+/**
+ * `centrs --version` takes only an output format, so it has no
+ * `CliCommandMetadata` (nothing in `docs/CLI.md`); this table exists so the
+ * shared flag-value helpers apply here too. Deliberately no `--help`:
+ * `--version --help` stays a usage error, as today.
+ */
+const versionOptions: readonly CliCommandOption[] = [
+	{
+		flag: "--format",
+		valueName: "<text|json|yaml>",
+		description: "Output format for the CLI response.",
+	},
+	{ flag: "--json", description: "Shortcut for `--format json`." },
+	{ flag: "--yaml", description: "Shortcut for `--format yaml`." },
+];
 
 export type VersionEnvelope = CentrsEnvelope<
 	{ version: string },
@@ -37,6 +58,7 @@ export function versionEnvelope(): VersionEnvelope {
 }
 
 function parseVersionFormat(args: readonly string[]): VersionFormat {
+	args = expandEqualsArgs(args, versionOptions);
 	let format: VersionFormat = "text";
 	for (let index = 0; index < args.length; index += 1) {
 		const arg = args[index];
@@ -45,11 +67,11 @@ function parseVersionFormat(args: readonly string[]): VersionFormat {
 		} else if (arg === "--yaml") {
 			format = "yaml";
 		} else if (arg === "--format") {
-			const value = args[++index];
+			const value = expectValue(args, ++index, arg, versionOptions);
 			if (!versionFormats.includes(value as VersionFormat)) {
 				throw new CentrsError({
 					code: "settings/invalid-format",
-					summary: `--format must be one of ${versionFormats.join(", ")}; got ${value ?? "(missing)"}.`,
+					summary: `--format must be one of ${versionFormats.join(", ")}; got ${value}.`,
 					remediation: `Choose one of ${versionFormats.join(", ")}.`,
 					context: { format: value },
 				});

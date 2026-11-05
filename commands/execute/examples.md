@@ -815,11 +815,13 @@ closed.
 
 ```bash
 centrs execute --host http://$A:$REST_PORT ':put [/system/identity/get name]' --username $U --password $P --json
+centrs execute --host="http://$A:$REST_PORT" --username="$U" --password="$P" --format=json -- ':put [/system/identity/get name]'
 centrs execute --host $A:$API_PORT --username $U --password $P --json -- ':put [/system/identity/get name]'
 ```
 
-Both are `ok: true`, the first over rest-api (the URL names REST) and the second
-over native-api on `$API_PORT`. `meta.target.source = { kind: "cli", key:
+All are `ok: true`, the first two over rest-api (the URL names REST) and the last
+over native-api on `$API_PORT`. The `=` form is covered by the H1 CLI test (#625).
+`meta.target.source = { kind: "cli", key:
 "host" }`, with no `recordIndex`: there is no `<target>`, so there is no CDB
 lookup. `retrieve`, `api` and `transfer` have the same rule (their H1).
 

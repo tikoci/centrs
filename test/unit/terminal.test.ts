@@ -69,7 +69,10 @@ describe("terminal --quickchr parsing (#610)", () => {
 
 	test("--quickchr needs a value", () => {
 		expect(() => parseTerminalCliArgs(["--quickchr"])).toThrow(
-			"Missing value for --quickchr",
+			expect.objectContaining({
+				code: "usage/missing-flag-value",
+				context: { flag: "--quickchr", got: null },
+			}),
 		);
 	});
 });

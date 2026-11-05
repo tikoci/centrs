@@ -27,7 +27,10 @@ import {
 import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
+	expandEqualsArgs,
 	expectValue,
+	helpRequested,
+	inferCliFormat,
 	printTextHeader,
 	printTextNotes,
 	renderCommandHelp,
@@ -104,10 +107,15 @@ export const transferCommand: CliCommandMetadata = {
 				"Confirm a mutating fan-out (upload/remove/mkdir/copy) across multiple routers in non-interactive runs.",
 		},
 		{
-			flag: "--verify / --no-verify",
+			flag: "--verify",
 			valueName: "<size|checksum|off>",
 			description:
 				"Post-transfer integrity check. Default size; `--no-verify` skips.",
+		},
+		{
+			flag: "--no-verify",
+			description:
+				"Disable post-transfer verification; conflicts with --verify.",
 		},
 		{
 			flag: "--type",
@@ -241,7 +249,9 @@ export async function runTransferCli(
 		const format = inferRequestedFormat(args, safeRequest);
 		const tips = isMissingTargetError(error)
 			? await buildTargetSelectionTips({
-					cdbFile: safeRequest?.cdbFile ?? cdbFileFromArgs(args),
+					cdbFile:
+						safeRequest?.cdbFile ??
+						cdbFileFromArgs(args, transferCommand.options),
 					env: Bun.env,
 				})
 			: [];
@@ -342,6 +352,15 @@ export function parseTransferCliArgs(
 	args: readonly string[],
 	fixedVerb?: TransferVerb,
 ): ParsedTransfer {
+	if (helpRequested(args)) {
+		return {
+			help: true,
+			request: { verb: fixedVerb ?? "list" },
+			selectionFlags: emptySelectionFlags(),
+			targetPositionals: [],
+		};
+	}
+	args = expandEqualsArgs(args, transferCommand.options);
 	const flags: Partial<TransferRequest> & { verbose?: boolean } = {};
 	const selectionFlags = emptySelectionFlags();
 	const positional: string[] = [];
@@ -362,33 +381,51 @@ export function parseTransferCliArgs(
 				help = true;
 				break;
 			case "--via":
-				flags.via = expectValue(args, ++index, arg);
+				flags.via = expectValue(args, ++index, arg, transferCommand.options);
 				break;
 			case "--host":
-				flags.host = expectValue(args, ++index, arg);
+				flags.host = expectValue(args, ++index, arg, transferCommand.options);
 				break;
 			case "--port":
-				flags.port = Number.parseInt(expectValue(args, ++index, arg), 10);
+				flags.port = Number.parseInt(
+					expectValue(args, ++index, arg, transferCommand.options),
+					10,
+				);
 				break;
 			case "--user":
 			case "-u":
 			case "--username":
-				flags.username = expectValue(args, ++index, arg);
+				flags.username = expectValue(
+					args,
+					++index,
+					arg,
+					transferCommand.options,
+				);
 				break;
 			case "--password":
-				flags.password = expectValue(args, ++index, arg);
+				flags.password = expectValue(
+					args,
+					++index,
+					arg,
+					transferCommand.options,
+				);
 				break;
 			case "--ssh-key":
-				flags.sshKey = expectValue(args, ++index, arg);
+				flags.sshKey = expectValue(args, ++index, arg, transferCommand.options);
 				break;
 			case "--insecure":
 				flags.insecure = true;
 				break;
 			case "--timeout":
-				flags.timeout = expectValue(args, ++index, arg);
+				flags.timeout = expectValue(
+					args,
+					++index,
+					arg,
+					transferCommand.options,
+				);
 				break;
 			case "--format":
-				flags.format = expectValue(args, ++index, arg);
+				flags.format = expectValue(args, ++index, arg, transferCommand.options);
 				break;
 			case "--json":
 				flags.format = "json";
@@ -401,7 +438,12 @@ export function parseTransferCliArgs(
 				flags.force = true;
 				break;
 			case "--verify":
-				explicitVerify = expectValue(args, ++index, arg);
+				explicitVerify = expectValue(
+					args,
+					++index,
+					arg,
+					transferCommand.options,
+				);
 				flags.verify = explicitVerify;
 				break;
 			case "--no-verify":
@@ -409,19 +451,29 @@ export function parseTransferCliArgs(
 				flags.verify = "off";
 				break;
 			case "--type":
-				flags.type = expectValue(args, ++index, arg);
+				flags.type = expectValue(args, ++index, arg, transferCommand.options);
 				break;
 			case "--name":
-				flags.name = expectValue(args, ++index, arg);
+				flags.name = expectValue(args, ++index, arg, transferCommand.options);
 				break;
 			case "--cdb-file":
-				flags.cdbFile = expectValue(args, ++index, arg);
+				flags.cdbFile = expectValue(
+					args,
+					++index,
+					arg,
+					transferCommand.options,
+				);
 				break;
 			case "--cdb-password":
-				flags.cdbPassword = expectValue(args, ++index, arg);
+				flags.cdbPassword = expectValue(
+					args,
+					++index,
+					arg,
+					transferCommand.options,
+				);
 				break;
 			case "--match":
-				flags.match = expectValue(args, ++index, arg);
+				flags.match = expectValue(args, ++index, arg, transferCommand.options);
 				break;
 			case "--validate":
 				flags.validate = true;
@@ -430,7 +482,7 @@ export function parseTransferCliArgs(
 				flags.validate = false;
 				break;
 			case "--out-dir":
-				flags.outDir = expectValue(args, ++index, arg);
+				flags.outDir = expectValue(args, ++index, arg, transferCommand.options);
 				break;
 			case "--yes":
 				flags.yes = true;
@@ -439,7 +491,12 @@ export function parseTransferCliArgs(
 				flags.verbose = true;
 				break;
 			default: {
-				const consumed = consumeSelectionFlag(args, index, selectionFlags);
+				const consumed = consumeSelectionFlag(
+					args,
+					index,
+					selectionFlags,
+					transferCommand.options,
+				);
 				if (consumed !== null) {
 					index = consumed;
 					break;
@@ -647,20 +704,11 @@ function inferRequestedFormat(
 	if (request) {
 		return resolvedFormat(request);
 	}
-	if (args.includes("--json")) {
-		return "json";
-	}
-	if (args.includes("--yaml")) {
-		return "yaml";
-	}
-	const formatIndex = args.indexOf("--format");
-	const value = formatIndex !== -1 ? args[formatIndex + 1] : undefined;
-	if (value === "json" || value === "yaml" || value === "text") {
-		return value;
-	}
-	const envFormat = process.env["CENTRS_FORMAT"];
-	if (envFormat === "json" || envFormat === "yaml" || envFormat === "text") {
-		return envFormat;
-	}
-	return "text";
+	return inferCliFormat(
+		args,
+		transferCommand.options,
+		transferOutputFormats,
+		"text",
+		process.env["CENTRS_FORMAT"],
+	);
 }

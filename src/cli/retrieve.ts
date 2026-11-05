@@ -36,7 +36,10 @@ import {
 import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
+	expandEqualsArgs,
 	expectValue,
+	helpRequested,
+	inferCliFormat,
 	printTextHeader,
 	printTextNotes,
 	renderCommandHelp,
@@ -311,7 +314,8 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 		const format = inferRequestedFormat(args, request);
 		const tips = isMissingTargetError(error)
 			? await buildTargetSelectionTips({
-					cdbFile: request?.cdbFile ?? cdbFileFromArgs(args),
+					cdbFile:
+						request?.cdbFile ?? cdbFileFromArgs(args, retrieveCommand.options),
 					env: Bun.env,
 				})
 			: [];
@@ -460,7 +464,11 @@ async function runRetrieveFanoutCli(
 	}
 }
 
-function parseRetrieveCliArgs(args: readonly string[]): RetrieveCliArgs {
+export function parseRetrieveCliArgs(args: readonly string[]): RetrieveCliArgs {
+	if (helpRequested(args)) {
+		return { path: "", help: true };
+	}
+	args = expandEqualsArgs(args, retrieveCommand.options);
 	const request: RetrieveCliArgs = {
 		path: "",
 	};
@@ -478,33 +486,56 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveCliArgs {
 				request.help = true;
 				break;
 			case "--via":
-				request.via = expectValue(args, ++index, arg);
+				request.via = expectValue(args, ++index, arg, retrieveCommand.options);
 				break;
 			case "--host":
-				request.host = expectValue(args, ++index, arg);
+				request.host = expectValue(args, ++index, arg, retrieveCommand.options);
 				break;
 			case "--port":
-				request.port = Number.parseInt(expectValue(args, ++index, arg), 10);
+				request.port = Number.parseInt(
+					expectValue(args, ++index, arg, retrieveCommand.options),
+					10,
+				);
 				break;
 			case "--user":
 			case "-u":
 			case "--username":
-				request.username = expectValue(args, ++index, arg);
+				request.username = expectValue(
+					args,
+					++index,
+					arg,
+					retrieveCommand.options,
+				);
 				break;
 			case "--password":
-				request.password = expectValue(args, ++index, arg);
+				request.password = expectValue(
+					args,
+					++index,
+					arg,
+					retrieveCommand.options,
+				);
 				break;
 			case "--timeout":
-				request.timeout = expectValue(args, ++index, arg);
+				request.timeout = expectValue(
+					args,
+					++index,
+					arg,
+					retrieveCommand.options,
+				);
 				break;
 			case "--format":
-				request.format = expectValue(args, ++index, arg);
+				request.format = expectValue(
+					args,
+					++index,
+					arg,
+					retrieveCommand.options,
+				);
 				break;
 			case "--json":
 				request.format = "json";
 				break;
 			case "--attribute": {
-				const value = expectValue(args, ++index, arg);
+				const value = expectValue(args, ++index, arg, retrieveCommand.options);
 				request.attribute = [
 					...(Array.isArray(request.attribute) ? request.attribute : []),
 					value,
@@ -514,7 +545,7 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveCliArgs {
 			case "--attributes":
 				request.attributes = [
 					...(Array.isArray(request.attributes) ? request.attributes : []),
-					expectValue(args, ++index, arg),
+					expectValue(args, ++index, arg, retrieveCommand.options),
 				];
 				break;
 			case "--all-attributes":
@@ -528,26 +559,46 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveCliArgs {
 			case "--query":
 				request.query = [
 					...[request.query ?? []].flat(),
-					expectValue(args, ++index, arg),
+					expectValue(args, ++index, arg, retrieveCommand.options),
 				];
 				break;
 			case "--max-results":
 				request.maxResultsBytes = Number.parseInt(
-					expectValue(args, ++index, arg),
+					expectValue(args, ++index, arg, retrieveCommand.options),
 					10,
 				);
 				break;
 			case "--cdb-file":
-				request.cdbFile = expectValue(args, ++index, arg);
+				request.cdbFile = expectValue(
+					args,
+					++index,
+					arg,
+					retrieveCommand.options,
+				);
 				break;
 			case "--cdb-password":
-				request.cdbPassword = expectValue(args, ++index, arg);
+				request.cdbPassword = expectValue(
+					args,
+					++index,
+					arg,
+					retrieveCommand.options,
+				);
 				break;
 			case "--match":
-				request.match = expectValue(args, ++index, arg);
+				request.match = expectValue(
+					args,
+					++index,
+					arg,
+					retrieveCommand.options,
+				);
 				break;
 			case "--resolve":
-				request.resolve = expectValue(args, ++index, arg);
+				request.resolve = expectValue(
+					args,
+					++index,
+					arg,
+					retrieveCommand.options,
+				);
 				break;
 			case "--validate":
 				request.validate = true;
@@ -562,31 +613,53 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveCliArgs {
 				request.follow = true;
 				break;
 			case "--sample":
-				request.sample = expectValue(args, ++index, arg);
+				request.sample = expectValue(
+					args,
+					++index,
+					arg,
+					retrieveCommand.options,
+				);
 				break;
 			case "--sweep":
-				request.sweep = expectValue(args, ++index, arg);
+				request.sweep = expectValue(
+					args,
+					++index,
+					arg,
+					retrieveCommand.options,
+				);
 				break;
 			case "--count":
-				request.count = parseCountFlag(expectValue(args, ++index, arg));
+				request.count = parseCountFlag(
+					expectValue(args, ++index, arg, retrieveCommand.options),
+				);
 				break;
 			case "--duration":
-				request.duration = expectValue(args, ++index, arg);
+				request.duration = expectValue(
+					args,
+					++index,
+					arg,
+					retrieveCommand.options,
+				);
 				break;
 			case "--wait":
-				request.wait = expectValue(args, ++index, arg);
+				request.wait = expectValue(args, ++index, arg, retrieveCommand.options);
 				break;
 			case "--until":
 				request.until = [
 					...[request.until ?? []].flat(),
-					expectValue(args, ++index, arg),
+					expectValue(args, ++index, arg, retrieveCommand.options),
 				];
 				break;
 			case "--until-empty":
 				request.untilEmpty = true;
 				break;
 			default: {
-				const consumed = consumeSelectionFlag(args, index, selectionFlags);
+				const consumed = consumeSelectionFlag(
+					args,
+					index,
+					selectionFlags,
+					retrieveCommand.options,
+				);
 				if (consumed !== null) {
 					index = consumed;
 					break;
@@ -695,16 +768,11 @@ function inferRequestedFormat(
 	if (request?.format) {
 		return request.format as RetrieveOutputFormat;
 	}
-	if (args.includes("--json")) {
-		return "json";
-	}
-	const formatIndex = args.indexOf("--format");
-	if (formatIndex !== -1 && args[formatIndex + 1]) {
-		return args[formatIndex + 1] as RetrieveOutputFormat;
-	}
-	const envFormat = process.env["CENTRS_FORMAT"];
-	if (retrieveOutputFormats.includes(envFormat as RetrieveOutputFormat)) {
-		return envFormat as RetrieveOutputFormat;
-	}
-	return "text";
+	return inferCliFormat(
+		args,
+		retrieveCommand.options,
+		retrieveOutputFormats,
+		"text",
+		process.env["CENTRS_FORMAT"],
+	);
 }

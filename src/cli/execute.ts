@@ -27,7 +27,10 @@ import { describeCentrs } from "../index.ts";
 import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
+	expandEqualsArgs,
 	expectValue,
+	helpRequested,
+	inferCliFormat,
 	printTextHeader,
 	printTextNotes,
 	rejectFlagsAfterSeparator,
@@ -185,6 +188,10 @@ interface ExecuteCliArgs extends ExecuteRequest {
 }
 
 export function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
+	if (helpRequested(args)) {
+		return { command: "", help: true };
+	}
+	args = expandEqualsArgs(args, executeCommand.options);
 	rejectFlagsAfterSeparator("execute", args, executeCommand.options);
 	const parsed: ExecuteCliArgs = { command: "" };
 	const selectionFlags = emptySelectionFlags();
@@ -231,7 +238,7 @@ export function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
 				parsed.cmr = true;
 				break;
 			case "--labels":
-				parsed.labels = expectValue(args, ++index, arg);
+				parsed.labels = expectValue(args, ++index, arg, executeCommand.options);
 				break;
 			case "--validate":
 				parsed.validate = true;
@@ -240,51 +247,84 @@ export function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
 				parsed.validate = false;
 				break;
 			case "--via":
-				parsed.via = expectValue(args, ++index, arg);
+				parsed.via = expectValue(args, ++index, arg, executeCommand.options);
 				break;
 			case "--host":
-				parsed.host = expectValue(args, ++index, arg);
+				parsed.host = expectValue(args, ++index, arg, executeCommand.options);
 				break;
 			case "--port":
-				parsed.port = parseIntegerFlag(expectValue(args, ++index, arg), arg);
+				parsed.port = parseIntegerFlag(
+					expectValue(args, ++index, arg, executeCommand.options),
+					arg,
+				);
 				break;
 			case "--user":
 			case "-u":
 			case "--username":
-				parsed.username = expectValue(args, ++index, arg);
+				parsed.username = expectValue(
+					args,
+					++index,
+					arg,
+					executeCommand.options,
+				);
 				break;
 			case "--password":
-				parsed.password = expectValue(args, ++index, arg);
+				parsed.password = expectValue(
+					args,
+					++index,
+					arg,
+					executeCommand.options,
+				);
 				break;
 			case "--ssh-key":
-				parsed.sshKey = expectValue(args, ++index, arg);
+				parsed.sshKey = expectValue(args, ++index, arg, executeCommand.options);
 				break;
 			case "--insecure":
 				parsed.insecure = true;
 				break;
 			case "--cdb-file":
-				parsed.cdbFile = expectValue(args, ++index, arg);
+				parsed.cdbFile = expectValue(
+					args,
+					++index,
+					arg,
+					executeCommand.options,
+				);
 				break;
 			case "--cdb-password":
-				parsed.cdbPassword = expectValue(args, ++index, arg);
+				parsed.cdbPassword = expectValue(
+					args,
+					++index,
+					arg,
+					executeCommand.options,
+				);
 				break;
 			case "--match":
-				parsed.match = expectValue(args, ++index, arg);
+				parsed.match = expectValue(args, ++index, arg, executeCommand.options);
 				break;
 			case "--resolve":
-				parsed.resolve = expectValue(args, ++index, arg);
+				parsed.resolve = expectValue(
+					args,
+					++index,
+					arg,
+					executeCommand.options,
+				);
 				break;
 			case "--timeout":
-				parsed.timeout = expectValue(args, ++index, arg);
+				parsed.timeout = expectValue(
+					args,
+					++index,
+					arg,
+					executeCommand.options,
+				);
 				break;
 			case "--max-results":
 				parsed.maxResultsBytes = parseIntegerFlag(
-					expectValue(args, ++index, arg),
+					expectValue(args, ++index, arg, executeCommand.options),
 					arg,
 				);
 				break;
 			case "--format": {
-				const value = expectValue(args, ++index, arg);
+				const value = expectValue(args, ++index, arg, executeCommand.options);
 				if (!executeOutputFormats.includes(value as ExecuteOutputFormat)) {
 					throw new Error(
 						`--format must be one of ${executeOutputFormats.join(", ")}; got ${value}.`,
@@ -294,7 +334,12 @@ export function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
 				break;
 			}
 			default: {
-				const consumed = consumeSelectionFlag(args, index, selectionFlags);
+				const consumed = consumeSelectionFlag(
+					args,
+					index,
+					selectionFlags,
+					executeCommand.options,
+				);
 				if (consumed !== null) {
 					index = consumed;
 					break;
@@ -433,7 +478,8 @@ export async function runExecuteCli(args: readonly string[]): Promise<number> {
 		const format = inferExecuteFormat(args, parsed);
 		const tips = isMissingTargetError(error)
 			? await buildTargetSelectionTips({
-					cdbFile: parsed?.cdbFile ?? cdbFileFromArgs(args),
+					cdbFile:
+						parsed?.cdbFile ?? cdbFileFromArgs(args, executeCommand.options),
 					env: Bun.env,
 				})
 			: [];
@@ -610,32 +656,13 @@ function inferExecuteFormat(
 	if (parsed?.format) {
 		return parsed.format;
 	}
-	let format: ExecuteOutputFormat = "text";
-	for (let index = 0; index < args.length; index += 1) {
-		const arg = args[index];
-		if (arg === undefined || arg === "--") break;
-		if (arg === "--json") {
-			format = "json";
-		} else if (arg === "--format") {
-			const value = args[index + 1];
-			if (executeOutputFormats.includes(value as ExecuteOutputFormat)) {
-				format = value as ExecuteOutputFormat;
-			}
-			index += 1;
-		} else if (EXECUTE_VALUE_FLAGS.has(arg)) {
-			index += 1;
-		}
-	}
-	return format;
+	return inferCliFormat(
+		args,
+		executeCommand.options,
+		executeOutputFormats,
+		"text",
+	);
 }
-
-const EXECUTE_VALUE_FLAGS: ReadonlySet<string> = new Set(
-	executeCommand.options.flatMap((option) =>
-		option.valueName === undefined
-			? []
-			: option.flag.split("/").map((token) => token.trim()),
-	),
-);
 
 function parseIntegerFlag(value: string, flag: string): number {
 	const parsed = Number.parseInt(value, 10);

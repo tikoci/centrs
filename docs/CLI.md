@@ -8,6 +8,13 @@ Every flag below is generated from the same metadata that renders
 (`bun run docs:cli --check`). Behavior, examples, and designed-but-not-yet
 implemented flags live in each command's `commands/<name>/README.md`.
 
+Long flags that take a value accept both `--flag value` and `--flag=value`,
+including an explicit empty `--flag=` value. Missing values and another flag
+in a value slot produce `usage/missing-flag-value`. Password flags accept
+flag-shaped values; use `--password=--help` for a literal help token.
+`--help` and `-h` before `--` show help even after an incomplete option.
+`centrs help <command>` and `centrs --help <command>` also show command help.
+
 | Command | Summary |
 | ------- | ------- |
 | [`retrieve`](#retrieve) | Read RouterOS values through the shared core using the selected protocol. |
@@ -179,7 +186,8 @@ Usage: centrs transfer <router>|--host <host> upload <local> [remote] | download
 | `--concurrency` | `<n>` | Max in-flight targets during fan-out (transport-aware default: rest-api 8, native-api 4). |
 | `--out-dir` | `<dir>` | `download` fan-out only: write one file per target into `<dir>`, named by CDB identity. Required when downloading across a selection. |
 | `--yes` |  | Confirm a mutating fan-out (upload/remove/mkdir/copy) across multiple routers in non-interactive runs. |
-| `--verify / --no-verify` | &lt;size\|checksum\|off&gt; | Post-transfer integrity check. Default size; `--no-verify` skips. |
+| `--verify` | &lt;size\|checksum\|off&gt; | Post-transfer integrity check. Default size; `--no-verify` skips. |
+| `--no-verify` |  | Disable post-transfer verification; conflicts with --verify. |
 | `--type` | &lt;file\|directory\|disk\|package&gt; | list filter: RouterOS /file row type. |
 | `--name` | `<glob>` | list filter: file-name glob. |
 | `--host` | &lt;host\|url&gt; | Host or base URL to dial. With no `<router>` before the verb it is the target (no CDB lookup); with one it overrides the resolved host. |
