@@ -12,7 +12,11 @@ release dates that heading and moves both `@latest` and `@next` to that release.
 `@next` stays there until another preview is published. A `-next.N` build has
 no section of its own.
 
-## 0.1.10 — next
+## 0.1.10 — 2026-11-05
+
+Patch release with SSH argument hardening, stricter CLI option parsing, and
+CDB concurrency protections. Publishing this stable version advances both npm
+dist-tags, `latest` and `next`, to `0.1.10`.
 
 ### Added
 
@@ -61,8 +65,8 @@ no section of its own.
   literal, including empty and flag-shaped values. Unknown `--name=value`
   diagnostics withhold the attached value, including for misspelled flags.
 - Reject option-like host/username values; end ssh/sftp option parsing with
-  `--`. Host resolution also rejects DNS labels that start with a hyphen.
-
+  `--`. Host resolution also rejects DNS labels that start with a hyphen
+  (#626).
 - `terminal --quickchr <name>` opens an ssh console to one running quickchr
   machine (#610). It used to reject even a single name as
   `usage/fanout-not-supported`. Host, port, user, and key come from the
@@ -75,11 +79,29 @@ no section of its own.
   positional or a direct override flag with it is `usage/conflicting-flags`.
   `--via mac-telnet` is `quickchr/unsupported-via`.
 
+### Known issues
+
+These are confirmed, pre-existing defects carried into this patch, not
+regressions introduced by 0.1.10. They remain open for follow-up fixes.
+
+- [#575](https://github.com/tikoci/centrs/issues/575): `execute --via mac-telnet`
+  can silently drop `:put` output from single-line commands with a trailing
+  newline; multiline output can contain console echo artifacts. Use REST,
+  native API, or SSH when reliable captured output is required.
+- [#604](https://github.com/tikoci/centrs/issues/604): MCP authorization and
+  connection resolution read the CDB separately. A concurrent record edit or
+  removal can change the address, credentials, or write policy between the
+  allowlist check and dialing; a removed record can fall through to an ad-hoc
+  target with fallback credentials. Avoid concurrent CDB edits during MCP
+  device calls. The #581 write lock prevents lost CDB updates but does not
+  bind authorization and dialing to one snapshot.
+
 ### Maintenance
 
-- Prepare the next development cycle with package version `0.1.10-next`.
-  Preview releases publish `0.1.10-next.<run_number>` to `@next`;
-  `@latest` stays on 0.1.9 until the next stable release.
+- Set the package version to `0.1.10` and date its release notes for the stable
+  release workflow. The `channel=latest` dispatch publishes the patch to
+  `@latest`, moves `@next` to it, and creates the GitHub Release after QA passes
+  on the release commit.
 - Align the README and security policy with shipped credential redaction,
   CDB encryption, global preferences, and the deferred interactive setup.
   Clarify that WinBox profile/session fields are preserved only, `devices edit`

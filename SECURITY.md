@@ -8,7 +8,7 @@ Please include the affected files or workflow, reproduction details, and impact.
 
 ## Scope
 
-`centrs` mediates RouterOS device access, credentials, and local discovery data through its library, CLI, and stdio MCP server. File transfer is available through the library and CLI. TUI and HTTP proxy surfaces are planned; the MCP server has no network listener. Security-sensitive areas include credential import/storage, RouterOS write execution, local network discovery, file transfer, and any future daemon that binds a network port.
+`centrs` mediates RouterOS device access, credentials, and local discovery data through its library, CLI, and stdio MCP server. File transfer is available through the library and CLI. The explicitly invoked bandwidth-test server binds loopback and requires authentication by default. TUI and HTTP proxy surfaces are planned; the MCP server has no network listener. Security-sensitive areas include credential import/storage, RouterOS write execution, local network discovery, file transfer, and network listeners.
 
 ## Credential handling
 
@@ -24,6 +24,32 @@ registry, and `devices encrypt` converts an existing open CDB. Conversion
 retains existing backups and creates a plaintext snapshot unless
 `--no-backup` is passed; that flag does not remove older backups. See the
 [encryption contract](commands/devices/README.md#cdb-encryption-lifecycle-558).
+
+## Device access and CDB integrity
+
+0.1.10 rejects option-like host and username values before invoking SSH/SFTP,
+ends their option parsing with `--`, and withholds attached values from unknown
+CLI option diagnostics (#626, #627). TLS verifies peers by default; SSH uses
+trust-on-first-use and rejects changed host keys. An explicit `--insecure`
+disables peer verification and reports a `transport/insecure-trust` warning.
+
+CDB mutations use a cross-process lock and check the revision loaded by the
+caller before writing (#581). Stale snapshots fail `cdb/conflict`; CLI/MCP
+add, set and remove operations and `discover --save` reload and retry. Lock contention
+beyond 10 seconds fails `cdb/locked`. These protections prevent lost updates
+between cooperating centrs writers; backups retain two prior versions by
+default. Close WinBox before mutating the same CDB; external writers do not
+take the centrs lock. See the [write contract](commands/devices/README.md#cdb-write-strategy).
+
+The MCP allowlist requires registered targets, and RouterOS writes require
+`mcp=rw` plus per-call `confirm: true`. **Known limitation
+[#604](https://github.com/tikoci/centrs/issues/604):** authorization and dialing
+read separate CDB snapshots. A concurrent edit or removal can change the
+target or credentials after authorization, or allow a removed target to fall
+through to an ad-hoc connection using fallback credentials. Avoid concurrent
+CDB edits during MCP device calls. The mutation lock does not close this race.
+This pre-existing defect remains open in 0.1.10; see the
+[release known issues](CHANGELOG.md#known-issues).
 
 ## Code scanning
 
@@ -50,4 +76,5 @@ Human review of the Security tab in the GitHub UI is part of the security workfl
 
 | Version | Supported |
 | --- | --- |
+| Latest stable patch (`latest` npm dist-tag) | yes; update to receive fixes |
 | `main` | yes |
