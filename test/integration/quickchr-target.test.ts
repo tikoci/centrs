@@ -4,17 +4,20 @@
  * machine name only — no `$R`/`$U`/`$P`, no CDB, no CENTRS_HOST-style env: the
  * live descriptor (`QuickCHR.get(name).descriptor()`) is the only
  * connection-fact source. Covers the Q-series examples in
- * `commands/{retrieve,execute,api,transfer}/examples.md`.
+ * `commands/{retrieve,execute,api,transfer}/examples.md`, plus the TQ-series
+ * in `commands/terminal/examples.md` (#610).
  */
 
 import { describe, expect, test } from "bun:test";
 import { runCli } from "../../src/cli.ts";
 import {
+	collapsePrintWrapping,
 	exampleIds,
 	isChrIntegrationEnabled,
 	recordIntegrationEvidence,
 	startIntegrationChr,
 } from "./chr.ts";
+import { runCliProcess } from "./cli-process.ts";
 
 const describeFast = isChrIntegrationEnabled() ? describe : describe.skip;
 
@@ -66,7 +69,10 @@ function captureConsole() {
 
 describeFast("--quickchr targets against CHR (#134)", () => {
 	test("Q1–Q3 per command: retrieve/execute/api/transfer resolve the machine by name", async () => {
-		const started = await startIntegrationChr();
+		// `secureLogin` makes quickchr provision and batch-verify a managed SSH key
+		// at first boot — without it the descriptor vouches for no SSH auth, and
+		// terminal TQ1 / transfer Q2's sftp branch have nothing to log in with.
+		const started = await startIntegrationChr({ secureLogin: true });
 		const chr = started.chr;
 		const consoleCapture = captureConsole();
 		try {
@@ -249,7 +255,7 @@ describeFast("--quickchr targets against CHR (#134)", () => {
 			// transfer Q2: the sftp gate. Either the descriptor advertises a usable
 			// batch-capable SSH auth mode and the list actually runs over sftp
 			// (never a silent fallback to REST, never a dropped key), or the gate
-			// fails typed (quickchr/unsupported-via, exit 1) — never a prompt.
+			// fails typed (quickchr/ssh-auth-unavailable, exit 1) — never a prompt.
 			const tq2 = await run([
 				"transfer",
 				"--quickchr",
@@ -262,7 +268,8 @@ describeFast("--quickchr targets against CHR (#134)", () => {
 			if (tq2.exit === 0) {
 				const tq2Env = parse(tq2.out);
 				expect(tq2Env.ok).toBe(true);
-				expect(tq2Env.meta.via).toBe("sftp");
+				// `meta.via` is the protocol id: sftp rides ssh (as transfer.test.ts).
+				expect(tq2Env.meta.via).toBe("ssh");
 				expect(tq2Env.meta.target.source?.kind).toBe("provider");
 				// Trust-by-provenance: the SSH endpoint forces `insecure` with
 				// provider provenance; the key (when the descriptor hands one over,
@@ -276,8 +283,78 @@ describeFast("--quickchr targets against CHR (#134)", () => {
 				expect(tq2.exit).toBe(1);
 				const tq2Env = parse(tq2.err);
 				expect(tq2Env.ok).toBe(false);
-				expect(tq2Env.error?.code).toBe("quickchr/unsupported-via");
+				expect(tq2Env.error?.code).toBe("quickchr/ssh-auth-unavailable");
 			}
+
+			// terminal TQ1 (#610): one `--quickchr` opens an ssh console. The
+			// descriptor must vouch for a provisioned, batch-verified key — that is
+			// what the terminal logs in with (`-i <key> -o IdentitiesOnly=yes`), so
+			// the round trip proves provider auth, not an ambient agent identity.
+			const quickchrModule = "@tikoci/quickchr";
+			const { QuickCHR } = (await import(quickchrModule)) as {
+				QuickCHR: {
+					get(name: string): {
+						descriptor(): Promise<{
+							services: {
+								ssh?: { auth?: { username: string; batchModes: string[] } };
+							};
+						}>;
+					};
+				};
+			};
+			const sshAuth = (await QuickCHR.get(name).descriptor()).services.ssh
+				?.auth;
+			expect(
+				sshAuth?.batchModes,
+				"quickchr did not provision a batch-verified SSH key for this machine; terminal --quickchr cannot log in without one",
+			).toContain("private-key");
+			const identityRecord = (await chr.rest("/system/identity")) as Record<
+				string,
+				string
+			>;
+			const identity = identityRecord["name"] ?? "";
+			const termQ1 = await runCliProcess({
+				args: ["terminal", "--quickchr", name],
+				// The second line asks the router which user holds this ssh login.
+				stdin:
+					'/system/identity/print\n:put ("ssh-user=" . [/user/active/get [find where via="ssh"] name])\n/quit\n',
+				env: { CENTRS_SKIP_ENV_FILE: "1" },
+				killAfterMs: 60_000,
+			});
+			const termQ1Out = collapsePrintWrapping(termQ1.stdoutText);
+			expect(
+				termQ1Out,
+				`terminal --quickchr exit ${termQ1.exitCode}; stderr=${termQ1.stderrText}`,
+			).toContain(`name: ${identity}`);
+			// The router reports the descriptor's user on this login: the session
+			// authenticated as quickchr's managed user, not another identity. (A
+			// piped no-PTY console echoes no prompt to assert on.)
+			expect(termQ1.stdoutText).toContain(`ssh-user=${sshAuth?.username}`);
+			// Teardown: `/quit` + stdin EOF ends the session; the router drops the
+			// ssh login from /user/active (the batch sftp list above may still be
+			// draining, so poll briefly rather than assert one snapshot).
+			let lingering: unknown[] = [];
+			for (let attempt = 0; attempt < 20; attempt += 1) {
+				const active = (await chr.rest("/user/active")) as Array<
+					Record<string, string>
+				>;
+				lingering = active.filter((row) => row["via"] === "ssh");
+				if (lingering.length === 0) break;
+				await Bun.sleep(500);
+			}
+			expect(lingering, "an ssh session outlived the terminal").toEqual([]);
+
+			// terminal TQ2: quickchr v1 forwards no mac-telnet; a pinned
+			// `--via mac-telnet` is a typed error, never a swap to ssh.
+			const termQ2 = await runCliProcess({
+				args: ["terminal", "--quickchr", name, "--via", "mac-telnet", "--json"],
+				env: { CENTRS_SKIP_ENV_FILE: "1" },
+			});
+			expect(termQ2.exitCode).toBe(1);
+			expect(termQ2.stdoutText).toBe("");
+			expect(JSON.parse(termQ2.stderrText).error.code as string).toBe(
+				"quickchr/unsupported-via",
+			);
 
 			const version =
 				typeof chr.state.version === "string" ? chr.state.version : "unknown";
@@ -290,6 +367,16 @@ describeFast("--quickchr targets against CHR (#134)", () => {
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
 				exampleIds: exampleIds(7),
+			});
+			await recordIntegrationEvidence({
+				suite: "--quickchr targets against CHR",
+				command: "terminal",
+				protocol: "ssh",
+				routerosVersion: version,
+				quickChrName: chr.name,
+				requestedChannel: started.requestedChannel,
+				requestedVersion: started.requestedVersion,
+				exampleIds: ["TQ1", "TQ2"],
 			});
 		} finally {
 			consoleCapture.restore();

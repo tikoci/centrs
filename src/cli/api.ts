@@ -29,7 +29,10 @@ import {
 } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
+	expandEqualsArgs,
 	expectValue,
+	helpRequested,
+	inferCliFormat,
 	printTextHeader,
 	printTextNotes,
 	renderCommandHelp,
@@ -219,6 +222,10 @@ interface ApiCliArgs extends ApiRequest {
 }
 
 export function parseApiCliArgs(args: readonly string[]): ApiCliArgs {
+	if (helpRequested(args)) {
+		return { endpoint: "", help: true };
+	}
+	args = expandEqualsArgs(args, apiCommand.options);
 	const parsed: ApiCliArgs = { endpoint: "" };
 	const positional: string[] = [];
 	const positionalIndexes: number[] = [];
@@ -265,11 +272,11 @@ export function parseApiCliArgs(args: readonly string[]): ApiCliArgs {
 				break;
 			case "-X":
 			case "--method":
-				parsed.method = expectValue(args, ++index, arg);
+				parsed.method = expectValue(args, ++index, arg, apiCommand.options);
 				break;
 			case "-f":
 			case "--field": {
-				const kv = expectValue(args, ++index, arg);
+				const kv = expectValue(args, ++index, arg, apiCommand.options);
 				const eq = kv.indexOf("=");
 				if (eq <= 0) {
 					throw new Error(`${arg} expects key=value; got ${kv}`);
@@ -282,74 +289,85 @@ export function parseApiCliArgs(args: readonly string[]): ApiCliArgs {
 			}
 			case "-d":
 			case "--data":
-				parsed.data = expectValue(args, ++index, arg);
+				parsed.data = expectValue(args, ++index, arg, apiCommand.options);
 				break;
 			case "--input":
-				parsed.inputPath = expectValue(args, ++index, arg);
+				parsed.inputPath = expectValue(args, ++index, arg, apiCommand.options);
 				break;
 			case "--query":
 			case "--filter":
 				parsed.query = [
 					...(parsed.query ?? []),
-					expectValue(args, ++index, arg),
+					expectValue(args, ++index, arg, apiCommand.options),
 				];
 				break;
 			case "--raw-query":
 				parsed.rawQuery = [
 					...(parsed.rawQuery ?? []),
-					expectValue(args, ++index, arg),
+					expectValue(args, ++index, arg, apiCommand.options),
 				];
 				break;
 			case "--attribute":
 			case "--proplist":
 				parsed.proplist = [
 					...(parsed.proplist ?? []),
-					expectValue(args, ++index, arg),
+					expectValue(args, ++index, arg, apiCommand.options),
 				];
 				break;
 			case "--duration":
-				parsed.duration = expectValue(args, ++index, arg);
+				parsed.duration = expectValue(args, ++index, arg, apiCommand.options);
 				break;
 			case "--count":
-				parsed.count = parseIntegerFlag(expectValue(args, ++index, arg), arg);
+				parsed.count = parseIntegerFlag(
+					expectValue(args, ++index, arg, apiCommand.options),
+					arg,
+				);
 				break;
 			case "--via":
-				parsed.via = expectValue(args, ++index, arg);
+				parsed.via = expectValue(args, ++index, arg, apiCommand.options);
 				break;
 			case "--host":
-				parsed.host = expectValue(args, ++index, arg);
+				parsed.host = expectValue(args, ++index, arg, apiCommand.options);
 				break;
 			case "--port":
-				parsed.port = parseIntegerFlag(expectValue(args, ++index, arg), arg);
+				parsed.port = parseIntegerFlag(
+					expectValue(args, ++index, arg, apiCommand.options),
+					arg,
+				);
 				break;
 			case "--user":
 			case "-u":
 			case "--username":
-				parsed.username = expectValue(args, ++index, arg);
+				parsed.username = expectValue(args, ++index, arg, apiCommand.options);
 				break;
 			case "--password":
-				parsed.password = expectValue(args, ++index, arg);
+				parsed.password = expectValue(args, ++index, arg, apiCommand.options);
 				break;
 			case "--insecure":
 				parsed.insecure = true;
 				break;
 			case "--cdb-file":
-				parsed.cdbFile = expectValue(args, ++index, arg);
+				parsed.cdbFile = expectValue(args, ++index, arg, apiCommand.options);
 				break;
 			case "--cdb-password":
-				parsed.cdbPassword = expectValue(args, ++index, arg);
+				parsed.cdbPassword = expectValue(
+					args,
+					++index,
+					arg,
+					apiCommand.options,
+				);
 				break;
 			case "--match":
-				parsed.match = expectValue(args, ++index, arg);
+				parsed.match = expectValue(args, ++index, arg, apiCommand.options);
 				break;
 			case "--resolve":
-				parsed.resolve = expectValue(args, ++index, arg);
+				parsed.resolve = expectValue(args, ++index, arg, apiCommand.options);
 				break;
 			case "--timeout":
-				parsed.timeout = expectValue(args, ++index, arg);
+				parsed.timeout = expectValue(args, ++index, arg, apiCommand.options);
 				break;
 			case "--format": {
-				const value = expectValue(args, ++index, arg);
+				const value = expectValue(args, ++index, arg, apiCommand.options);
 				if (!apiOutputFormats.includes(value as ApiOutputFormat)) {
 					throw new Error(
 						`--format must be one of ${apiOutputFormats.join(", ")}; got ${value}.`,
@@ -359,7 +377,12 @@ export function parseApiCliArgs(args: readonly string[]): ApiCliArgs {
 				break;
 			}
 			default: {
-				const consumed = consumeSelectionFlag(args, index, selectionFlags);
+				const consumed = consumeSelectionFlag(
+					args,
+					index,
+					selectionFlags,
+					apiCommand.options,
+				);
 				if (consumed !== null) {
 					index = consumed;
 					break;
@@ -582,7 +605,7 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 		const format = inferApiFormat(args, parsed);
 		const tips = isMissingTargetError(error)
 			? await buildTargetSelectionTips({
-					cdbFile: parsed?.cdbFile ?? cdbFileFromArgs(args),
+					cdbFile: parsed?.cdbFile ?? cdbFileFromArgs(args, apiCommand.options),
 					env: Bun.env,
 				})
 			: [];
@@ -755,31 +778,17 @@ function inferApiFormat(
 	if (parsed?.format) {
 		return parsed.format;
 	}
-	if (args.includes("--json")) {
-		return "json";
-	}
-	const index = args.indexOf("--format");
-	if (index >= 0) {
-		const value = args[index + 1];
-		if (
-			value !== undefined &&
-			apiOutputFormats.includes(value as ApiOutputFormat)
-		) {
-			return value as ApiOutputFormat;
-		}
-	}
 	// Honor CENTRS_FORMAT on the parse-time error path so the catch render matches
 	// buildApiErrorEnvelope's env-aware `meta.operation.request.format`. CLI flags
-	// above still win.
-	const envFormat = Bun.env["CENTRS_FORMAT"];
-	if (
-		envFormat !== undefined &&
-		apiOutputFormats.includes(envFormat as ApiOutputFormat)
-	) {
-		return envFormat as ApiOutputFormat;
-	}
-	// api is machine-first: default to the structured json envelope, not text.
-	return "json";
+	// above still win. api is machine-first: default to the structured json
+	// envelope, not text.
+	return inferCliFormat(
+		args,
+		apiCommand.options,
+		apiOutputFormats,
+		"json",
+		Bun.env["CENTRS_FORMAT"],
+	);
 }
 
 function parseIntegerFlag(value: string, flag: string): number {

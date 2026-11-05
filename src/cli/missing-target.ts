@@ -16,6 +16,7 @@ import { buildTip, type Tip } from "../core/envelope.ts";
 import { defaultCdbPath, loadCdb } from "../devices.ts";
 import { CentrsError } from "../errors.ts";
 import { DEFAULT_RECORD_TARGET, identityFromComment } from "../resolver/cdb.ts";
+import { type CliCommandOption, valueFlagTokens } from "./common.ts";
 
 /** Cap on how many saved devices a single tip names before "(+N more)". */
 const MAX_LISTED_DEVICES = 8;
@@ -60,14 +61,25 @@ export interface CdbInputs {
  * never flow into the (logged) tip path, and the tips read only an unencrypted
  * registry — an encrypted CDB falls back to generic guidance.
  */
-export function cdbFileFromArgs(args: readonly string[]): string | undefined {
+export function cdbFileFromArgs(
+	args: readonly string[],
+	options: readonly CliCommandOption[],
+): string | undefined {
+	const values = valueFlagTokens(options);
 	for (let index = 0; index < args.length; index += 1) {
-		if (args[index] === "--cdb-file") {
+		const arg = args[index];
+		if (arg === "--") break;
+		if (arg === "--cdb-file") {
 			if (index + 1 >= args.length) return undefined;
 			const value = args[index + 1] as string; // bounds-checked above
 			if (value.startsWith("--")) return undefined;
 			return value;
 		}
+		if (arg?.startsWith("--cdb-file=")) {
+			const value = arg.slice("--cdb-file=".length);
+			return value === "" ? undefined : value;
+		}
+		if (arg !== undefined && values.has(arg)) index += 1;
 	}
 	return undefined;
 }

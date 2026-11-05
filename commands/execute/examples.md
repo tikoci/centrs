@@ -815,11 +815,13 @@ closed.
 
 ```bash
 centrs execute --host http://$A:$REST_PORT ':put [/system/identity/get name]' --username $U --password $P --json
+centrs execute --host="http://$A:$REST_PORT" --username="$U" --password="$P" --format=json -- ':put [/system/identity/get name]'
 centrs execute --host $A:$API_PORT --username $U --password $P --json -- ':put [/system/identity/get name]'
 ```
 
-Both are `ok: true`, the first over rest-api (the URL names REST) and the second
-over native-api on `$API_PORT`. `meta.target.source = { kind: "cli", key:
+All are `ok: true`, the first two over rest-api (the URL names REST) and the last
+over native-api on `$API_PORT`. The `=` form is covered by the H1 CLI test (#625).
+`meta.target.source = { kind: "cli", key:
 "host" }`, with no `recordIndex`: there is no `<target>`, so there is no CDB
 lookup. `retrieve`, `api` and `transfer` have the same rule (their H1).
 
@@ -1084,3 +1086,23 @@ centrs execute 127.0.0.1 --port $API --username $READER --password $PW --yes -- 
 (`context.missing` `["write", "reboot"]`) and
 `cmr/client-script-not-validated`. The same command as the lab's admin login
 has neither the policy warning nor `cmr/selection-includes-controller`.
+
+## Per-service CDB ports (#618)
+
+### SP1. Execute uses the port belonging to its transport
+
+`$CDB` holds a `127.0.0.1` record with `www-port=$WWW_PORT`,
+`api-port=$API_PORT`, `ssh-port=$SSH_PORT`, and legacy `port=1`.
+The host forwards reach CHR `www`, relocated `api` (18728), and relocated
+`ssh` (2222); `$KEY.pub` is imported for the saved user.
+
+```bash
+centrs execute 127.0.0.1 /system/identity/print --via rest-api --cdb-file $CDB --json
+centrs execute 127.0.0.1 /system/identity/print --via native-api --cdb-file $CDB --json
+centrs execute 127.0.0.1 /system/identity/print --via ssh --ssh-key $KEY --insecure --cdb-file $CDB --json
+```
+
+All succeed; `meta.target.port` is the matching host port and
+`meta.settings.port.key` is `record:0:www-port`, `record:0:api-port`, or
+`record:0:ssh-port`. Mapped to `test/integration/cdb-service-ports.test.ts` →
+`REST and native API each read their own key` and `SSH execute reads ssh-port`.

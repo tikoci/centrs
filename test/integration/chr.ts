@@ -104,6 +104,12 @@ interface StartOptions {
 	 * same RouterOS either way.
 	 */
 	bootDiskFormat?: "qcow2" | "raw";
+	/**
+	 * quickchr's managed login: a `quickchr` account plus a provisioned,
+	 * batch-verified SSH key the descriptor hands to `--quickchr` consumers.
+	 * quickchr only creates it when this is explicitly `true` at first boot.
+	 */
+	secureLogin?: boolean;
 }
 
 const routerOsChannels = [

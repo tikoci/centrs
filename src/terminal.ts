@@ -18,6 +18,7 @@
  */
 
 import { CentrsError, serializeCentrsError } from "./errors.ts";
+import type { RouterOsProtocol } from "./protocols/index.ts";
 import {
 	createUdpMacTelnetTransport,
 	isBroadcastHost,
@@ -28,17 +29,23 @@ import {
 import { MacTelnetConsole } from "./protocols/mac-telnet-console.ts";
 import { sshCommonOptions, sshUserHost } from "./protocols/ssh.ts";
 import {
-	type CdbResolution,
+	assertNoQuickchrOverrideConflict,
 	isIpTransport,
 	isMacAddress,
 	loadEnvFileDefaults,
 	parseResolvePolicy,
+	type QuickchrResolution,
+	quickchrConnection,
+	quickchrKeyInstallCommand,
+	quickchrKeyInstallVia,
+	quickchrSshAuthUnavailable,
 	type ResolvedAuth,
 	type ResolvedTarget,
 	resolveAuth,
 	resolveBooleanSetting,
 	resolveCdb,
 	resolveMacTarget,
+	resolveQuickchrTarget,
 	resolveStringSetting,
 	resolveTarget,
 } from "./resolver/index.ts";
@@ -56,6 +63,13 @@ export interface TerminalRequest {
 	 * host / IP / CDB identity (the IP-level console over ssh).
 	 */
 	targetInput?: string;
+	/**
+	 * quickchr machine name (`--quickchr <name>`, #610): the live descriptor's
+	 * SSH endpoint supplies host/port/username/key, bypassing the CDB, env, and
+	 * `__default__` ladder for those fields. Exactly one machine — terminal is a
+	 * single session. Exclusive with `targetInput` and the direct override flags.
+	 */
+	quickchr?: string;
 	/**
 	 * Transport. Defaults to `mac-telnet` for a MAC target and `ssh` for any other
 	 * (host / IP / CDB identity); rest/native have no terminal capability.
@@ -116,7 +130,24 @@ interface ResolvedTerminal {
 	auth: ResolvedAuth;
 	sourceMac?: string;
 	insecure: boolean;
-	warnings: CdbResolution["warnings"];
+	/**
+	 * Restrict ssh to public-key auth (`PreferredAuthentications=publickey`).
+	 * Set for a `--quickchr` console: the provider's managed key is the only
+	 * credential, so a rejected key fails instead of falling back to a password
+	 * or keyboard-interactive prompt.
+	 */
+	publicKeyOnly?: boolean;
+	/**
+	 * Resolution warnings: CDB record notes, or the quickchr provider-trust note
+	 * (relaxed host-key checking for the ephemeral VM). The CLI streams device
+	 * bytes rather than an envelope, so these are for API callers.
+	 */
+	warnings: readonly { code: string; message: string }[];
+}
+
+/** Test seam: how a `--quickchr` name becomes live connection facts. */
+export interface ResolveTerminalOptions {
+	resolveQuickchr?: (name: string) => Promise<QuickchrResolution>;
 }
 
 /** Reject any transport without a terminal capability (mac-telnet + ssh). */
@@ -145,6 +176,7 @@ function gateTerminalVia(via: string): void {
 export async function resolveTerminalRequest(
 	request: TerminalRequest,
 	env: Record<string, string | undefined> = Bun.env,
+	options: ResolveTerminalOptions = {},
 ): Promise<ResolvedTerminal> {
 	// Gate the transport BEFORE any CDB load: an explicit unsupported `--via`
 	// should fail fast and hermetically, without a device-registry lookup for a
@@ -155,6 +187,9 @@ export async function resolveTerminalRequest(
 		gateTerminalVia(preliminaryVia);
 	}
 	const config = await loadEnvFileDefaults(env);
+	if (request.quickchr !== undefined) {
+		return resolveQuickchrTerminal(request, env, config, options);
+	}
 	const cdb = await resolveCdb(
 		{
 			targetInput: request.targetInput,
@@ -240,6 +275,130 @@ export async function resolveTerminalRequest(
 		insecure: insecure.value,
 		warnings: cdb?.warnings ?? [],
 	};
+}
+
+/**
+ * `terminal --quickchr <name>` (#610): the named-live-provider path. The direct
+ * overrides conflict up front (before any machine lookup), the machine resolves
+ * through quickchr's public descriptor API only, and the chosen `--via` (default
+ * ssh) must be a service the descriptor forwards — `--via mac-telnet` is a typed
+ * `quickchr/unsupported-via`, never a swap to ssh. The SSH endpoint must carry a
+ * provider-provisioned key path — stricter than the execute/sftp batch gate,
+ * which also accepts `agent-or-config`: an interactive ssh with no `-i` would
+ * offer ambient agent/config identities and could fall back to a password
+ * prompt. So the session logs in only with quickchr's managed key under
+ * `IdentitiesOnly=yes`; host-key checking is relaxed by provenance for the
+ * ephemeral VM, exactly as for the batch ssh clients.
+ */
+async function resolveQuickchrTerminal(
+	request: TerminalRequest,
+	env: Record<string, string | undefined>,
+	config: Record<string, string | undefined>,
+	options: ResolveTerminalOptions,
+): Promise<ResolvedTerminal> {
+	const machine = request.quickchr ?? "";
+	assertNoQuickchrOverrideConflict(request, machine);
+	if (request.targetInput !== undefined) {
+		throw new CentrsError({
+			code: "usage/conflicting-flags",
+			summary: `\`--quickchr ${machine}\` names the terminal target and cannot be combined with a <router> target.`,
+			remediation:
+				"Drop the <router> positional (or `--quickchr`) so the terminal has one target source.",
+			context: { machine, target: request.targetInput },
+		});
+	}
+	const via =
+		resolveStringSetting(
+			request.via,
+			env,
+			"CENTRS_VIA",
+			"ssh",
+			"via",
+			undefined,
+			undefined,
+			config,
+		)?.value ?? "ssh";
+	gateTerminalVia(via);
+	const resolution = await (options.resolveQuickchr ?? resolveQuickchrTarget)(
+		machine,
+	);
+	const connection = terminalQuickchrConnection(resolution, via);
+	return {
+		via,
+		target: connection.target,
+		auth: connection.auth,
+		insecure: connection.insecure,
+		publicKeyOnly: true,
+		warnings: connection.warnings,
+	};
+}
+
+/**
+ * {@link quickchrConnection} with a terminal-shaped remediation. The shared one
+ * suggests the machine's other live services (`--via rest-api` / `native-api`),
+ * none of which has a terminal capability, so terminal names what does work:
+ * the default ssh, a machine provisioned with a managed key, or a direct
+ * `--host` console with the caller's own key — never a password prompt, which
+ * an agent cannot answer.
+ */
+function terminalQuickchrConnection(
+	resolution: QuickchrResolution,
+	via: string,
+) {
+	try {
+		const connection = quickchrConnection(resolution, via as RouterOsProtocol);
+		if (via === "ssh" && connection.auth.sshKey === undefined) {
+			// The descriptor vouches only for `agent-or-config`; the interactive
+			// console requires the provider's own key (see resolveQuickchrTerminal).
+			// quickchrConnection succeeded, so the ssh endpoint is the available shape.
+			const ssh = resolution.services.ssh as { auth?: unknown } | undefined;
+			throw quickchrSshAuthUnavailable(
+				resolution,
+				{ host: connection.target.host, port: connection.target.port },
+				ssh?.auth as Parameters<typeof quickchrSshAuthUnavailable>[2],
+				"has no provider-provisioned SSH key for the console, and centrs does not hand an interactive session to the ambient ssh-agent, ~/.ssh/config, or a password prompt",
+			);
+		}
+		return connection;
+	} catch (error) {
+		if (
+			!(error instanceof CentrsError) ||
+			(error.code !== "quickchr/unsupported-via" &&
+				error.code !== "quickchr/ssh-auth-unavailable")
+		) {
+			throw error;
+		}
+		const machine = resolution.name;
+		let remediation: string;
+		if (error.code === "quickchr/ssh-auth-unavailable") {
+			const { host, port, username, availableServices } = (error.context ??
+				{}) as {
+				host?: string;
+				port?: number;
+				username?: string;
+				availableServices?: string[];
+			};
+			const user = username ?? "admin";
+			const installVia = quickchrKeyInstallVia(availableServices ?? []);
+			const direct = `\`centrs terminal --host ${host} --port ${port} --username ${user} --ssh-key <private key> --insecure\``;
+			remediation = `quickchr provisions a verified key only on a machine's first boot with \`--secure-login\` (\`quickchr add/start --secure-login\`); recreate the machine that way.${
+				installVia !== undefined
+					? ` Or install your own key (\`${quickchrKeyInstallCommand(machine, user, installVia)}\`) and open the console directly: ${direct}.`
+					: ` The machine forwards no REST or API service to install your own key over; with a key already on the router, open the console directly: ${direct}.`
+			}`;
+		} else if (via !== "ssh") {
+			remediation = `quickchr forwards no ${via} service; drop \`--via ${via}\` so the terminal uses the machine's ssh endpoint.`;
+		} else {
+			remediation = `The machine reports no live ssh service; check it with \`quickchr inspect ${machine}\`.`;
+		}
+		throw new CentrsError({
+			code: error.code,
+			summary: error.summary,
+			remediation,
+			context: { ...error.context, command: "terminal" },
+			cause: error,
+		});
+	}
 }
 
 /** Build the UDP transport + console for a resolved mac-telnet terminal and open it. */
@@ -398,6 +557,10 @@ export function buildSshTerminalArgv(resolved: ResolvedTerminal): string[] {
 		"-p",
 		String(resolved.target.port),
 		...sshCommonOptions(conn),
+		...(resolved.publicKeyOnly
+			? ["-o", "PreferredAuthentications=publickey"]
+			: []),
+		"--",
 		sshUserHost(conn),
 	];
 }

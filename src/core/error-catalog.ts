@@ -41,6 +41,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary: "A CDB entry with that target already exists.",
 	},
 	{
+		code: "cdb/conflict",
+		summary:
+			"The CDB changed after it was loaded; the stale write was refused so no change is lost.",
+	},
+	{
 		code: "cdb/create-failed",
 		summary: "A new CDB file could not be created at the resolved location.",
 	},
@@ -85,6 +90,16 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		code: "cdb/invalid-record",
 		summary:
 			"A device record failed schema validation (blank target or wrong field type).",
+	},
+	{
+		code: "cdb/lock-unsupported",
+		summary:
+			"The CDB filesystem does not support the hard links required for write locking.",
+	},
+	{
+		code: "cdb/locked",
+		summary:
+			"Another writer held the CDB lock past the wait timeout; nothing was written.",
 	},
 	{ code: "cdb/not-found", summary: "The CDB file could not be found." },
 	{
@@ -384,7 +399,12 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "quickchr/unsupported-via",
 		summary:
-			"The chosen `--via` has no usable service on the quickchr machine (not forwarded, unavailable, or SSH without batch-capable auth).",
+			"The chosen `--via` has no usable service on the quickchr machine (not forwarded, or marked unavailable).",
+	},
+	{
+		code: "quickchr/ssh-auth-unavailable",
+		summary:
+			"The quickchr machine forwards SSH but vouches for no verified SSH key, so no non-interactive SSH/SFTP login is possible.",
 	},
 
 	// routeros/*
@@ -704,6 +724,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "usage/missing-group",
 		summary: "The operation requires a non-empty --group value.",
+	},
+	{
+		code: "usage/missing-flag-value",
+		summary:
+			"A flag that needs a value was given none, or was followed by another flag.",
 	},
 	{
 		code: "usage/not-implemented",

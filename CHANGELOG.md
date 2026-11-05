@@ -12,17 +12,14 @@ release dates that heading and moves both `@latest` and `@next` to that release.
 `@next` stays there until another preview is published. A `-next.N` build has
 no section of its own.
 
-## 0.1.10 — next
+## 0.2.0 — next
 
 ### Maintenance
 
-- Prepare the next development cycle with package version `0.1.10-next`.
-  Preview releases publish `0.1.10-next.<run_number>` to `@next`;
-  `@latest` stays on 0.1.9 until the next stable release.
-- Align the README and security policy with shipped credential redaction,
-  CDB encryption, global preferences, and the deferred interactive setup.
-  Clarify that WinBox profile/session fields are preserved only, `devices edit`
-  is reserved, and stable releases advance both npm dist-tags.
+- Start the 0.2.0 development cycle with package version `0.2.0-next`. The
+  minor bump marks the coming transport-default change (native-api first, with
+  availability-aware fallback). Preview releases publish
+  `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
 - CHR integration tests can lease one default CHR per `bun test` process,
   restored to a baseline QEMU snapshot before each lease, instead of booting
   one per test (#612). Seven multi-boot files opt in with
@@ -32,6 +29,101 @@ no section of its own.
 - Bump `@tikoci/quickchr` to `^0.5.4` (from 0.5.2). Its snapshot operations
   get their own monitor timeouts (quickchr#80); 0.5.2's flat 5 s often cut a
   CHR `savevm` short.
+
+## 0.1.10 — 2026-11-05
+
+Patch release with SSH argument hardening, stricter CLI option parsing, and
+CDB concurrency protections. Publishing this stable version advances both npm
+dist-tags, `latest` and `next`, to `0.1.10`.
+
+### Added
+
+- `LoadedCdb.revision`, `retryOnCdbConflict()`, `CDB_CONFLICT_MAX_ATTEMPTS`,
+  and the CDB lock primitives (`withWinBoxCdbLock`, `readWinBoxCdbRevision`,
+  `winBoxCdbLockPath`) are exported; `writeWinBoxCdb()` accepts
+  `expectedRevision` (#581).
+- CLI parsers accept long `--flag=value` options, and `help <command>` /
+  `--help <command>` route to that command's help (#625).
+- CDB per-service port keys `www-port`, `www-ssl-port`, `api-port`,
+  `api-ssl-port` and `ssh-port` (#618). Each is read only by the matching
+  transport and beats the legacy all-transport `port=` within the CDB tier.
+  `--port`/`CENTRS_PORT` precedence and MAC-Telnet delivery are unchanged.
+
+### Changed
+
+- The default CDB backup retention drops from 5 to 2
+  (`WINBOX_CDB_DEFAULT_BACKUP_RETENTION`). The new write lock, not backups,
+  guards against concurrent writers (#581).
+- Missing CLI option values now report `usage/missing-flag-value` with
+  `context.flag` and, when present, `context.got`, instead of the generic
+  `input/invalid-command` (#625).
+- A `--quickchr` machine that forwards SSH but has no verified SSH key now
+  fails with `quickchr/ssh-auth-unavailable` instead of
+  `quickchr/unsupported-via`, for `execute --via ssh`, `transfer --via sftp`
+  and `terminal`. Callers that branched on `unsupported-via` for this case
+  must match the new code. Its context carries `host`, `port`, `username`,
+  `modes`, `batchModes`, `availableServices` and, when the machine forwards
+  one, `keyInstallVia`. Its remediation names quickchr's first-boot
+  `--secure-login`, or installing your own key over `--via <keyInstallVia>`
+  and dialing the endpoint with `--host`/`--ssh-key`, never a password prompt.
+  `unsupported-via` now means only a service the machine does not forward or
+  marked unavailable.
+
+### Fixed
+
+- Concurrent or stale CDB mutations no longer both succeed while one change is
+  silently lost (#581). Writes run under a `<cdb>.lock` file and re-check the
+  loaded revision: a stale snapshot fails `cdb/conflict`, and a lock held past
+  10 s fails `cdb/locked`. The CLI, MCP, and `discover --save` reload and replay
+  on conflict, so independent processes all land their changes. Two backups in
+  the same millisecond no longer overwrite each other, and on Windows the final
+  rename retries briefly while another process holds the CDB open.
+- Value-taking CLI flags reject a following option before target resolution;
+  `--help` / `-h` before `--` still prints help (#625). Password values remain
+  literal, including empty and flag-shaped values. Unknown `--name=value`
+  diagnostics withhold the attached value, including for misspelled flags.
+- Reject option-like host/username values; end ssh/sftp option parsing with
+  `--`. Host resolution also rejects DNS labels that start with a hyphen
+  (#626).
+- `terminal --quickchr <name>` opens an ssh console to one running quickchr
+  machine (#610). It used to reject even a single name as
+  `usage/fanout-not-supported`. Host, port, user, and key come from the
+  machine's descriptor; the session logs in only with quickchr's verified
+  managed key (public-key auth, no ssh-agent, `~/.ssh/config` identity or
+  password fallback), which quickchr provisions for a machine first booted with
+  `--secure-login`. Without that key the error is the new
+  `quickchr/ssh-auth-unavailable` (see Changed above).
+  A repeated `--quickchr` is still `usage/fanout-not-supported`. A `<router>`
+  positional or a direct override flag with it is `usage/conflicting-flags`.
+  `--via mac-telnet` is `quickchr/unsupported-via`.
+
+### Known issues
+
+These are confirmed, pre-existing defects carried into this patch, not
+regressions introduced by 0.1.10. They remain open for follow-up fixes.
+
+- [#575](https://github.com/tikoci/centrs/issues/575): `execute --via mac-telnet`
+  can silently drop `:put` output from single-line commands with a trailing
+  newline; multiline output can contain console echo artifacts. Use REST,
+  native API, or SSH when reliable captured output is required.
+- [#604](https://github.com/tikoci/centrs/issues/604): MCP authorization and
+  connection resolution read the CDB separately. A concurrent record edit or
+  removal can change the address, credentials, or write policy between the
+  allowlist check and dialing; a removed record can fall through to an ad-hoc
+  target with fallback credentials. Avoid concurrent CDB edits during MCP
+  device calls. The #581 write lock prevents lost CDB updates but does not
+  bind authorization and dialing to one snapshot.
+
+### Maintenance
+
+- Set the package version to `0.1.10` and date its release notes for the stable
+  release workflow. The `channel=latest` dispatch publishes the patch to
+  `@latest`, moves `@next` to it, and creates the GitHub Release after QA passes
+  on the release commit.
+- Align the README and security policy with shipped credential redaction,
+  CDB encryption, global preferences, and the deferred interactive setup.
+  Clarify that WinBox profile/session fields are preserved only, `devices edit`
+  is reserved, and stable releases advance both npm dist-tags.
 
 ## 0.1.9 — 2026-11-03
 

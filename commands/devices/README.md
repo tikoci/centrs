@@ -123,7 +123,10 @@ resolver settings.
 | `via`           | override | Default transport for this device (`rest-api`, `native-api`, `ssh`, …). |
 | `validate`      | override | `true` / `false`. `false` is the escape hatch; CLI overrides.           |
 | `timeout`       | override | Default request timeout in ms. Per-transport caps still apply.          |
-| `port`          | override | Non-default transport port. Omitted when equal to the protocol default. |
+| `port`          | override | Legacy all-transport port (REST, native API, SSH, MAC-Telnet delivery). Prefer the per-service keys below. Omitted when equal to the protocol default. |
+| `www-port`, `www-ssl-port` | override | REST port, plain/TLS. Beats `port`. See "Per-service ports". |
+| `api-port`, `api-ssl-port` | override | Native API port, plain/TLS. Beats `port`. |
+| `ssh-port`      | override | SSH port (execute, terminal, SFTP transfer). Beats `port`. |
 | `ssh-key`       | override | Per-device private key file path for SSH transports.                    |
 | `source`        | override | Provenance marker for discovered/imported records (`mndp`, `dude`, …).  |
 | `mcp`           | override | MCP write policy for this device: `ro` (default) or `rw`. See `commands/mcp/`. |
@@ -146,6 +149,18 @@ Rules:
   error needs to mention them. It joins the comment-kv allowlist *with* the SSH
   transport (see `commands/terminal/README.md`), not before — a key path with no
   working SSH transport is the kind of half-feature we avoid.
+- **Per-service ports** are named after RouterOS `/ip/service` entries. Only
+  the transport that connects to that service reads them; MAC-Telnet reads
+  none. Within the CDB tier the matching key beats `port=`; `--port`,
+  `CENTRS_PORT` and the rest of the ladder are unchanged, so a CLI/env port still
+  wins (config `CENTRS_PORT` stays below the CDB). Plain vs TLS: an explicit
+  `http://`/`https://` in the target picks that variant and is never switched;
+  with no scheme the stored variant decides, secure first when both are stored.
+  A saved key decides TLS by its name, so `api-port=8729` is plain. A higher-tier
+  `--port` replaces only the number and keeps the saved variant's TLS, except
+  native's existing explicit 8728 (plain) / 8729 (TLS) rule. An invalid value
+  warns `cdb/invalid-option` and counts as absent. `meta.settings.port` names
+  the key that won (e.g. `record:3:www-ssl-port`).
 - Unknown keys → `cdb/unknown-option` warning. The call still succeeds.
 - Tokens are shell-word tokenized. Values with spaces require double quotes
   (`"…"`), with `\"` and `\\` escapes. `=` inside a quoted value is literal.
@@ -548,7 +563,7 @@ creates a plaintext snapshot of the original; it does not run backup retention.
 The `cdb/plaintext-backups` warning accompanies conversion, including no-op runs:
 only the active file is protected. Handle backups according to your own retention
 policy; centrs neither encrypts nor deletes them during conversion. Subsequent
-ordinary writes still use the normal five-backup retention below.
+ordinary writes still use the normal two-backup retention below.
 `--no-backup` (library: `skipBackup: true`) skips the new plaintext snapshot, so
 no fresh plaintext copy is written; earlier backups are still retained and the
 warning still applies to them. Without the snapshot, a forgotten password cannot
@@ -561,25 +576,35 @@ instead of being silently ignored. `devices init --help` and
 `devices encrypt --help` show only those accepted flags; the same metadata
 generates their sections in [`docs/CLI.md`](../../docs/CLI.md).
 
-Close WinBox and other CDB writers before conversion. If they share this path,
-they must reopen it using the CDB password; a stale writer can overwrite the
-conversion. Atomic replacement does not provide concurrent-writer transactions
-(#581). Password rotation and decryption are outside this slice. WinBox manual
+Close WinBox before conversion. If it shares this path, it must reopen it using
+the CDB password; WinBox does not take the centrs lock, so a running WinBox can
+save its in-memory list over the conversion. Concurrent centrs writers are safe:
+conversion takes the CDB lock and refuses a stale snapshot with `cdb/conflict`
+(see "Concurrent writers" below). Password rotation and decryption are outside this slice. WinBox manual
 interoperability verification remains open (see Residual risks).
 
 ## CDB write strategy
 
-All writes go through one helper (`writeWinBoxCdb`) that:
+Revision-checked writes use one helper (`writeWinBoxCdb`) under the CDB lock
+(see "Concurrent writers" below):
 
-1. Snapshots the current file to `winbox.cdb.bak.<timestamp>` beside it (the
-   timestamp is a filesystem-safe, lexicographically-sortable ISO variant).
-2. Keeps the last 5 backups, deletes older ones.
-3. Builds the new record set with unknown fields preserved verbatim (see
+1. Re-reads the file and refuses with `cdb/conflict` if it changed since the
+   caller loaded it.
+2. Snapshots the current file to `winbox.cdb.bak.<timestamp>` beside it (the
+   timestamp is a filesystem-safe, lexicographically-sortable ISO variant; a
+   second backup in the same millisecond gets a `-1`, `-2`, … suffix instead of
+   overwriting the first).
+3. Keeps the last 2 backups, deletes older ones. The lock, not backups, guards
+   against concurrent writers; backups are an undo for a mistaken mutation.
+4. Builds the new record set with unknown fields preserved verbatim (see
    below).
-4. Writes to `winbox.cdb.tmp.<pid>.<rand>` in the same directory and `fsync`s
+5. Writes to `winbox.cdb.tmp.<pid>.<rand>` in the same directory and `fsync`s
    it (then best-effort `fsync`s the directory).
-5. `rename()`s over the original (atomic on POSIX), so a crash never leaves a
-   partially-written CDB.
+6. `rename()`s over the original (atomic on POSIX), so a crash never leaves a
+   partially-written CDB. On Windows, where replacing a file another process
+   has open (antivirus, the search indexer, WinBox) fails transiently, the
+   rename is retried briefly on `EPERM`/`EACCES`/`EBUSY` before the error
+   surfaces.
 
 Encrypted CDBs: the write layer decrypts on load, mutates the open record set,
 then re-encrypts with the same password loaded from settings before the atomic
@@ -594,6 +619,54 @@ Refusals:
 - Writing to an unencrypted CDB with `--cdb-password` succeeds with the
   existing `cdb/password-not-needed` warning. centrs does **not** silently
   upgrade the file to encrypted.
+
+### Concurrent writers (#581)
+
+Atomic rename alone does not protect read–modify–write: two callers that load
+the same CDB and both save would each get success while the second silently
+dropped the first's change. centrs closes that gap with a revision check inside
+a lock.
+
+- **Revision.** `loadCdb()` records `LoadedCdb.revision`, the sha256 of the
+  on-disk bytes (`absent` when there was no file). An encrypted CDB gets a fresh
+  salt per write, so every write changes its revision.
+- **Lock.** A write takes the sibling lock file `<cdb>.lock` (for example
+  `winbox.cdb.lock`). The lock appears atomically with its holder record (pid,
+  hostname, start time, token): it is written to a temp file and hard-linked
+  into place, which never replaces an existing lock. Waiting is bounded (10 s),
+  then `cdb/locked` names the lock file and holder. Reads never lock.
+  If the filesystem explicitly reports that hard links are unsupported, the
+  write fails with `cdb/lock-unsupported`; move the CDB to a filesystem that
+  supports them. Permission errors are not classified as missing support.
+- **Check under the lock.** Holding the lock, the writer re-reads the file and
+  compares revisions; a mismatch is `cdb/conflict` and nothing is written (no
+  backup either). Check and replacement are one critical section.
+- **Replay.** CLI and MCP `add`/`set`/`remove`, and `discover --save`, reload and replay a
+  conflicted mutation (up to 5 attempts in total, `CDB_CONFLICT_MAX_ATTEMPTS`).
+  Replay re-runs normal validation, so a racing duplicate `add` becomes
+  `cdb/already-exists` rather than an overwrite. Library callers holding an old
+  `LoadedCdb` receive `cdb/conflict` and choose; `retryOnCdbConflict()` is the
+  same helper the CLI uses. `devices encrypt` does not replay automatically;
+  retry the command after a conflict.
+- **Leftover locks.** A lock whose holder recorded this host and whose pid is no
+  longer running is removed automatically. A lock from another host (a CDB on a
+  shared drive), an unreadable lock, or a pid the OS reused is never removed by
+  age; delete it by hand once no centrs writer is running. Windows recycles pids
+  quickly, so this is the more likely case there.
+  Recovery attempts are serialized by a SQLite write transaction on the
+  persistent `<cdb>.lock.guard` file. The OS releases that mutex if a breaker
+  crashes. The guard stores no CDB data and must stay in place: deleting it
+  while writers are running could let two recovery attempts overlap.
+- **Low-level writes.** `writeWinBoxCdb()` without `expectedRevision` stays an
+  unsynchronized primitive for callers that own the file exclusively. Every
+  centrs mutation passes it.
+
+**Boundary: writers outside centrs.** WinBox and other tools do not take the
+lock. The revision check catches their writes made before centrs' locked check,
+not one landing between the check and the rename, and it cannot stop a running
+WinBox from later saving its in-memory address list over the file. This matters
+only when WinBox is pointed at the same file centrs uses. Close WinBox before
+mutating that file with centrs.
 
 ### Unknown CDB fields
 

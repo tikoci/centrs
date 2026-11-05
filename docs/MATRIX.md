@@ -1,12 +1,12 @@
 # Matrix
 
-This file owns **capability status and the selected work track**. The
-command × protocol grid covers live operations; offline analysis, frontends,
-and peer measurement have separate entries below. A capability's acceptance
-criteria live in its `commands/<name>/README.md`; GitHub issues own the tasks
-and dependencies that satisfy them.
+This file owns **capability status, the current track, parked themes and
+nits**. The command × protocol grid covers live operations; offline analysis,
+frontends, and peer measurement have separate entries below. A capability's
+acceptance criteria live in its `commands/<name>/README.md`; GitHub issues own
+the actionable tasks that satisfy them.
 
-Start with [Current priority](#current-priority), then the command's README,
+Start with [Current track](#current-track), then the command's README,
 examples, and linked issue. Verification follows `docs/CONSTITUTION.md` →
 Done definition. A completed implementation slice is not proof that the whole
 capability is complete.
@@ -98,9 +98,11 @@ and implementation sequencing in the linked issues.
 - `check` is `designed` (`commands/check/README.md`): a reach + health battery
   whose reads ride the execute-capable transports (rest-api/native-api/ssh/
   mac-telnet), so those four cells are `designed`; `snmp` and `romon`/
-  `winbox-terminal` stay `not-started`. Its per-host fan-out is the machinery the
-  IP-scan discovery (#149) will iterate; the L2-default timing evidence (#136) is
-  recorded in the README before the cells advance past `designed`.
+  `winbox-terminal` stay `not-started`. Its reach half (finding which services
+  answer, and on which ports) moves to `devices` onboarding
+  ([Devices and onboarding](#devices-and-onboarding)); the health battery stays
+  here. The L2-default timing evidence (#136) is recorded in the README before
+  the cells advance past `designed`.
 - `explain`'s two `CHR-passed` protocol cells are the whole live capability
   (#236). `explain <router> '<input>'` collects read-only `:parse`, highlight
   and child argument-name evidence (#491), and `--schema`/`--complete` describe
@@ -131,13 +133,14 @@ provides shared analysis for future integrations across the command grid.
 
 | Capability | State | Contract and evidence | Work |
 | ---------- | ----- | --------------------- | ---- |
-| explain / offline baseline | `verified` | `commands/explain/README.md` → Offline baseline acceptance; offline examples in `test/unit/explain.test.ts`, focused `test/unit/explain-*` suites, and CHR captures under `test/fixtures/explain/`. The token partition is scored against device `highlight` by `test/unit/explain-highlight-agreement.test.ts` and `test/fixtures/explain/highlight-agreement.json`. The public entry is `@tikoci/centrs/explain`; its dependency boundary and executed browser-consumer proof are gated by `test/unit/explain-browser-entry.test.ts` (`bun run explain:browser-consumer`). #322's fixed-size 16× depth guard and deterministic structural-work guards close the bounded-execution criterion. | #90 indexes correctness, token agreement (#264/#263), consumer verification, and bounded execution (#322). |
+| explain / offline baseline | `verified` | `commands/explain/README.md` → Offline baseline acceptance; offline examples in `test/unit/explain.test.ts`, focused `test/unit/explain-*` suites, and CHR captures under `test/fixtures/explain/`. The token partition is scored against device `highlight` by `test/unit/explain-highlight-agreement.test.ts` and `test/fixtures/explain/highlight-agreement.json`. The public entry is `@tikoci/centrs/explain`; its dependency boundary and executed browser-consumer proof are gated by `test/unit/explain-browser-entry.test.ts` (`bun run explain:browser-consumer`). #322's fixed-size 16× depth guard and deterministic structural-work guards close the bounded-execution criterion. | Closed history: #90 (correctness, token agreement #264/#263, consumer verification, bounded execution #322). Follow-on work: [Explain for agents](#explain-for-agents). |
 
 The CLI/library expose structure, diagnostics, token partitions, symbols, and
 flow-sensitive value facts. `verified` records the offline acceptance evidence;
 it is not a parser-coverage score and does not advance either live protocol cell.
-Live probes (#236), MCP response alignment (#223), and future configuration
-policies are distinct work, not prerequisites for using offline analysis.
+Live probes (#236), MCP response alignment and future configuration policies
+([Explain for agents](#explain-for-agents)) are distinct work, not
+prerequisites for using offline analysis.
 
 ### Transport-base readiness
 
@@ -184,123 +187,177 @@ its own capability axis and is exempt from the RouterOS command-validation gate.
 Wire, auth, TCP/UDP, and CI caveats live in `commands/btest/README.md` and the
 `src/protocols/btest*.ts` / `src/protocols/ec-srp5.ts` module headers.
 
-## Current priority
+## Current track
 
-Live `explain` (#236) is `CHR-passed` on REST and native API: the #491
-foundation, #492's describe and completion facets, and #225's live value types,
-with every applicable example green on stable and long-term CHR. Issue #90
-owns the remaining sequencing, including #507's context surface. Its bounded
-submission matrix is grounded (#574); context selection and binding behavior
-remain follow-up work.
+The maintainer sets this list, and it is the only thing that schedules work.
+An open bug can be fixed without being selected; nothing requires picking one
+up. Unfinished grid cells and parked themes do not preempt the track.
 
-**First: `explain`** (maintainer decision 2026-10-16 on
-[#90](https://github.com/tikoci/centrs/issues/90)). In order: make the
-published offline readings honest (#350, #211; complete), give the result a
-statement tree (#497; complete), then the live probe foundation (#491;
-complete). Those probes grounded #351, #358 and #371 (complete), #492
-added the describe/completion facets, and #225 the live value types. The
-closeout of #236 promoted both live cells (complete). The
-plan, and what is deliberately out of this run, is the 2026-10-16 plan
-comment on #90. It is step 3 of the validation track below.
+1. **Release 0.1.10** (in progress).
+2. **Transport selection**, the first work on `0.2.0-next`. native-api becomes
+   the default for `retrieve`, `api` and `execute`. Automatic selection falls
+   back to the next available transport and reports each hop; a pinned `--via`
+   still never falls back. Ports are stored per service, not as one `port=`.
+   Issues: #588, #620, #621, #622, #131.
+   [Protocol selection](CONSTITUTION.md#protocol-selection) changes in the
+   same PR.
+3. **Next: [Devices and onboarding](#devices-and-onboarding).** Port discovery
+   moves from `check` into `devices`, so an agent can add a device without
+   reading `/ip/service` and storing ports by hand.
 
-**The CMR track is paused** (maintainer decision 2026-10-16; held for the
-7.26beta caller-policy fix — #527 now carries direct 7.26beta3 evidence that a
-restricted caller is refused, with the first refusing release still
-unbracketed). It was first from the 2026-10-12 decision on
-[#441](https://github.com/tikoci/centrs/issues/441). Done: `execute --cmr`
-(#450), which runs one validated command on CMR clients through their
-controller. The contract is in
-[`commands/execute/README.md` → CMR](../commands/execute/README.md#cmr-clients-through-their-controller---cmr),
-with examples CMR0–CMR15. Also done: the fleet blast-radius gate for
-controller fleet commands run with plain `execute` or `api` (#453), with
-examples CMR16–CMR18 and api CMR1. The feature map of CMR against centrs is
-on #441 (2026-10-13). When it resumes, next is the read-only slice of #449 (a
-`devices` view of members and a default controller). Deferred: CDB linkage
-(#449) and `retrieve --cmr` (#441).
+## Parked themes
 
-**The native-api / NDJSON line** (maintainer decision on
-[#396](https://github.com/tikoci/centrs/issues/396), 2026-10-07): agents in the
-field poll with `sleep` where a native follow would answer. In order:
-(1) done: #402, literal `api --stream` with `!empty` frames and
-`--format ndjson`; (2) done: `retrieve --follow` (#396, unfiltered);
-(3) done: `retrieve --sample`; (4) #397: one-shot `retrieve --query` done,
-filtered `--follow` done; #364 (`--wait`/`--until`, same grammar) done;
-(5) #398 and #401 remain open. Each slice's contract lives in its command
-README.
+Direction that is agreed but not scheduled. Each theme has four parts: the
+question, the current lean, when it is ready, and the issues it absorbed.
+Ready means eligible, not started: a ready theme waits until the maintainer
+puts it on the current track. Absorbed issues are closed with the
+`moved-to-docs` label: transferred history, not rejections. When a theme is
+selected it moves to the current track, amends
+the constitution first where it contradicts it, gets a section in its command
+README, and its slices become new issues that link back to the absorbed ones.
+A theme entry that keeps growing is being used as an issue.
 
-**Tightening validation as a whole** is the next track, in the three-step
-order agreed on [#236](https://github.com/tikoci/centrs/issues/236):
+### Workspace and local state
 
-1. **Done** — fix the offline false rejects so the analyzer can be trusted as a
-   gate (#347/#348, shipped in #349; the measured corpus false-reject count went
-   4 → 1).
-2. **Done** — front the `execute` / `api` device preflight with the offline
-   analyzer (#354). The gate is now two-stage; the contract is in
-   [`docs/CONSTITUTION.md` → Validation is the product](CONSTITUTION.md#validation-is-the-product).
-3. **Done** — **live `explain` (#236)**, as stage two of a gate that now exists.
-   The contract is [`commands/explain/README.md`](../commands/explain/README.md)
-   and the live examples in
-   [`commands/explain/examples.md`](../commands/explain/examples.md);
-   [#90](https://github.com/tikoci/centrs/issues/90) indexes what follows.
+- **Question:** how centrs finds a project's own CDB and settings, and where
+  data that spans CLI sessions lives.
+- **Lean:** walk up from the working directory to a `.tikoci/` directory. Each
+  tool owns a subdirectory: `.tikoci/centrs/` holds the CDB, `centrs.env` and
+  `centrs.db`, apart from other tools' data, with owner-only permissions and
+  its own `.gitignore`. The user-level directory uses the same layout. A
+  workspace file may set only an allowlisted set of keys. The CDB is never
+  synced to a remote; a push/pull scheme is a workspace tool's job.
+- **Lean, `centrs.db`:** SQLite, derived, deletable and secret-free; no code
+  path depends on it. First tables: `seen` facts from MNDP, ARP and ping. A
+  session log records verb, target and error code only until redaction exists.
+- **Ready when:** now. It adds a settings layer, so the constitution changes
+  first.
+- **Absorbed:** #92, #160.
 
-The offline baseline stays `verified`: #264 closed the measured token vocabulary
-and #322 closed the final bounded-execution gap, including the public depth-axis
-guard.
+### Devices and onboarding
 
-The live pass is the device-backed cross-check on the offline result, not a
-replacement for it. It adds read-only `/console/inspect` and `:parse` evidence,
-the describe/completion facets, and the live `observedType`/`schemaType`
-producers (#225). REST and native-api cells advance only when their
-applicable examples pass on CHR via `bun run test:integration`.
+- **Question:** one `devices` view of everything centrs can reach, and adding a
+  device without hand-written port facts.
+- **Lean:** `devices add` probes the services through the address it was given
+  (one failure never stops the others; a device that only answers ping is
+  recorded) and stores per-service ports. With no open port, ARP finds the MAC
+  and MAC-Telnet is tried. `devices list` unions CDB records, quickchr machines,
+  CMR members and twins (`twin=<quickchr-name>`). rosetta device data is opt-in
+  (`devices show --specs`). `check` keeps the health battery and future rules.
+- **Ready when:** transport selection is done; the current track already
+  schedules it as step 3.
+- **Absorbed:** #149, #173, #176, #441, #449, #585.
 
-Open offline follow-ups remain explicit but do not reopen the verified baseline.
-Issue #211 made an unlisted absolute bare path abstain (rule F, R14); rule
-P's closed-world reading is still not adopted (#372). The non-authoritative
-scratch citation cleanup is complete (#272, shipped in #568). Issues #350 (the broad
-optional `=`), #351 (a relative submenu brace read as a command operand)
-and #355 (`'` is not a RouterOS token) are complete. A submenu block after a navigation statement
-(`/ip⏎address { … }`) keeps the pre-#351 reading; see
-`commands/explain/README.md`. #336, #342 and #498 are complete: the
-corpus is pinned to schema 5, with one recorded session per release channel
-(long-term 7.23.8, stable 7.24.5, testing 7.25rc2, development 7.26beta1) read
-through `scripts/corpus-db.ts`. The highlight slice is cut from those sessions
-and gated in CI, and the operator sweep is re-run on the same builds — plus
-7.21.5 retained as an age anchor — so the operator axis and the token partition
-are scored on the same firmware. The #335
-source refresh pins both architectures of those versions beside the 7.10.2 /
-7.16 history anchors and accepts the current CLI-Reference drift. Issue #223 is
-a separate MCP response migration. If live evidence finds a wrong offline
-assertion, give that defect a bounded issue and matching CHR-grounded controls
-rather than folding it silently into the live implementation.
+### Auth and secrets
 
-Unfinished SNMP, RoMON, TUI, or other protocol/frontend cells do not preempt this
-track. Change this selection when the maintainer selects another track.
+- **Question:** unlocking an encrypted CDB without the password reaching a
+  transcript, and per-device credentials that live outside the CDB.
+- **Lean:** encrypted CDB by default, with a tip for unlocking from the user's
+  environment. A password command or file read once per CDB load (#603),
+  keychain and OAuth helpers, per-device auth overrides. A workspace file can
+  never name a password command. Exports that carry secrets get a notice
+  (#542).
+- **Ready when:** workspace and local state is done, because the workspace
+  trust rule bounds the unlock channel.
+- **Absorbed:** #420, #542, #603.
 
-### Protocol backlog order
+### Batch reads and sessions
 
-Retained for protocol work when selected; this is not a dependency chain for
-offline analysis. Per-item detail lives in the linked `commands/<name>/`.
+- **Question:** a dashboard needs a dozen reads per refresh; how they share one
+  login and one round trip.
+- **Lean:** library first: one resolved, logged-in session (#401) and
+  native-api tag multiplexing (#398), an array of retrieve requests in and an
+  array of envelopes out. The CLI then gets attribute projection, `.query` and
+  several reads per call as flags. No query language.
+- **Ready when:** a library consumer needs it, or native-api becomes the
+  default.
+- **Absorbed:** #398, #401.
 
-1. **retrieve / rest-api** — `CHR-passed` (`commands/retrieve/`).
-2. **CDB resolution + metadata overrides** — `CHR-passed` (`commands/devices/`).
-3. **CDB groups + fan-out** — `CHR-passed` (`commands/devices/`, fan-out core).
-4. **execute / native-api + rest-api** — `CHR-passed` (`commands/execute/`).
-5. **devices** (CDB mutation + provenance) — `CHR-passed` (`commands/devices/`).
-6. **retrieve / snmp** — `not-started` (future: SNMP OID/MIB reads + MikroTik MIB cache).
-7. **ssh** for transfer/execute/terminal — all three `CHR-passed`.
-8. **mac-telnet** for execute/terminal — both `CHR-passed`.
-9. **RoMON / WinBox Terminal for execute** — `not-started` (see Open questions).
-10. **discover / mndp** — `CHR-passed` (`commands/discover/`).
-11. **MCP, TUI, proxy** — MCP `CHR-passed`; TUI/proxy `not-started`.
-12. **btest (peer measurement)** — server and client both `CHR-passed`.
+### Explain for agents
 
-## Open questions (decisions needed before the affected cell can advance)
+- **Question:** what `explain` shows by default to an agent on the research →
+  explain → execute path.
+- **Lean:** the default is the verdict, problems (error, warn, tip), a manual
+  link and one tip, plus a nudge to run it live when it ran offline. Today's
+  structure, tokens and evidence move behind `--syntax`. Parser internals move
+  out of the command README into their own file. rosetta owns the documentation
+  dataset (versioned files with a hash) and centrs fetches it. ANSI and HTML
+  renderings, policy rules and secret detection build on this.
+- **Ready when:** now. Manual links can ship first as a generated path → URL
+  table.
+- **Absorbed:** #90, #133, #223, #372, #373, #501, #507, #520, #573.
 
-| Question | Affects cell | Notes |
-| -------- | ------------ | ----- |
-| RoMON / WinBox Terminal validation and CI | execute / romon, execute / winbox-terminal | Lower priority than mac-telnet; need reference tooling and typed failure mapping before advancing. |
+### Surface contracts
 
-Recently closed (folded into the specs): SNMP MIB-cache policy → `commands/retrieve/README.md`; bug-report rendering (inline `--bug-report` flag, no separate verb) → `docs/CONSTITUTION.md`; L2-in-CI for mac-telnet/MNDP (quickchr `socket-connect` host-side L2 capture; `socket-mcast` is macOS-broken) → `commands/discover/README.md` + `commands/execute/README.md`.
+- **Question:** how the CLI, library, MCP and future web surfaces keep one
+  shape, and where deliberate differences are tracked.
+- **Lean:** generate the MCP tool reference the way `docs/CLI.md` is generated,
+  and keep only deliberate divergences as structured data (TOML) beside each
+  command's README; future web endpoints use the same tree. The first two argv
+  words decide a command's risk class, so harness allowlists can match on
+  prefixes. `execute` results become predictable (#360); catch-all error codes
+  are split (#528). `--help` may carry one cheap line pointing to the skill or
+  docs.
+- **Ready when:** now. MCP work starts from #605's `isError` fix.
+- **Absorbed:** #95, #129, #148, #360, #528, #593, #606.
 
-When a question is answered, fold the answer into the relevant
-`commands/<name>/README.md` or `docs/CONSTITUTION.md`, then delete the row.
+### Transfer methods
+
+- **Question:** moving files where REST or native-api size limits, or missing
+  SSH access, get in the way.
+- **Lean:** `--via fetch` upload (centrs serves HTTP and the router runs
+  `/tool/fetch`), File Share (`/ip/cloud/back-to-home-file`) where the router
+  supports it, directory upload, a path from uploaded assets to an
+  owner-accessible URL, and version-aware `mkdir`.
+- **Ready when:** a consumer needs it; routeros-muse dashboards raised it
+  first.
+- **Absorbed:** #147, #548, #594, #595.
+
+### CI, release and review
+
+- **Question:** how much testing runs for each event, across platforms, without
+  two full sweeps per change.
+- **Lean:** unit tests on every platform for every code push and PR; docs-only
+  changes run lint only. The CHR sweep runs nightly when main or a RouterOS
+  channel version changed, and at release. Ordinary PRs cannot merge while the
+  last nightly is red; a repair merges with passing evidence on its own head,
+  or by maintainer override. Versions and npm tags align across TIKOCI repos.
+  Snapshot CHR reuse is piloted in #612.
+- **Ready when:** now.
+- **Absorbed:** #97, #142.
+
+### Docs and onboarding
+
+- **Question:** how an agent or developer learns centrs without reading the
+  source.
+- **Lean:** the `routeros-centrs` and `routeros-quickchr-cli` skills are the
+  agent entry point; they should name the command prefixes that are safe to
+  allowlist. Pages publishes `llms.txt` and the generated CLI reference, the
+  README shows real envelopes, and one worked example spans retrieve → export →
+  transfer → `api --stream`. TIKOCI-wide instruction files are collected in
+  `tikoci.github.io` and vendored here, each recording its source and revision.
+- **Ready when:** now.
+- **Absorbed:** #122, #140, #150, #151.
+
+### RoMON, WinBox terminal and SNMP
+
+- **Question:** the `not-started` cells `execute / romon`,
+  `execute / winbox-terminal` and `retrieve / snmp`.
+- **Lean:** RoMON and WinBox terminal need reference tooling and typed failure
+  mapping first, with protocol knowledge from `tikoci/m2ir`; MAC-Telnet stays
+  the layer-2 path meanwhile. SNMP reads come with the MIB cache described in
+  `commands/retrieve/README.md`.
+- **Ready when:** RoMON and WinBox terminal have reference tooling; SNMP is
+  ready now.
+- **Absorbed:** none.
+
+## Nits
+
+A nit is a small item written in one or two sentences. It is a candidate for
+the next PR in its area, not required scope. Delete the line when the nit is
+done or declined. A nit that needs more explanation is an issue.
+
+- `execute`: a lone `print` sent through `execute` could get a tip that
+  `retrieve` is the read-only verb a harness can allowlist.
+- `.github/instructions/`: trim Copilot-era verbosity when the TIKOCI-wide
+  files are collected in `tikoci.github.io`.

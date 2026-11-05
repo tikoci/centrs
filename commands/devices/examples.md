@@ -831,3 +831,114 @@ CDB path/password and output flags, plus `--encrypt` for `init` or
 `--user`, `--password-stdin`, `--show-password`, `--group` and `--match`.
 Test: `devices file-command help is scoped without opening a CDB` in
 `test/integration/cli-smoke.test.ts` (network-free).
+
+## Concurrent writers (#581)
+
+### 69. Concurrent `add` from independent processes all land
+
+```bash
+centrs devices add 198.51.100.1 --user racer --cdb-file $CDB --json &
+centrs devices add 198.51.100.2 --user racer --cdb-file $CDB --json &
+centrs devices add 198.51.100.3 --user racer --cdb-file $CDB --json &
+wait
+```
+
+All three exit 0 with empty stderr, and `devices list` shows the fixture
+records plus all three targets. No `$CDB.lock` remains. Run against both the
+open and the encrypted fixture (`--cdb-password centrs-test`); the encrypted
+CDB stays encrypted.
+
+### 70. A lock held by another host is `cdb/locked`
+
+`$CDB.lock` holds `{ "pid": 4242, "hostname": "another-host.example", … }`:
+
+```bash
+centrs devices add 198.51.100.9 --cdb-file $CDB --json
+```
+
+Exits 1 after the 10 s lock wait with `error.code="cdb/locked"`;
+`error.context` names `cdbFile`, `lockFile` and `holder` (pid, hostname,
+createdAt), and the remediation names the lock file to delete. The CDB is
+unchanged, no backup is written, and the foreign lock is left in place.
+
+### 71. A lock left by a dead process on this host is recovered
+
+`$CDB.lock` holds this host's name and the pid of a process that has exited:
+
+```bash
+centrs devices add 198.51.100.10 --cdb-file $CDB --json
+```
+
+Exits 0; the target is added and the lock file is removed.
+
+### 72. A stale library snapshot is refused (offline)
+
+```ts
+const a = await loadCdb({ cdbFile });
+const b = await loadCdb({ cdbFile });
+await addDevice({ cdb: a, target: "a.example", user: "test" });
+await addDevice({ cdb: b, target: "b.example", user: "test" }); // throws
+```
+
+The second call rejects with `cdb/conflict` (`context.expectedRevision` is
+`b.revision`) and writes nothing; the CDB holds `a.example` only. Wrapping the
+call in `retryOnCdbConflict(b, reload, …)` instead lands both. Same for open and
+encrypted CDBs, and for `setDevice`/`removeDevice`/`encryptCdb`. Mapped to
+`test/unit/cdb-concurrency.test.ts` → `stale-snapshot reproduction (#581)`; MCP
+parity in `test/unit/mcp-tools.test.ts` →
+`concurrent adds all land, matching the CLI conflict contract (#581)`.
+
+### 73. A crashed recovery process does not block concurrent writers
+
+A process holds the SQLite recovery mutex on `$CDB.lock.guard` and leaves its
+holder record in `$CDB.lock`, then is killed. Three independent CLI processes
+add different targets to that CDB concurrently (as in example 69).
+
+All three exit 0, and the CDB retains the fixture records and all additions.
+`$CDB.lock` is removed; the empty `$CDB.lock.guard` remains for future recovery.
+Mapped to `test/integration/devices.test.ts` → `example 73`.
+
+## Per-service port keys (#618)
+
+### SP1. Save service ports, then remove one to use legacy `port=`
+
+The fixture record for `127.0.0.1` has `port=1` and valid host forwards in
+`www-port=$WWW_PORT`, `api-port=$API_PORT`, and `ssh-port=$SSH_PORT`.
+`test/integration/cdb-service-ports.test.ts` →
+`removing a key falls back to legacy port=` covers:
+
+```bash
+centrs devices set 127.0.0.1 api-port= --cdb-file $CDB --json
+centrs retrieve 127.0.0.1 /system/identity --via native-api --timeout 5s --cdb-file $CDB --json
+centrs retrieve 127.0.0.1 /system/identity --via rest-api --cdb-file $CDB --json
+```
+
+The deletion succeeds. Native retrieve fails connecting through legacy `port=1`,
+with `meta.settings.port.key="record:0:port"`. REST still succeeds using
+`record:0:www-port`.
+
+### SP2. Set and delete service ports with `--strict` (offline)
+
+An existing record for `192.0.2.5` has legacy `port=9000`:
+
+```bash
+centrs devices set 192.0.2.5 www-port=7080 --strict --cdb-file $CDB --json
+centrs devices set 192.0.2.5 www-port= --strict --cdb-file $CDB --json
+```
+
+Both succeed. Resolution uses 7080 after the first update and 9000 after the
+second. Mapped to `test/unit/cdb-service-ports.test.ts` →
+`set --strict, resolve, delete, resolve`.
+
+### SP3. Secure service keys select TLS (offline)
+
+```bash
+centrs devices set 192.0.2.5 www-ssl-port=7443 api-ssl-port=18729 --strict --cdb-file $CDB --json
+```
+
+With no explicit scheme, REST resolves HTTPS on 7443 and native API resolves TLS
+on 18729. An explicit `http://` selects only a plain key (`www-port` or
+`api-port`); if absent, legacy `port=` or the old defaults apply. Mapped to
+`test/unit/cdb-service-ports.test.ts` → `only the secure key stored → TLS on that port`
+and `explicit http:// picks the plain key and is never upgraded`.
+TLS service connections are not covered by the certificate-free CHR fixture.

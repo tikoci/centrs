@@ -94,6 +94,9 @@ export {
 	type QuickchrConnection,
 	type QuickchrResolution,
 	quickchrConnection,
+	quickchrKeyInstallCommand,
+	quickchrKeyInstallVia,
+	quickchrSshAuthUnavailable,
 	resolveQuickchrTarget,
 	SUPPORTED_DESCRIPTOR_VERSION,
 } from "./quickchr-provider.ts";

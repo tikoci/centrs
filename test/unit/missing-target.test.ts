@@ -2,12 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { executeCommand } from "../../src/cli/execute.ts";
 import {
 	buildTargetSelectionTips,
-	cdbFileFromArgs,
 	formatTipsText,
 	isMissingTargetError,
 	missingTargetError,
+	cdbFileFromArgs as readCdbFile,
 } from "../../src/cli/missing-target.ts";
 import {
 	buildWinBoxCdbEntryRecord,
@@ -24,6 +25,9 @@ async function cdbFile(
 	await writeFile(path, encodeOpenWinBoxCdb(records));
 	return { path, cleanup: () => rm(dir, { recursive: true, force: true }) };
 }
+
+const cdbFileFromArgs = (args: readonly string[]) =>
+	readCdbFile(args, executeCommand.options);
 
 describe("isMissingTargetError", () => {
 	test("true only for a missing-target-tagged error", () => {
@@ -46,6 +50,16 @@ describe("isMissingTargetError", () => {
 });
 
 describe("cdbFileFromArgs", () => {
+	test("inline paths count, but values and post-separator tokens do not (#625)", () => {
+		expect(cdbFileFromArgs(["--cdb-file=registry.cdb"])).toBe("registry.cdb");
+		expect(
+			cdbFileFromArgs(["--password", "--cdb-file=secret"]),
+		).toBeUndefined();
+		expect(cdbFileFromArgs(["--", "--cdb-file=literal"])).toBeUndefined();
+		expect(
+			cdbFileFromArgs(["--password", "--", "--cdb-file=registry.cdb"]),
+		).toBe("registry.cdb");
+	});
 	test("pulls --cdb-file out of raw args, never the password", () => {
 		expect(
 			cdbFileFromArgs(["x", "--cdb-file", "/a.cdb", "--cdb-password", "pw"]),

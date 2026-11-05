@@ -6,7 +6,7 @@ applyTo: "src/**,test/**,commands/**,docs/MATRIX.md,docs/CONSTITUTION.md,AGENTS.
 
 Read `docs/CONSTITUTION.md` before changing anything that touches RouterOS,
 errors, settings, or the result envelope. Read `docs/MATRIX.md` to find the
-capability and selected work track. Read `commands/<name>/README.md` and
+capability and the current track. Read `commands/<name>/README.md` and
 `commands/<name>/examples.md` for the executable spec.
 
 ## Evidence follows the capability

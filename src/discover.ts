@@ -34,8 +34,10 @@ import {
 	addDevice,
 	type DevicesWarning,
 	type LoadCdbOptions,
+	type LoadedCdb,
 	loadCdb,
 	resolveDevicesSettings,
+	retryOnCdbConflict,
 } from "./devices.ts";
 import {
 	asCentrsError,
@@ -540,36 +542,48 @@ export async function saveDiscoveredNeighbors(
 		// target string that already names an entry — both guard a hand-curated
 		// record from being clobbered, and the latter keeps `addDevice` from
 		// failing `cdb/already-exists` on a colliding connectable address.
-		const exists =
-			neighborMacKnown(cdb.entries, neighbor.macAddress) ||
-			cdb.entries.some((entry) => entry.target === target);
-		const detail: DiscoverSaveRecord = {
-			target,
-			action: exists ? "skipped-existing" : "added",
-		};
+		const known = (snapshot: LoadedCdb): boolean =>
+			neighborMacKnown(snapshot.entries, neighbor.macAddress) ||
+			snapshot.entries.some((entry) => entry.target === target);
+		const detail: DiscoverSaveRecord = { target, action: "added" };
 		if (neighbor.macAddress !== undefined) {
 			detail.mac = neighbor.macAddress;
 		}
 		if (neighbor.identity !== undefined) {
 			detail.identity = neighbor.identity;
 		}
-		if (exists) {
-			skipped += 1;
-			records.push(detail);
-			continue;
-		}
 
 		const recordType = neighbor.ipv4
 			? winBoxCdbRecordType.ipAdmin
 			: winBoxCdbRecordType.macTarget;
-		const envelope = await addDevice({
+		// Another writer may land between our load and this add (#581): on
+		// `cdb/conflict` reload and re-run the de-dupe against the fresh
+		// snapshot, so a record the other writer just added is skipped, not
+		// duplicated or lost.
+		const envelope = await retryOnCdbConflict(
 			cdb,
-			target,
-			recordType,
-			group,
-			comment: formatMndpProvenanceComment(neighbor, at),
-			writeOptions: args.writeOptions,
-		});
+			() => loadCdb(args.loadOptions),
+			async (snapshot) => {
+				cdb = snapshot;
+				if (known(snapshot)) {
+					return undefined;
+				}
+				return addDevice({
+					cdb: snapshot,
+					target,
+					recordType,
+					group,
+					comment: formatMndpProvenanceComment(neighbor, at),
+					writeOptions: args.writeOptions,
+				});
+			},
+		);
+		if (envelope === undefined) {
+			detail.action = "skipped-existing";
+			skipped += 1;
+			records.push(detail);
+			continue;
+		}
 		added += 1;
 		detail.cdbRecordIndex = envelope.data.cdbRecordIndex;
 		records.push(detail);

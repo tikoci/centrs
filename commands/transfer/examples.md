@@ -564,11 +564,16 @@ centrs transfer --quickchr $NAME list --via sftp --json
 When the descriptor's SSH endpoint advertises a **usable** batch-capable auth
 mode (`agent-or-config`, or `private-key` together with a verified
 `privateKeyPath` — a bare `private-key` mode with no path does not count), the
-list succeeds over sftp: `meta.via=sftp`, `meta.target.source.kind=provider`,
+list succeeds over sftp: `meta.via=ssh` (the protocol id, as in every sftp
+transfer), `meta.target.source.kind=provider`,
 `meta.settings.insecure` provider-sourced, and the key path (when one is
-handed over) carried as a provider-sourced `sshKey`. Otherwise the envelope is
-`ok: false` with `error.code=quickchr/unsupported-via` and exit code 1 — a
-typed gate, **never** a password prompt and never a silent fallback to REST.
+handed over) carried as a provider-sourced `sshKey`. When the machine forwards
+SSH but its auth is not usable, the envelope is `ok: false` with
+`error.code=quickchr/ssh-auth-unavailable` and exit code 1 — a typed gate,
+**never** a password prompt and never a silent fallback to REST. When the
+descriptor has no SSH service, or marks it unavailable, the code is
+`quickchr/unsupported-via` instead: the machine has no SSH to provision a key
+for.
 
 ## CDB record `via=` (#591)
 
@@ -615,3 +620,23 @@ A `via=rest-api` record uploading more than 60 KB with no `--via`:
 `ok: false`, `error.code=transport/unsupported-operation`, nothing sent. The
 remediation names `record:N:via` and suggests `--via sftp`, matching a
 pinned `--via rest`.
+
+## Per-service CDB ports (#618)
+
+### SP1. REST, native and SFTP uploads use their own service ports
+
+`$CDB` holds a `127.0.0.1` record with `www-port=$WWW_PORT`,
+`api-port=$API_PORT`, `ssh-port=$SSH_PORT`, and legacy `port=1`.
+The ports are CHR host forwards; `$KEY.pub` is imported for the saved user,
+and `$SRC` is a small local text file.
+
+```bash
+centrs transfer 127.0.0.1 --via rest --cdb-file $CDB upload $SRC centrs-618-rest.txt --json
+centrs transfer 127.0.0.1 --via native --cdb-file $CDB upload $SRC centrs-618-native.txt --json
+centrs transfer 127.0.0.1 --via sftp --ssh-key $KEY --insecure --cdb-file $CDB upload $SRC centrs-618-sftp.txt --json
+```
+
+All succeed; `meta.target.port` is the matching host port and
+`meta.settings.port.key` is `record:0:www-port`, `record:0:api-port`, or
+`record:0:ssh-port`. Mapped to `test/integration/cdb-service-ports.test.ts` →
+`transfer over REST, native and SFTP reads the matching key`.

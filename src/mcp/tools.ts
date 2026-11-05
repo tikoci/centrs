@@ -22,6 +22,7 @@ import {
 	listGroups,
 	recordTypeFromName,
 	removeDevice,
+	retryOnCdbConflict,
 	setDevice,
 	showDevice,
 } from "../devices.ts";
@@ -616,20 +617,25 @@ export async function handleDevices(
 			case "add": {
 				requireConfirm("centrs_devices op=add", args.confirm);
 				const target = requireDevicesTarget(args, "add");
-				return await addDevice({
+				return await retryOnCdbConflict(
 					cdb,
-					target,
-					recordType: resolveRecordType(args.recordType),
-					user: args.user,
-					password: args.password,
-					group: args.group,
-					profile: args.profile,
-					session: args.session,
-					comment: args.comment,
-					commentKvUpdates: buildGeoUpdates(args),
-					savedPassword: args.savedPassword,
-					force: args.force,
-				});
+					() => loadAllowlistCdb(config),
+					(snapshot) =>
+						addDevice({
+							cdb: snapshot,
+							target,
+							recordType: resolveRecordType(args.recordType),
+							user: args.user,
+							password: args.password,
+							group: args.group,
+							profile: args.profile,
+							session: args.session,
+							comment: args.comment,
+							commentKvUpdates: buildGeoUpdates(args),
+							savedPassword: args.savedPassword,
+							force: args.force,
+						}),
+				);
 			}
 			case "edit":
 				// The interactive editor has no MCP analogue; modify via op=set.
@@ -637,23 +643,32 @@ export async function handleDevices(
 			case "set": {
 				requireConfirm("centrs_devices op=set", args.confirm);
 				const target = requireDevicesTarget(args, "set");
-				return await setDevice({
+				return await retryOnCdbConflict(
 					cdb,
-					target,
-					updates: [...buildGeoUpdates(args), ...(args.updates ?? [])],
-					user: args.user,
-					password: args.password,
-					group: args.group,
-					profile: args.profile,
-					session: args.session,
-					savedPassword: args.savedPassword,
-					strict: args.strict,
-				});
+					() => loadAllowlistCdb(config),
+					(snapshot) =>
+						setDevice({
+							cdb: snapshot,
+							target,
+							updates: [...buildGeoUpdates(args), ...(args.updates ?? [])],
+							user: args.user,
+							password: args.password,
+							group: args.group,
+							profile: args.profile,
+							session: args.session,
+							savedPassword: args.savedPassword,
+							strict: args.strict,
+						}),
+				);
 			}
 			case "remove": {
 				requireConfirm("centrs_devices op=remove", args.confirm);
 				const target = requireDevicesTarget(args, "remove");
-				return await removeDevice({ cdb, target });
+				return await retryOnCdbConflict(
+					cdb,
+					() => loadAllowlistCdb(config),
+					(snapshot) => removeDevice({ cdb: snapshot, target }),
+				);
 			}
 			default:
 				throw new CentrsError({

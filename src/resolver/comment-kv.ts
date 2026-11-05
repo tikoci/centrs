@@ -35,6 +35,11 @@ export const commentKvAllowlist = [
 	"validate",
 	"timeout",
 	"port",
+	"www-port",
+	"www-ssl-port",
+	"api-port",
+	"api-ssl-port",
+	"ssh-port",
 	"source",
 	"mcp",
 	"ssh-key",
@@ -42,6 +47,22 @@ export const commentKvAllowlist = [
 ] as const;
 
 export type CommentKvKey = (typeof commentKvAllowlist)[number];
+
+/**
+ * Per-service port keys, named after RouterOS `/ip/service` entries. Each one
+ * applies only to the transport that connects to that service (REST → `www`/
+ * `www-ssl`, native API → `api`/`api-ssl`, SSH → `ssh`) and beats the legacy
+ * all-transport `port=` within the CDB tier. MAC-Telnet reads none of them.
+ */
+export const servicePortKeys = [
+	"www-port",
+	"www-ssl-port",
+	"api-port",
+	"api-ssl-port",
+	"ssh-port",
+] as const;
+
+export type ServicePortKey = (typeof servicePortKeys)[number];
 
 /**
  * Comment keys that resolve `<router>` to a record, distinct from the setting

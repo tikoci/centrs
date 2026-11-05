@@ -7,12 +7,22 @@ exception here — not in scattered prose.
 
 This file is short on purpose. Resist the urge to grow it.
 
+It states the rules for what centrs does today and the invariants new work must
+respect. Direction that is agreed but not built lives in `docs/MATRIX.md` →
+Parked themes, not here. When a theme is selected and contradicts a rule below,
+amend the rule first: before the theme's code, or in the same change.
+
 ## What centrs is
 
-A typed library for RouterOS analysis and **validated** device access, with
-CLI/MCP/TUI/proxy frontends and structured, actionable diagnostics. The
-TypeScript API is the root surface; everything else is an adapter over it.
-The initial consumers are other TIKOCI tools and developers building integrations.
+The RouterOS hub for agents and the tools they drive: a typed library for
+RouterOS analysis and **validated** device access, with CLI, MCP and future
+web/proxy frontends and structured, actionable diagnostics. The TypeScript API
+is the root surface; everything else is an adapter over it. The CLI is the
+primary and most-audited surface: it needs no configuration, and its `--help`
+and envelopes show what centrs offers. The other surfaces keep the same shapes
+and differ only where a surface must. The initial consumers are other TIKOCI
+tools (routeros-muse first), agents working in a project directory, and
+developers building integrations or UIs over centrs.
 
 The product is *not* "REST/SSH/native API wrappers." The product is
 **validation + structured envelopes + identity resolution** on top of those
@@ -284,8 +294,10 @@ principles are load-bearing:
   address saved under a different user is a second record, not an update.
   `group` is a flat attribute, never part of the key.
 - **The CDB is both the device datastore and the credential store.** The WinBox
-  CDB file at its well-known location *is* the inventory; there is no separate
-  cache. centrs-specific meaning is overlaid through an allowlist of comment-kv keys —
+  CDB file at its well-known location *is* the inventory, and the only durable
+  one. Anything else centrs keeps (today the in-memory MNDP cache) is derived,
+  deletable and secret-free, and no code path may require it to exist.
+  centrs-specific meaning is overlaid through an allowlist of comment-kv keys —
   the lookup keys `identity=`/`mac=`/`ip=` (the one sanctioned exception to "the
   comment is free text") plus override keys like `via`/`port`/`ssh-key`; every
   other comment token stays inert. **Anything expressible in the CDB must also
@@ -295,7 +307,10 @@ principles are load-bearing:
 The lookup-key grammar, the CDB resolution and ambiguity rules (`--match`,
 `identity/ambiguous`, `--prefer-family`), the comment-kv allowlist, encrypted-CDB
 handling, and the atomic write strategy live in `commands/devices/README.md` —
-`devices` is the registry command and the CDB's only writer.
+`devices` is the registry command and the CDB's only writer. Every CDB mutation
+is checked against the revision it was loaded from, under a cross-process lock:
+a stale snapshot is refused with `cdb/conflict`, never two successes with one
+change lost (#581).
 
 #### Default-device record (`__default__`)
 
@@ -375,9 +390,10 @@ the resolver is generalized **once**, not per source (the umbrella plan is #174)
 
 Sources fall into two kinds, and the distinction is normative:
 
-- **Selector-source** — participates in the Axis-A grammar. **CDB** (now), and
-  **TikTOML** next (#137). Multiple selector-sources union into one selection;
-  the split-brain precedence between them is #137's problem, not resolved here.
+- **Selector-source** — participates in the Axis-A grammar. **CDB** is the only
+  one today; TikTOML (#137) was closed, and other inventory sources are parked
+  under MATRIX → Devices and onboarding. Multiple selector-sources would union
+  into one selection; their precedence is decided when a second source lands.
 - **Named-live-provider** — addressed *only* by an explicit named flag, **never**
   matched by a selector; fanned out by repeating the flag. Because it owns an
   **ephemeral** endpoint it also **bypasses** the settings/`__default__` ladder and
@@ -394,9 +410,9 @@ availability, host, port, TLS, auth, and provenance). A **selector-source** is t
 *degenerate single-endpoint* case — one record materialized lazily once `--via` is
 known. A **named-live-provider** populates the map directly, since it genuinely
 exposes different facts per transport. Providers must **not** be flattened to a
-single host/port: that shape is the contract quickchr's descriptor and TikTOML's
-`services` block both map onto, and flattening it forces exactly the re-plumb #174
-exists to prevent. A `--via` whose service key a provider does not supply is a
+single host/port: that shape is the contract quickchr's descriptor maps onto, and
+any later inventory source must too; flattening it forces exactly the
+re-plumb #174 exists to prevent. A `--via` whose service key a provider does not supply is a
 typed unsupported-provider error, never a silent fallback.
 
 #### Controller-mediated selection (CMR)
@@ -535,12 +551,18 @@ offline tests do not establish new device facts. Changes to shared execution
 or transport behavior still require `bun run test:integration`. The offline
 call itself never needs a router merely to satisfy a workflow label.
 
-`docs/MATRIX.md` owns capability status and the selected work track. A
-capability's acceptance criteria — like `explain`'s Offline baseline
+`CHR-passed` means every example in a capability's `examples.md` is green via
+`bun run test:integration` against CHR. The one exception is a command that
+does no network IO (`devices`, `settings`): its examples are fixture-backed
+integration tests that need no CHR, under the evidence contract in its command
+README. Either way, `CHR-passed` does not mean the capability is finished;
+follow-on work is a parked theme, a nit or an issue.
+
+`docs/MATRIX.md` owns capability status, the current track, parked themes and
+nits. A capability's acceptance criteria — like `explain`'s Offline baseline
 acceptance — live in its `commands/<name>/README.md`; GitHub issues own the
-tasks and dependencies that satisfy those criteria, not the criteria
-themselves. Umbrella issues index that work rather than replacing capability
-status. Status advances only with matching evidence in the same change.
+actionable tasks that satisfy those criteria, not the criteria themselves.
+Status advances only with matching evidence in the same change.
 Record test names, fixture provenance, and CHR versions where applicable.
 Offline verification never advances a live protocol cell to `CHR-passed`.
 
@@ -554,8 +576,8 @@ centrs does:
 - Choose protocols per the table above and configure them.
 - Validate before execute; re-validate server-side immediately before run.
 - Return structured envelopes with provenance and warnings.
-- Use the WinBox CDB at its well-known location as the device datastore and
-  cache; overlay centrs metadata via comment-kv and groups.
+- Use the WinBox CDB at its well-known location as the durable device
+  datastore; overlay centrs metadata via comment-kv and groups.
 - Speak MikroTik peer-measurement protocols on explicit request — the bandwidth
   test (`btest`), as both client and server — with the same envelope / identity /
   error contract (but not the RouterOS-command validation gate).

@@ -13,19 +13,15 @@ Any of:
   `btest`, and `winbox-terminal` are never available on a quickchr target.
 - The service exists but quickchr marked it `available: false` (the error
   carries the provider's `unavailableReason`).
-- `--via ssh` (or `transfer --via sftp`/`scp`): the SSH endpoint reports no
-  batch-capable auth mode (`batchModes` is empty), so a non-interactive
-  handoff is impossible. centrs fails typed here rather than prompt for a
-  password or silently pick another transport.
+
+An SSH endpoint that is forwarded but has no verified key is a separate code,
+[`quickchr/ssh-auth-unavailable`](ssh-auth-unavailable.md).
 
 ## Fix
 
 - Pick one of the machine's live services; the error's `availableServices`
   context lists them (typically `--via rest-api` / `--via native-api` /
   `--via ssh`).
-- For the SSH/sftp gate, verify key-based login works from quickchr's side
-  (`quickchr ssh <name>`); once quickchr has a verified key, the descriptor
-  advertises `private-key` in `batchModes` and centrs will use it.
 - If the machine should be forwarding the service but is not, inspect it with
   `quickchr inspect <name>`.
 - To use a transport quickchr does not forward, target the device directly

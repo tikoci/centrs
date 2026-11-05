@@ -903,6 +903,19 @@ describeFast("execute against CHR", () => {
 				{
 					command: "execute",
 					via: "rest-api",
+					args: [
+						"execute",
+						`--host=${chr.restUrl}`,
+						`--username=${auth.username}`,
+						`--password=${auth.password}`,
+						"--format=json",
+						"--",
+						identityCommand,
+					],
+				},
+				{
+					command: "execute",
+					via: "rest-api",
 					args: ["execute", "--host", chr.restUrl, identityCommand, ...cliAuth],
 				},
 				{

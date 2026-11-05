@@ -52,6 +52,19 @@ export interface SshConnectionConfig {
  * identical across every SSH transport.
  */
 export function sshCommonOptions(config: SshConnectionConfig): string[] {
+	// Check the raw fields before any destination formatting (including SFTP's
+	// IPv6 brackets), regardless of which resolver supplied them.
+	for (const field of ["host", "username"] as const) {
+		if (config[field]?.startsWith("-")) {
+			throw new CentrsError({
+				code: "input/invalid-target",
+				summary: `The SSH ${field} must not start with a hyphen.`,
+				remediation:
+					"Provide a host and username that do not start with `-`; correct the selected CLI, environment, CDB or provider value.",
+				context: { field },
+			});
+		}
+	}
 	const connectSeconds = Math.max(1, Math.ceil(config.timeoutMs / 1000));
 	const options: string[] = [];
 	if (config.sshKey) {
@@ -258,6 +271,7 @@ export class SshExecClient {
 			"-p",
 			String(this.config.port),
 			...sshCommonOptions(this.config),
+			"--",
 			sshUserHost(this.config),
 			command,
 		];

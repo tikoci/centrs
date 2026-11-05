@@ -149,6 +149,61 @@ There's no `<router>` and no `--via`. The host-only target selects ssh, as a
 host `<router>` does, with no CDB lookup. stdout contains the device identity,
 checked as in TS1.
 
+## quickchr targets (TQ1–TQ3, #610)
+
+`$NAME` is the machine name of a running quickchr-managed CHR. TQ1–TQ2 are
+covered by `test/integration/quickchr-target.test.ts`, which shares that suite's
+CHR boot (booted with quickchr secure login, so it has a managed key).
+The no-CHR error paths (repeat, positional, override conflicts, unknown machine)
+are unit tests in `test/unit/terminal.test.ts`.
+
+### TQ1. Open an ssh console on a quickchr machine (batch relay)
+
+```bash
+printf '%s\n' '/system/identity/print' ':put ("ssh-user=" . [/user/active/get [find where via="ssh"] name])' '/quit' | centrs terminal --quickchr $NAME
+```
+
+No `--via`, host, port, user, or key: the descriptor's SSH endpoint supplies
+them, and the session logs in with quickchr's batch-verified managed key (the
+harness boots the CHR with quickchr `secureLogin`, which provisions one), with
+ssh limited to public-key auth.
+stdout contains the device identity (checked as in TS1) and
+`ssh-user=<descriptor user>`, RouterOS's own record of who holds the login. After
+`/quit` and stdin EOF the process exits, and the router's `/user/active` lists
+no ssh session.
+
+### TQ2. `--via mac-telnet` on a quickchr target → `quickchr/unsupported-via`
+
+```bash
+centrs terminal --quickchr $NAME --via mac-telnet --json
+```
+
+Envelope on stderr: `ok: false`, `error.code="quickchr/unsupported-via"`, exit
+`1`, no bytes on stdout. quickchr v1 forwards no mac-telnet service, and centrs
+never swaps a pinned `--via` for ssh.
+
+### TQ3. A machine with no verified key → `quickchr/ssh-auth-unavailable`, then bring your own key
+
+```bash
+centrs terminal --quickchr $NAME --json
+centrs execute --quickchr $NAME --via <keyInstallVia> '/user/ssh-keys/add user=<user> key="<public key>"' --yes --json
+printf '/system/identity/print\n/quit\n' | centrs terminal --host <host> --port <port> --username <user> --ssh-key $OWN_KEY --insecure
+```
+
+`$NAME` here is a machine booted **without** quickchr secure login (the
+`test/integration/terminal-ssh.test.ts` harness), so its descriptor vouches for
+no SSH key. The first call's envelope on stderr is `ok: false`,
+`error.code="quickchr/ssh-auth-unavailable"`, exit `1`, no bytes on stdout; the
+remediation names `--secure-login`, and `error.context` carries
+`host`/`port`/`username` and `keyInstallVia`: the forwarded non-SSH service
+(`native-api` first, else `rest-api`) the install command is pinned to, since
+execute's own default may not be forwarded. A machine that forwards neither
+gets no install command and no `keyInstallVia`. Following the remediation, the
+key install over that service succeeds, and the direct console, filled in from that
+context with `$OWN_KEY` (minted by the test), prints the device identity with
+no agent and no password prompt available. Covered by
+`test/integration/terminal-ssh.test.ts`.
+
 ## MAC target over `--via ssh` resolution (behavior note — not a numbered CHR example)
 
 This path resolves a MAC to an IP and, on the unresolved / no-opt-in branch,

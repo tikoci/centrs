@@ -13,6 +13,12 @@ RouterOS write and in-band CDB registration through `centrs_devices add`.
 `src/mcp.ts` is the runtime barrel (`@tikoci/centrs/mcp`); `docs/MATRIX.md` is
 the authoritative status.
 
+Known limitation [#604](https://github.com/tikoci/centrs/issues/604): the
+allowlist check and connection resolver read separate CDB snapshots. Avoid
+concurrent CDB edits during device calls; a changed or removed record can
+invalidate authorization before dialing. See the
+[security policy](../../SECURITY.md#device-access-and-cdb-integrity).
+
 Run it:
 
 ```bash

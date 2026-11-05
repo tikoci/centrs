@@ -18,7 +18,9 @@ import { asCentrsError, formatCentrsErrorText } from "../errors.ts";
 import { describeCentrs, parseDuration } from "../index.ts";
 import {
 	type CliCommandMetadata,
+	expandEqualsArgs,
 	expectValue,
+	helpRequested,
 	renderCommandHelp,
 	unknownFlagError,
 } from "./common.ts";
@@ -84,7 +86,11 @@ interface DiscoverCliArgs {
 	format?: DiscoverOutputFormat;
 }
 
-function parseDiscoverCliArgs(args: readonly string[]): DiscoverCliArgs {
+export function parseDiscoverCliArgs(args: readonly string[]): DiscoverCliArgs {
+	if (helpRequested(args)) {
+		return { help: true };
+	}
+	args = expandEqualsArgs(args, discoverCommand.options);
 	const parsed: DiscoverCliArgs = {};
 	for (let index = 0; index < args.length; index += 1) {
 		const arg = args[index];
@@ -97,16 +103,18 @@ function parseDiscoverCliArgs(args: readonly string[]): DiscoverCliArgs {
 				parsed.help = true;
 				break;
 			case "--timeout":
-				parsed.timeoutMs = parseDuration(expectValue(args, ++index, arg));
+				parsed.timeoutMs = parseDuration(
+					expectValue(args, ++index, arg, discoverCommand.options),
+				);
 				break;
 			case "--save":
 				parsed.save = true;
 				break;
 			case "--group":
-				parsed.group = expectValue(args, ++index, arg);
+				parsed.group = expectValue(args, ++index, arg, discoverCommand.options);
 				break;
 			case "--port": {
-				const value = expectValue(args, ++index, arg);
+				const value = expectValue(args, ++index, arg, discoverCommand.options);
 				const port = Number.parseInt(value, 10);
 				if (!Number.isInteger(port) || port < 0 || port > 65535) {
 					throw new Error(`--port must be an integer 0-65535; got ${value}.`);
@@ -115,13 +123,23 @@ function parseDiscoverCliArgs(args: readonly string[]): DiscoverCliArgs {
 				break;
 			}
 			case "--cdb-file":
-				parsed.cdbFile = expectValue(args, ++index, arg);
+				parsed.cdbFile = expectValue(
+					args,
+					++index,
+					arg,
+					discoverCommand.options,
+				);
 				break;
 			case "--cdb-password":
-				parsed.cdbPassword = expectValue(args, ++index, arg);
+				parsed.cdbPassword = expectValue(
+					args,
+					++index,
+					arg,
+					discoverCommand.options,
+				);
 				break;
 			case "--format": {
-				const value = expectValue(args, ++index, arg);
+				const value = expectValue(args, ++index, arg, discoverCommand.options);
 				if (!discoverOutputFormats.includes(value as DiscoverOutputFormat)) {
 					throw new Error(
 						`--format must be one of ${discoverOutputFormats.join(", ")}; got ${value}.`,

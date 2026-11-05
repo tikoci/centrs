@@ -27,7 +27,10 @@ import {
 } from "../settings.ts";
 import {
 	type CliCommandMetadata,
+	expandEqualsArgs,
 	expectValue,
+	helpRequested,
+	inferCliFormat,
 	renderCommandHelp,
 	unknownFlagError,
 } from "./common.ts";
@@ -83,7 +86,11 @@ interface SettingsCliArgs {
 	format?: SettingsOutputFormat;
 }
 
-function parseSettingsCliArgs(args: readonly string[]): SettingsCliArgs {
+export function parseSettingsCliArgs(args: readonly string[]): SettingsCliArgs {
+	if (helpRequested(args)) {
+		return { help: true, subcommand: "print" };
+	}
+	args = expandEqualsArgs(args, settingsCommand.options);
 	const positional: string[] = [];
 	let help = false;
 	let all = false;
@@ -106,16 +113,16 @@ function parseSettingsCliArgs(args: readonly string[]): SettingsCliArgs {
 				all = true;
 				break;
 			case "--cdb-file":
-				cdbFile = expectValue(args, ++index, arg);
+				cdbFile = expectValue(args, ++index, arg, settingsCommand.options);
 				break;
 			case "--cdb-password":
-				cdbPassword = expectValue(args, ++index, arg);
+				cdbPassword = expectValue(args, ++index, arg, settingsCommand.options);
 				break;
 			case "--skip-env-file":
 				skipEnvFile = true;
 				break;
 			case "--format": {
-				const value = expectValue(args, ++index, arg);
+				const value = expectValue(args, ++index, arg, settingsCommand.options);
 				if (!settingsOutputFormats.includes(value as SettingsOutputFormat)) {
 					throw new Error(
 						`--format must be one of ${settingsOutputFormats.join(", ")}; got ${value}.`,
@@ -293,13 +300,10 @@ export async function runSettingsCli(args: readonly string[]): Promise<number> {
 }
 
 function inferSettingsFormat(args: readonly string[]): SettingsOutputFormat {
-	if (args.includes("--json")) {
-		return "json";
-	}
-	const formatIndex = args.indexOf("--format");
-	const value = formatIndex >= 0 ? args[formatIndex + 1] : undefined;
-	if (value && settingsOutputFormats.includes(value as SettingsOutputFormat)) {
-		return value as SettingsOutputFormat;
-	}
-	return "text";
+	return inferCliFormat(
+		args,
+		settingsCommand.options,
+		settingsOutputFormats,
+		"text",
+	);
 }

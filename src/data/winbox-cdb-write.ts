@@ -17,8 +17,16 @@
  * unless the caller pins one for tests) before they hit disk; the backup
  * snapshot copies the existing on-disk bytes verbatim, so an encrypted CDB
  * stays encrypted across backup + write.
+ *
+ * Concurrency (#581): pass `expectedRevision` (the revision the records were
+ * loaded from) and the whole backup → write → rename sequence runs under the
+ * cross-process lock in `winbox-cdb-lock.ts`, after re-reading the file and
+ * refusing a stale snapshot with `cdb/conflict`. Without `expectedRevision` the
+ * write is unsynchronized: a low-level primitive for callers that own the file
+ * exclusively. Every centrs mutation passes it.
  */
 
+import { constants as fsConstants } from "node:fs";
 import {
 	chmod,
 	copyFile,
@@ -35,9 +43,19 @@ import {
 	encryptWinBoxCdb,
 	type WinBoxCdbRecord,
 } from "./winbox-cdb.ts";
+import {
+	assertWinBoxCdbRevision,
+	type WinBoxCdbLockOptions,
+	type WinBoxCdbRevision,
+	withWinBoxCdbLock,
+} from "./winbox-cdb-lock.ts";
 
-/** Default number of timestamped backups retained next to the CDB. */
-export const WINBOX_CDB_DEFAULT_BACKUP_RETENTION = 5;
+/**
+ * Default number of timestamped backups retained next to the CDB. Two since
+ * #581: the write lock, not backups, now guards against concurrent writers;
+ * the remaining backups are an undo for a mistaken mutation.
+ */
+export const WINBOX_CDB_DEFAULT_BACKUP_RETENTION = 2;
 
 const BACKUP_INFIX = ".bak.";
 const TEMP_INFIX = ".tmp.";
@@ -57,6 +75,16 @@ export interface WriteWinBoxCdbOptions {
 	 * password (centrs reads it from the loaded CDB's settings).
 	 */
 	encryptWith?: { password: string; salt?: Uint8Array };
+	/**
+	 * Revision the records were loaded from. When set, the write takes the CDB
+	 * lock, re-reads the file, and fails `cdb/conflict` if it changed — so a
+	 * stale snapshot can never silently drop another writer's change.
+	 */
+	expectedRevision?: WinBoxCdbRevision;
+	/** Lock wait/identity options; only used with `expectedRevision`. */
+	lock?: WinBoxCdbLockOptions;
+	/** Platform override for the Windows rename retry (tests). */
+	platform?: NodeJS.Platform;
 }
 
 export interface WriteWinBoxCdbResult {
@@ -82,8 +110,7 @@ function backupPrefix(target: string): string {
 }
 
 /**
- * List existing backups for `target`, newest first (names embed a sortable
- * sortable ISO 8601 timestamp variant, so lexicographic order is chronological).
+ * List backups newest first: timestamp order, then numeric collision suffix.
  */
 export async function listWinBoxCdbBackups(
 	target: string,
@@ -98,10 +125,23 @@ export async function listWinBoxCdbBackups(
 	}
 	return names
 		.filter((name) => name.startsWith(prefix))
-		.sort((a, b) => (a < b ? 1 : a > b ? -1 : 0))
+		.sort(compareBackupsNewestFirst)
 		.map((name) => join(dir, name));
 }
 
+/** Order timestamps lexically and their collision suffixes numerically. */
+function compareBackupsNewestFirst(a: string, b: string): number {
+	const left = /^(.*Z)(?:-(\d+))?$/.exec(a);
+	const right = /^(.*Z)(?:-(\d+))?$/.exec(b);
+	if (left && right && left[1] === right[1]) {
+		const l = BigInt(left[2] ?? "0");
+		const r = BigInt(right[2] ?? "0");
+		return l < r ? 1 : l > r ? -1 : 0;
+	}
+	return a < b ? 1 : a > b ? -1 : 0;
+}
+
+/** Check whether a target is accessible before attempting its backup. */
 async function pathExists(path: string): Promise<boolean> {
 	try {
 		await stat(path);
@@ -121,6 +161,27 @@ export async function writeWinBoxCdb(
 	target: string,
 	records: readonly WinBoxCdbRecord[],
 	options: WriteWinBoxCdbOptions = {},
+): Promise<WriteWinBoxCdbResult> {
+	const expected = options.expectedRevision;
+	if (expected === undefined) {
+		return writeUnlocked(target, records, options);
+	}
+	await mkdir(dirname(target), { recursive: true });
+	return withWinBoxCdbLock(
+		target,
+		async () => {
+			await assertWinBoxCdbRevision(target, expected);
+			return writeUnlocked(target, records, options);
+		},
+		options.lock,
+	);
+}
+
+/** Serialize, back up, and replace a CDB after the caller establishes exclusivity. */
+async function writeUnlocked(
+	target: string,
+	records: readonly WinBoxCdbRecord[],
+	options: WriteWinBoxCdbOptions,
 ): Promise<WriteWinBoxCdbResult> {
 	const retention =
 		options.backupRetention ?? WINBOX_CDB_DEFAULT_BACKUP_RETENTION;
@@ -144,9 +205,13 @@ export async function writeWinBoxCdb(
 	// e.g. 0644 (#382 review).
 	const mode = targetExists ? (await stat(target)).mode & 0o777 : 0o600;
 	if (targetExists && !options.skipBackup) {
-		const stamp = backupStamp(options.now ?? new Date());
-		backupPath = join(dir, `${backupPrefix(target)}${stamp}`);
-		await copyFile(target, backupPath);
+		backupPath = await copyToUniqueBackup(
+			target,
+			join(
+				dir,
+				`${backupPrefix(target)}${backupStamp(options.now ?? new Date())}`,
+			),
+		);
 		try {
 			await chmod(backupPath, mode);
 		} catch (error) {
@@ -182,7 +247,7 @@ export async function writeWinBoxCdb(
 		} finally {
 			await handle.close();
 		}
-		await rename(tempPath, target);
+		await renameReplacing(tempPath, target, options.platform);
 	} catch (error) {
 		await unlink(tempPath).catch(() => undefined);
 		throw error;
@@ -197,6 +262,81 @@ export async function writeWinBoxCdb(
 		backupPath,
 		prunedBackups,
 	};
+}
+
+/**
+ * Copy `target` to `base`, or `base-1`, `base-2`, … when a backup with that
+ * timestamp already exists. Start after the greatest surviving suffix: filling
+ * a gap left by retention would make the newest snapshot look like the oldest
+ * and immediately prune it. Numeric ordering also keeps -10 newer than -9.
+ */
+async function copyToUniqueBackup(
+	target: string,
+	base: string,
+): Promise<string> {
+	const latest = (await listWinBoxCdbBackups(target)).find(
+		(path) =>
+			path === base ||
+			(path.startsWith(`${base}-`) &&
+				/^\d+$/.test(path.slice(base.length + 1))),
+	);
+	let sequence =
+		latest === undefined
+			? 0n
+			: BigInt(latest.slice(base.length + 1) || "0") + 1n;
+	for (let attempt = 0; ; attempt += 1) {
+		const candidate = sequence === 0n ? base : `${base}-${sequence}`;
+		try {
+			await copyFile(target, candidate, fsConstants.COPYFILE_EXCL);
+			return candidate;
+		} catch (error) {
+			if (errorCode(error) !== "EEXIST" || attempt >= 99) {
+				throw error;
+			}
+			sequence += 1n;
+		}
+	}
+}
+
+const WINDOWS_RENAME_RETRY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
+const WINDOWS_RENAME_RETRY_DELAYS_MS = [20, 50, 100, 200, 400];
+
+/**
+ * `rename()` over the CDB. On Windows the replace fails transiently while
+ * another process (antivirus, the search indexer, WinBox) has the target open,
+ * so retry briefly there before surfacing the error. POSIX renames do not have
+ * this failure mode and are not retried.
+ */
+async function renameReplacing(
+	from: string,
+	to: string,
+	platform: NodeJS.Platform = process.platform,
+): Promise<void> {
+	for (let attempt = 0; ; attempt += 1) {
+		try {
+			await rename(from, to);
+			return;
+		} catch (error) {
+			const delay = WINDOWS_RENAME_RETRY_DELAYS_MS[attempt];
+			const code = errorCode(error);
+			if (
+				platform !== "win32" ||
+				delay === undefined ||
+				code === undefined ||
+				!WINDOWS_RENAME_RETRY_CODES.has(code)
+			) {
+				throw error;
+			}
+			await Bun.sleep(delay);
+		}
+	}
+}
+
+/** Read an operating-system error code for collision and retry decisions. */
+function errorCode(error: unknown): string | undefined {
+	return typeof error === "object" && error !== null && "code" in error
+		? String((error as { code: unknown }).code)
+		: undefined;
 }
 
 /** Best-effort directory fsync so the rename is durable across a crash. */
