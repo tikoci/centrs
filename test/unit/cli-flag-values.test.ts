@@ -258,6 +258,12 @@ describe("help surface (#625)", () => {
 			const help = await run(["devices", sub, "--help"]);
 			expect(help.out).toContain(`Usage: centrs devices ${sub} [flags]`);
 			expect(await run(["devices", sub, "--cdb-file", "-h"])).toEqual(help);
+			expect(
+				await run(["devices", "--cdb-file", "registry.cdb", sub, "--help"]),
+			).toEqual(help);
+			expect(
+				await run(["devices", "--cdb-file=registry.cdb", sub, "-h"]),
+			).toEqual(help);
 			expect(await run(["help", "devices", sub])).toEqual(help);
 		}
 		expect(await run(["devices", "list", "-h"])).toEqual(

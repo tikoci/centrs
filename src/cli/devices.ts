@@ -47,6 +47,7 @@ import {
 	inferCliFormat,
 	renderCommandHelp,
 	unknownFlagError,
+	valueFlagTokens,
 } from "./common.ts";
 
 /**
@@ -316,7 +317,19 @@ interface DevicesCliArgs {
 
 export function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 	if (helpRequested(args)) {
-		const sub = args[0];
+		const values = valueFlagTokens(devicesCommand.options);
+		let sub: string | undefined;
+		for (let index = 0; index < args.length; index += 1) {
+			const arg = args[index];
+			if (arg === undefined) continue;
+			if (values.has(arg)) {
+				index += 1;
+				continue;
+			}
+			if (arg.startsWith("-")) continue;
+			sub = arg;
+			break;
+		}
 		return {
 			help: true,
 			...(sub === "init" || sub === "encrypt" ? { subcommand: sub } : {}),
