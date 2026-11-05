@@ -8,7 +8,7 @@ Please include the affected files or workflow, reproduction details, and impact.
 
 ## Scope
 
-`centrs` mediates RouterOS device access, credentials, and local discovery data through its library, CLI, and stdio MCP server. File transfer is available through the library and CLI. The explicitly invoked bandwidth-test server binds loopback and requires authentication by default. TUI and HTTP proxy surfaces are planned; the MCP server has no network listener. Security-sensitive areas include credential import/storage, RouterOS write execution, local network discovery, file transfer, and network listeners.
+`centrs` mediates RouterOS device access, credentials, and local discovery data through its library, CLI, and stdio MCP server. File transfer is available through the library and CLI. The explicitly invoked bandwidth-test server binds loopback by default (`--bind` can expose it) and requires authentication by default. TUI and HTTP proxy surfaces are planned; the MCP server has no network listener. Security-sensitive areas include credential import/storage, RouterOS write execution, local network discovery, file transfer, and network listeners.
 
 ## Credential handling
 
@@ -31,11 +31,16 @@ retains existing backups and creates a plaintext snapshot unless
 ends their option parsing with `--`, and withholds attached values from unknown
 CLI option diagnostics (#626, #627). TLS verifies peers by default; SSH uses
 trust-on-first-use and rejects changed host keys. An explicit `--insecure`
-disables peer verification and reports a `transport/insecure-trust` warning.
+disables peer verification; envelope-returning operations report a
+`transport/insecure-trust` warning.
 
-CDB mutations use a cross-process lock and check the revision loaded by the
-caller before writing (#581). Stale snapshots fail `cdb/conflict`; CLI/MCP
-add, set and remove operations and `discover --save` reload and retry. Lock contention
+Record mutations and encryption conversion use a cross-process lock and check
+the revision loaded by the caller before writing (#581). High-level library
+mutations reject stale `LoadedCdb` snapshots with `cdb/conflict`. The low-level
+`writeWinBoxCdb()` enables locking and revision checks only when supplied with
+`expectedRevision`; omitting it skips both protections. `devices init` instead
+uses atomic no-clobber creation. CLI/MCP add, set and remove operations and
+`discover --save` reload and retry conflicting mutations. Lock contention
 beyond 10 seconds fails `cdb/locked`. These protections prevent lost updates
 between cooperating centrs writers; backups retain two prior versions by
 default. Close WinBox before mutating the same CDB; external writers do not

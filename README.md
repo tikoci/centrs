@@ -183,9 +183,12 @@ so you can always see *why* a given port or transport was chosen.
   dialing (#604); see the [security policy](SECURITY.md#device-access-and-cdb-integrity).
 
 `devices` owns CDB mutations, including those requested through MCP or
-`discover --save`. Writes use a cross-process lock, a loaded-revision check,
+`discover --save`. Record mutations use a cross-process lock, a loaded-revision check,
 timestamped backups (two retained by default), and atomic rename, preserving
-unknown WinBox fields verbatim. Stale library snapshots fail with `cdb/conflict`;
+unknown WinBox fields verbatim. High-level library mutations reject stale
+`LoadedCdb` snapshots with `cdb/conflict`. The low-level `writeWinBoxCdb()`
+requires `expectedRevision` to enable locking and revision checks; omitting it
+skips both protections. `devices init` uses atomic no-clobber creation instead.
 CLI/MCP add, set and remove operations and `discover --save` reload and retry.
 Close WinBox before mutating the same file: external writers do not take the
 centrs lock.
