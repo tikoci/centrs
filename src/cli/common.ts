@@ -402,7 +402,7 @@ export function unknownFlagError(
 			return missingFlagValueError(name, undefined, option.valueName);
 		}
 		// An unknown `--x=y`: suggest on the base name, where the typo is. The
-		// value is never echoed — an unknown name (a mistyped `--pasword=…`,
+		// value is never echoed — an unknown name (a misspelled password flag,
 		// or a `--password=…` this command lacks) may carry a credential.
 		const shown = `${name}=<value>`;
 		const suggestions = closestFlags(name, knownFlags(options));

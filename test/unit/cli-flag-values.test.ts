@@ -15,6 +15,8 @@ import { cliCommands } from "../../src/cli.ts";
 import { CentrsError } from "../../src/errors.ts";
 import { runCliCaptured as run } from "./cli-capture.ts";
 
+// cspell:ignore pasword
+
 const parsers: ReadonlyArray<{
 	name: string;
 	parse: (args: readonly string[]) => unknown;
@@ -159,11 +161,12 @@ describe("shared CLI flag values (#625)", () => {
 		}
 	});
 	test("unknown-flag diagnostics never echo an attached value", () => {
+		const secret = "canary";
 		for (const [parse, token] of [
 			[parseMcpCliArgs, "--password=canary"],
 			[parseDiscoverCliArgs, "--password=canary"],
 			[parseExecuteCliArgs, "--pasword=canary"],
-			[parseExecuteCliArgs, "--bogus=http://admin:canary@127.0.0.1"],
+			[parseExecuteCliArgs, `--bogus=http://admin:${secret}@127.0.0.1`],
 		] as const) {
 			const error = refusal(parse, [token]);
 			expect(error.code).toBe("input/invalid-command");
