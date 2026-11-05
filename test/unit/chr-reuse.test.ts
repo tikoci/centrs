@@ -17,6 +17,8 @@ interface FakeOptions {
 	failRestores?: number[];
 	/** Make restore a silent no-op (the marker survives). */
 	silentRestore?: boolean;
+	/** Make every dirty-marker write throw. */
+	failMarker?: boolean;
 	/** Make the n-th boot (1-based) throw. */
 	failBoots?: number[];
 }
@@ -38,6 +40,7 @@ function fakeHooks(options: FakeOptions = {}) {
 		},
 		async saveBaseline() {},
 		async markDirty(chr) {
+			if (options.failMarker) throw new Error("marker write failed");
 			chr.dirty = true;
 		},
 		async restoreBaseline(chr) {
@@ -128,6 +131,22 @@ describe("createChrReuse", () => {
 		// The marker survived, so the first VM was replaced with a fresh one.
 		expect(lease?.instance).toBe(instances[1] as FakeChr);
 		expect(instances[0]?.removed).toBe(true);
+	});
+
+	test("a failed marker write is a failed restore, never an unproven lease", async () => {
+		const { hooks, instances, logs } = fakeHooks({ failMarker: true });
+		const reuse = createChrReuse(hooks);
+		(await reuse.acquire())?.release();
+		const lease = await reuse.acquire();
+		// Without the marker a silent restore would be invisible, so the first
+		// VM is discarded and the lease goes to the replacement.
+		expect(lease?.instance).toBe(instances[1] as FakeChr);
+		expect(instances[0]?.removed).toBe(true);
+		expect(reuse.stats.restores).toBe(0);
+		expect(reuse.stats.replacements).toBe(1);
+		expect(logs.some((line) => line.includes("marker write failed"))).toBe(
+			true,
+		);
 	});
 
 	test("fails closed once the replacement budget is spent", async () => {

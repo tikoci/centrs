@@ -147,13 +147,10 @@ export function createChrReuse<C>(hooks: ReuseHooks<C>): ChrReuse<C> {
 
 	async function restore(instance: C): Promise<void> {
 		const started = Date.now();
-		try {
-			await hooks.markDirty(instance);
-		} catch (error) {
-			hooks.log(
-				`CHR reuse: dirty marker not set (${describeError(error)}); restoring anyway`,
-			);
-		}
+		// The marker is what proves the restore happened: without it, a silent
+		// no-op `loadvm` would pass `assertClean`. A failed write is therefore a
+		// failed restore, and the caller discards this VM for a replacement.
+		await hooks.markDirty(instance);
 		await hooks.restoreBaseline(instance);
 		await hooks.ready(instance);
 		await hooks.assertClean(instance);

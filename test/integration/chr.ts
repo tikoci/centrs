@@ -511,8 +511,10 @@ export interface AcquireOptions {
 	 * Lease the process's shared default CHR, restored to its baseline snapshot,
 	 * instead of booting a private one (#612; see `chr-reuse.ts`). Only for the
 	 * default fixture: combining it with any boot override is an error, because
-	 * an override must never be dropped to attach to the shared VM. Ignored
-	 * (private boot) when `CENTRS_CHR_REUSE=0`.
+	 * an override must never be dropped to attach to the shared VM. That error
+	 * is raised whether or not reuse is enabled, so a misuse cannot pass only
+	 * under the rollback switch. Otherwise `reuse` is ignored (private boot)
+	 * when `CENTRS_CHR_REUSE=0`.
 	 */
 	reuse?: boolean;
 }
