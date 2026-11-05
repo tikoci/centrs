@@ -2623,4 +2623,71 @@ describe("centrs devices concurrent writers (#581)", () => {
 		expect(await targetsIn(cdbPath)).toContain("198.51.100.10");
 		expect(await Bun.file(`${cdbPath}.lock`).exists()).toBe(false);
 	}, 30_000);
+
+	test("example 73 a crashed recovery process does not block concurrent writers", async () => {
+		const cdbPath = await copyCdbFixture("example-73-crashed-recovery");
+		const before = await targetsIn(cdbPath);
+		const lockFile = `${cdbPath}.lock`;
+		const guardFile = `${lockFile}.guard`;
+		const breaker = Bun.spawn(
+			[
+				process.execPath,
+				"-e",
+				`import { Database } from "bun:sqlite";
+const guard = new Database(process.argv[1]);
+guard.run("BEGIN IMMEDIATE");
+console.log("ready");
+setInterval(() => {}, 1000);`,
+				guardFile,
+			],
+			{ stdout: "pipe", stderr: "pipe" },
+		);
+		try {
+			const reader = breaker.stdout.getReader();
+			try {
+				const ready = await reader.read();
+				expect(new TextDecoder().decode(ready.value)).toContain("ready");
+			} finally {
+				reader.releaseLock();
+			}
+			await writeFile(
+				lockFile,
+				JSON.stringify({
+					pid: breaker.pid,
+					hostname: hostname(),
+					createdAt: new Date().toISOString(),
+					token: "crashed-breaker",
+				}),
+			);
+		} finally {
+			breaker.kill();
+			await breaker.exited;
+		}
+		const targets = ["198.51.100.21", "198.51.100.22", "198.51.100.23"];
+		const results = await Promise.all(
+			targets.map((target) =>
+				runCliProcess({
+					args: [
+						"devices",
+						"add",
+						target,
+						"--user",
+						"racer",
+						"--cdb-file",
+						cdbPath,
+						"--json",
+					],
+				}),
+			),
+		);
+		for (const result of results) {
+			expect(result.stderrText).toBe("");
+			expect(result.exitCode).toBe(0);
+		}
+		expect((await targetsIn(cdbPath)).sort()).toEqual(
+			[...before, ...targets].sort(),
+		);
+		expect(await Bun.file(lockFile).exists()).toBe(false);
+		expect(await Bun.file(guardFile).exists()).toBe(true);
+	}, 30_000);
 });

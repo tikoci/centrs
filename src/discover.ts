@@ -557,7 +557,7 @@ export async function saveDiscoveredNeighbors(
 			? winBoxCdbRecordType.ipAdmin
 			: winBoxCdbRecordType.macTarget;
 		// Another writer may land between our load and this add (#581): on
-		// `cdb/conflict` reload once and re-run the de-dupe against the fresh
+		// `cdb/conflict` reload and re-run the de-dupe against the fresh
 		// snapshot, so a record the other writer just added is skipped, not
 		// duplicated or lost.
 		const envelope = await retryOnCdbConflict(

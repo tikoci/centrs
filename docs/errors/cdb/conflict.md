@@ -11,9 +11,11 @@ Under the CDB lock it re-reads the file and refuses to replace it when the
 revision no longer matches. Without that check the second writer would silently
 drop the first writer's change.
 
-The CLI, MCP, and `discover --save` reload and replay the request (up to 5 attempts) on a
-conflict, so you normally see this only when the CDB is changing continuously,
-or when a library caller holds an old `LoadedCdb` snapshot.
+`devices add`/`set`/`remove`, the MCP `centrs_devices` add/set/remove ops, and
+`discover --save` reload and replay the request (up to 5 attempts) on a conflict.
+You normally see this error from them only when the CDB is changing continuously.
+`devices encrypt` and direct library mutations do not replay automatically;
+they receive `cdb/conflict` on the first stale write.
 
 ## Fix
 

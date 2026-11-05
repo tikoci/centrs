@@ -110,8 +110,7 @@ function backupPrefix(target: string): string {
 }
 
 /**
- * List existing backups for `target`, newest first (names embed a sortable
- * sortable ISO 8601 timestamp variant, so lexicographic order is chronological).
+ * List backups newest first: timestamp order, then numeric collision suffix.
  */
 export async function listWinBoxCdbBackups(
 	target: string,
@@ -126,8 +125,19 @@ export async function listWinBoxCdbBackups(
 	}
 	return names
 		.filter((name) => name.startsWith(prefix))
-		.sort((a, b) => (a < b ? 1 : a > b ? -1 : 0))
+		.sort(compareBackupsNewestFirst)
 		.map((name) => join(dir, name));
+}
+
+function compareBackupsNewestFirst(a: string, b: string): number {
+	const left = /^(.*Z)(?:-(\d+))?$/.exec(a);
+	const right = /^(.*Z)(?:-(\d+))?$/.exec(b);
+	if (left && right && left[1] === right[1]) {
+		const l = BigInt(left[2] ?? "0");
+		const r = BigInt(right[2] ?? "0");
+		return l < r ? 1 : l > r ? -1 : 0;
+	}
+	return a < b ? 1 : a > b ? -1 : 0;
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -253,16 +263,26 @@ async function writeUnlocked(
 
 /**
  * Copy `target` to `base`, or `base-1`, `base-2`, … when a backup with that
- * timestamp already exists: two writes in one millisecond must not collapse to
- * one backup. The suffixed name sorts after the bare one, so newest-first
- * ordering still holds.
+ * timestamp already exists. Start after the greatest surviving suffix: filling
+ * a gap left by retention would make the newest snapshot look like the oldest
+ * and immediately prune it. Numeric ordering also keeps -10 newer than -9.
  */
 async function copyToUniqueBackup(
 	target: string,
 	base: string,
 ): Promise<string> {
+	const latest = (await listWinBoxCdbBackups(target)).find(
+		(path) =>
+			path === base ||
+			(path.startsWith(`${base}-`) &&
+				/^\d+$/.test(path.slice(base.length + 1))),
+	);
+	let sequence =
+		latest === undefined
+			? 0n
+			: BigInt(latest.slice(base.length + 1) || "0") + 1n;
 	for (let attempt = 0; ; attempt += 1) {
-		const candidate = attempt === 0 ? base : `${base}-${attempt}`;
+		const candidate = sequence === 0n ? base : `${base}-${sequence}`;
 		try {
 			await copyFile(target, candidate, fsConstants.COPYFILE_EXCL);
 			return candidate;
@@ -270,6 +290,7 @@ async function copyToUniqueBackup(
 			if (errorCode(error) !== "EEXIST" || attempt >= 99) {
 				throw error;
 			}
+			sequence += 1n;
 		}
 	}
 }

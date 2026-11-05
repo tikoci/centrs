@@ -888,6 +888,16 @@ encrypted CDBs, and for `setDevice`/`removeDevice`/`encryptCdb`. Mapped to
 parity in `test/unit/mcp-tools.test.ts` →
 `concurrent adds all land, matching the CLI conflict contract (#581)`.
 
+### 73. A crashed recovery process does not block concurrent writers
+
+A process holds the SQLite recovery mutex on `$CDB.lock.guard` and leaves its
+holder record in `$CDB.lock`, then is killed. Three independent CLI processes
+add different targets to that CDB concurrently (as in example 69).
+
+All three exit 0, and the CDB retains the fixture records and all additions.
+`$CDB.lock` is removed; the empty `$CDB.lock.guard` remains for future recovery.
+Mapped to `test/integration/devices.test.ts` → `example 73`.
+
 ## Per-service port keys (#618)
 
 ### SP1. Save service ports, then remove one to use legacy `port=`

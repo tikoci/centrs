@@ -638,17 +638,22 @@ a lock.
 - **Check under the lock.** Holding the lock, the writer re-reads the file and
   compares revisions; a mismatch is `cdb/conflict` and nothing is written (no
   backup either). Check and replacement are one critical section.
-- **Replay.** The CLI, MCP, and `discover --save` reload and replay a
+- **Replay.** CLI and MCP `add`/`set`/`remove`, and `discover --save`, reload and replay a
   conflicted mutation (up to 5 attempts in total, `CDB_CONFLICT_MAX_ATTEMPTS`).
   Replay re-runs normal validation, so a racing duplicate `add` becomes
   `cdb/already-exists` rather than an overwrite. Library callers holding an old
   `LoadedCdb` receive `cdb/conflict` and choose; `retryOnCdbConflict()` is the
-  same helper the CLI uses.
+  same helper the CLI uses. `devices encrypt` does not replay automatically;
+  retry the command after a conflict.
 - **Leftover locks.** A lock whose holder recorded this host and whose pid is no
   longer running is removed automatically. A lock from another host (a CDB on a
   shared drive), an unreadable lock, or a pid the OS reused is never removed by
   age; delete it by hand once no centrs writer is running. Windows recycles pids
   quickly, so this is the more likely case there.
+  Recovery attempts are serialized by a SQLite write transaction on the
+  persistent `<cdb>.lock.guard` file. The OS releases that mutex if a breaker
+  crashes. The guard stores no CDB data and must stay in place: deleting it
+  while writers are running could let two recovery attempts overlap.
 - **Low-level writes.** `writeWinBoxCdb()` without `expectedRevision` stays an
   unsynchronized primitive for callers that own the file exclusively. Every
   centrs mutation passes it.

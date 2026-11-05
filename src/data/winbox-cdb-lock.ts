@@ -16,6 +16,10 @@
  * is the same no-clobber primitive `devices init` already relies on, and it maps
  * to `CreateHardLinkW` on Windows. No handle is held open while the lock is
  * held, so release (`unlink`) is not blocked by an open handle on Windows.
+ * Dead-holder recovery is serialized by a SQLite write transaction on the
+ * persistent sibling `<cdb>.lock.guard`. SQLite releases that OS lock when a
+ * breaker exits, including on a crash. Never unlink the guard: replacing its
+ * inode would let two breakers lock different files.
  *
  * A lock is broken only when its holder recorded this host and that pid is no
  * longer running — never by age, since re-encrypting a large CDB can be slow.
@@ -26,8 +30,9 @@
  * check, but not one landing between the check and the rename.
  */
 
+import { Database } from "bun:sqlite";
 import { createHash, randomUUID } from "node:crypto";
-import { link, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { link, readFile, unlink, writeFile } from "node:fs/promises";
 import { hostname as osHostname } from "node:os";
 import { CentrsError } from "../errors.ts";
 
@@ -100,7 +105,7 @@ export async function assertWinBoxCdbRevision(
 		code: "cdb/conflict",
 		summary: `The CDB at ${target} changed after it was loaded; this write was refused so the other change is not lost.`,
 		remediation:
-			"Reload the CDB and re-apply the change. The CLI and MCP reload and retry automatically; reaching this means other writers kept changing the file, so retry shortly. If WinBox has this file open, close it first.",
+			"Reload the CDB and re-apply the change. CLI and MCP add/set/remove and discover --save retry automatically; devices encrypt and direct library mutations do not. If WinBox has this file open, close it first.",
 		context: { cdbFile: target, expectedRevision: expected, current },
 	});
 }
@@ -146,7 +151,7 @@ async function acquireLock(
 		createdAt: new Date().toISOString(),
 		token: randomUUID(),
 	};
-	const deadline = Date.now() + timeoutMs;
+	const deadline = performance.now() + timeoutMs;
 	let delayMs = 10;
 	let lastHolder: WinBoxCdbLockHolder | undefined;
 	for (;;) {
@@ -154,24 +159,23 @@ async function acquireLock(
 			return self;
 		}
 		const current = await readLockHolder(lockPath);
-		if (current === "gone") {
-			continue;
-		}
-		lastHolder = current;
+		lastHolder = current === "gone" ? undefined : current;
 		if (
+			current !== "gone" &&
 			current !== undefined &&
 			current.hostname === self.hostname &&
 			current.pid !== self.pid &&
 			!isAlive(current.pid)
 		) {
-			await breakDeadLock(lockPath, current);
-			continue;
+			await breakDeadLock(lockPath, current, self, isAlive);
 		}
-		if (Date.now() >= deadline) {
+		if (performance.now() >= deadline) {
 			throw lockedError(target, lockPath, lastHolder, timeoutMs);
 		}
 		const jitter = Math.random() * delayMs;
-		await Bun.sleep(Math.min(delayMs + jitter, deadline - Date.now()));
+		await Bun.sleep(
+			Math.max(0, Math.min(delayMs + jitter, deadline - performance.now())),
+		);
 		delayMs = Math.min(delayMs * 2, 250);
 	}
 }
@@ -210,9 +214,12 @@ async function readLockHolder(
 		const value = JSON.parse(text) as Partial<WinBoxCdbLockHolder>;
 		if (
 			typeof value.pid === "number" &&
+			Number.isSafeInteger(value.pid) &&
+			value.pid > 0 &&
 			typeof value.hostname === "string" &&
 			typeof value.createdAt === "string" &&
-			typeof value.token === "string"
+			typeof value.token === "string" &&
+			value.token.length > 0
 		) {
 			return value as WinBoxCdbLockHolder;
 		}
@@ -223,28 +230,44 @@ async function readLockHolder(
 }
 
 /**
- * Remove a lock whose holder is dead. Rename it aside first so a concurrent
- * breaker cannot delete a fresh lock created after our read; if what we moved
- * is not the dead holder, put it back without clobbering.
+ * Re-read and remove a dead holder only while holding the recovery mutex.
+ * A second lock file with PID-based recovery would just repeat the original
+ * race. SQLite's non-blocking BEGIN IMMEDIATE instead supplies a cross-process
+ * mutex whose crash recovery is owned by the OS. No database contents or
+ * journal are needed; the persistent empty guard file only supplies an inode.
  */
 async function breakDeadLock(
 	lockPath: string,
 	dead: WinBoxCdbLockHolder,
+	self: WinBoxCdbLockHolder,
+	isAlive: (pid: number) => boolean,
 ): Promise<void> {
-	const asidePath = `${lockPath}.${randomUUID()}.stale`;
+	const guardPath = `${lockPath}.guard`;
+	// Only SQLite may open this inode: closing an unrelated fd for it can drop
+	// this process's POSIX advisory locks while another connection is using it.
+	const guard = new Database(guardPath);
 	try {
-		await rename(lockPath, asidePath);
-	} catch {
-		return;
+		guard.run("PRAGMA busy_timeout = 0");
+		try {
+			guard.run("BEGIN IMMEDIATE");
+		} catch (error) {
+			if (errorCode(error) === "SQLITE_BUSY") return;
+			throw error;
+		}
+		const current = await readLockHolder(lockPath);
+		if (
+			current !== "gone" &&
+			current !== undefined &&
+			current.token === dead.token &&
+			current.hostname === self.hostname &&
+			current.pid !== self.pid &&
+			!isAlive(current.pid)
+		) {
+			await unlink(lockPath);
+		}
+	} finally {
+		guard.close();
 	}
-	const moved = await readLockHolder(asidePath);
-	if (moved === "gone") {
-		return;
-	}
-	if (moved?.token !== dead.token) {
-		await link(asidePath, lockPath).catch(() => undefined);
-	}
-	await unlink(asidePath).catch(() => undefined);
 }
 
 async function releaseLock(

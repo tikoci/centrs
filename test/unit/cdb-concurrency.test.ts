@@ -5,7 +5,9 @@
  * the CLI/MCP replay helper, and backup naming under rapid serialized writes.
  * Independent-process coverage lives in test/integration/devices.test.ts.
  */
+import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
+import { writeFileSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -274,6 +276,35 @@ describe("writeWinBoxCdb expectedRevision", () => {
 			first.backupPath as string,
 		]);
 	});
+
+	for (const backupRetention of [2, 20]) {
+		test(`same-timestamp backups retain the latest contents (retention ${backupRetention})`, async () => {
+			const { cdbFile } = await sandbox();
+			await writeFile(cdbFile, encodeOpenWinBoxCdb([record("host0.example")]));
+			const now = new Date(Date.UTC(2026, 10, 5, 12, 0, 0));
+			const paths: string[] = [];
+			for (let index = 1; index <= 12; index += 1) {
+				const result = await writeWinBoxCdb(
+					cdbFile,
+					[record(`host${index}.example`)],
+					{
+						now,
+						backupRetention,
+					},
+				);
+				const backup = result.backupPath as string;
+				expect(paths).not.toContain(backup);
+				paths.push(backup);
+				const backups = await listWinBoxCdbBackups(cdbFile);
+				expect(backups).toEqual(paths.slice(-backupRetention).reverse());
+				expect(await readFile(backups[0] as string)).toEqual(
+					Buffer.from(
+						encodeOpenWinBoxCdb([record(`host${index - 1}.example`)]),
+					),
+				);
+			}
+		});
+	}
 });
 
 describe("withWinBoxCdbLock", () => {
@@ -351,6 +382,96 @@ describe("withWinBoxCdbLock", () => {
 		});
 		expect(ran).toBe("ran");
 		expect(await Bun.file(lockFile).exists()).toBe(false);
+	});
+
+	test("eight waiters on one dead holder never overlap critical sections", async () => {
+		const { cdbFile } = await sandbox();
+		const lockFile = winBoxCdbLockPath(cdbFile);
+		await writeFile(
+			lockFile,
+			JSON.stringify({
+				pid: 4242,
+				hostname: hostname(),
+				createdAt: new Date().toISOString(),
+				token: "crashed",
+			}),
+		);
+		let inside = 0;
+		let maxInside = 0;
+		await Promise.all(
+			Array.from({ length: 8 }, () =>
+				withWinBoxCdbLock(
+					cdbFile,
+					async () => {
+						inside += 1;
+						maxInside = Math.max(maxInside, inside);
+						await Bun.sleep(10);
+						inside -= 1;
+					},
+					{ timeoutMs: 3000, isProcessAlive: (pid) => pid !== 4242 },
+				),
+			),
+		);
+		expect(maxInside).toBe(1);
+		expect(await Bun.file(lockFile).exists()).toBe(false);
+	});
+
+	test("a busy recovery guard respects the timeout and a later attempt can recover", async () => {
+		const { cdbFile } = await sandbox();
+		const lockFile = winBoxCdbLockPath(cdbFile);
+		const dead = JSON.stringify({
+			pid: 4242,
+			hostname: hostname(),
+			createdAt: new Date().toISOString(),
+			token: "crashed",
+		});
+		await writeFile(lockFile, dead);
+		const guard = new Database(`${lockFile}.guard`);
+		guard.run("BEGIN IMMEDIATE");
+		const options = {
+			...fastLock,
+			isProcessAlive: (pid: number) => pid !== 4242,
+		};
+		try {
+			await expect(
+				withWinBoxCdbLock(cdbFile, async () => undefined, options),
+			).rejects.toMatchObject({ code: "cdb/locked" });
+			expect(await readFile(lockFile, "utf8")).toBe(dead);
+		} finally {
+			guard.close();
+		}
+		expect(
+			await withWinBoxCdbLock(cdbFile, async () => "recovered", options),
+		).toBe("recovered");
+	});
+
+	test("a stale recovery observation leaves a newer live holder untouched", async () => {
+		const { cdbFile } = await sandbox();
+		const lockFile = winBoxCdbLockPath(cdbFile);
+		const dead = {
+			pid: 4242,
+			hostname: hostname(),
+			createdAt: new Date().toISOString(),
+			token: "dead",
+		};
+		const live = { ...dead, pid: 4243, token: "new-live-holder" };
+		await writeFile(lockFile, JSON.stringify(dead));
+		let replaced = false;
+		await expect(
+			withWinBoxCdbLock(cdbFile, async () => undefined, {
+				...fastLock,
+				isProcessAlive: (pid) => {
+					if (pid === dead.pid && !replaced) {
+						// Another breaker recovered D and a new writer acquired L
+						// between our first observation and taking the recovery mutex.
+						replaced = true;
+						writeFileSync(lockFile, JSON.stringify(live));
+					}
+					return pid !== dead.pid;
+				},
+			}),
+		).rejects.toMatchObject({ code: "cdb/locked" });
+		expect(JSON.parse(await readFile(lockFile, "utf8"))).toEqual(live);
 	});
 
 	test("an unreadable lock is never broken", async () => {
