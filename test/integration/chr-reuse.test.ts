@@ -139,10 +139,21 @@ describeReuse("CHR reuse: snapshot restore against CHR (#612)", () => {
 				(message) => logs.push(message),
 			);
 			// A real loadvm against a snapshot that does not exist: QEMU refuses it,
-			// and quickchr resumes the guest before throwing.
+			// and quickchr resumes the guest before throwing. Count the rejection
+			// here rather than matching quickchr's error text, so a different
+			// message (a monitor timeout, say) cannot fail the control, and a later
+			// readiness failure cannot pass it.
+			let loadRejections = 0;
 			const reuse = createChrReuse({
 				...hooks,
-				restoreBaseline: (chr) => chr.snapshot.load("centrs-no-such-snapshot"),
+				async restoreBaseline(chr) {
+					try {
+						await chr.snapshot.load("centrs-no-such-snapshot");
+					} catch (error) {
+						loadRejections += 1;
+						throw error;
+					}
+				},
 			});
 			try {
 				const first = await reuse.acquire();
@@ -156,7 +167,11 @@ describeReuse("CHR reuse: snapshot restore against CHR (#612)", () => {
 				expect(second?.instance).not.toBe(firstInstance);
 				expect(reuse.stats.boots).toBe(2);
 				expect(reuse.stats.replacements).toBe(1);
-				expect(logs.some((line) => line.includes("loadvm failed"))).toBe(true);
+				expect(loadRejections).toBe(1);
+				// centrs's own discard log, not quickchr's wording.
+				expect(
+					logs.some((line) => line.includes("restoring the baseline failed")),
+				).toBe(true);
 				// The replacement is a usable router.
 				expect(await second?.instance.waitForBoot(30_000)).toBe(true);
 				second?.release();

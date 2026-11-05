@@ -528,6 +528,10 @@ export function isChrReuseEnabled(
 /** Bounded readiness after a boot or a restore. */
 const REUSE_READY_TIMEOUT_MS = 60_000;
 const REUSE_MARKER = "centrsReuseDirty";
+// `:typeof` of the marker, grounded on CHR 7.25.1: `bool` once set, `nothing`
+// for a global that is declared but unset (the restored baseline).
+const MARKER_SET = "bool";
+const MARKER_UNSET = "nothing";
 /** Boot options of a CHR that will be snapshotted: live snapshots need qcow2. */
 export const REUSE_BOOT_OPTIONS: Partial<StartOptions> = {
 	bootDiskFormat: "qcow2",
@@ -622,7 +626,17 @@ export function quickChrReuseHooks(
 			await chr.snapshot.save(BASELINE_SNAPSHOT);
 		},
 		async markDirty(chr) {
-			await chr.exec(`:global ${REUSE_MARKER} true`, { timeout: 10_000 });
+			// `exec` resolves with RouterOS's error text rather than throwing, so
+			// read the marker back: only `bool` proves it was set.
+			const { output } = await chr.exec(
+				`:global ${REUSE_MARKER} true; :put [:typeof $${REUSE_MARKER}]`,
+				{ timeout: 10_000 },
+			);
+			if (output.trim() !== MARKER_SET) {
+				throw new Error(
+					`setting the reuse marker on ${chr.name} returned ${JSON.stringify(output.trim())}, not "${MARKER_SET}"`,
+				);
+			}
 		},
 		async restoreBaseline(chr) {
 			await chr.snapshot.load(BASELINE_SNAPSHOT);
@@ -641,9 +655,17 @@ export function quickChrReuseHooks(
 				`:global ${REUSE_MARKER}; :put [:typeof $${REUSE_MARKER}]`,
 				{ timeout: 10_000 },
 			);
-			if (output.trim() === "bool") {
+			const result = output.trim();
+			if (result === MARKER_SET) {
 				throw new Error(
 					`the pre-restore marker survived on ${chr.name}: the baseline was not restored`,
+				);
+			}
+			// Anything but `nothing` (an unset global) is an unproven router, for
+			// example `syntax error (line 1 column N)` from a failed check.
+			if (result !== MARKER_UNSET) {
+				throw new Error(
+					`the reuse marker check on ${chr.name} returned ${JSON.stringify(result)}, not "${MARKER_UNSET}": the restore is unproven`,
 				);
 			}
 		},
