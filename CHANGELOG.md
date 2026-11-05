@@ -16,6 +16,12 @@ no section of its own.
 
 ### Added
 
+- `LoadedCdb.revision`, `retryOnCdbConflict()`, `CDB_CONFLICT_MAX_ATTEMPTS`,
+  and the CDB lock primitives (`withWinBoxCdbLock`, `readWinBoxCdbRevision`,
+  `winBoxCdbLockPath`) are exported; `writeWinBoxCdb()` accepts
+  `expectedRevision` (#581).
+- CLI parsers accept long `--flag=value` options, and `help <command>` /
+  `--help <command>` route to that command's help (#625).
 - CDB per-service port keys `www-port`, `www-ssl-port`, `api-port`,
   `api-ssl-port` and `ssh-port` (#618). Each is read only by the matching
   transport and beats the legacy all-transport `port=` within the CDB tier.
@@ -23,6 +29,12 @@ no section of its own.
 
 ### Changed
 
+- The default CDB backup retention drops from 5 to 2
+  (`WINBOX_CDB_DEFAULT_BACKUP_RETENTION`). The new write lock, not backups,
+  guards against concurrent writers (#581).
+- Missing CLI option values now report `usage/missing-flag-value` with
+  `context.flag` and, when present, `context.got`, instead of the generic
+  `input/invalid-command` (#625).
 - A `--quickchr` machine that forwards SSH but has no verified SSH key now
   fails with `quickchr/ssh-auth-unavailable` instead of
   `quickchr/unsupported-via`, for `execute --via ssh`, `transfer --via sftp`
@@ -37,6 +49,17 @@ no section of its own.
 
 ### Fixed
 
+- Concurrent or stale CDB mutations no longer both succeed while one change is
+  silently lost (#581). Writes run under a `<cdb>.lock` file and re-check the
+  loaded revision: a stale snapshot fails `cdb/conflict`, and a lock held past
+  10 s fails `cdb/locked`. The CLI, MCP, and `discover --save` reload and replay
+  on conflict, so independent processes all land their changes. Two backups in
+  the same millisecond no longer overwrite each other, and on Windows the final
+  rename retries briefly while another process holds the CDB open.
+- Value-taking CLI flags reject a following option before target resolution;
+  `--help` / `-h` before `--` still prints help (#625). Password values remain
+  literal, including empty and flag-shaped values. Unknown `--name=value`
+  diagnostics withhold the attached value, including for misspelled flags.
 - Reject option-like host/username values; end ssh/sftp option parsing with
   `--`. Host resolution also rejects DNS labels that start with a hyphen.
 

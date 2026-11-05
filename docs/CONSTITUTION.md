@@ -295,7 +295,10 @@ principles are load-bearing:
 The lookup-key grammar, the CDB resolution and ambiguity rules (`--match`,
 `identity/ambiguous`, `--prefer-family`), the comment-kv allowlist, encrypted-CDB
 handling, and the atomic write strategy live in `commands/devices/README.md` —
-`devices` is the registry command and the CDB's only writer.
+`devices` is the registry command and the CDB's only writer. Every CDB mutation
+is checked against the revision it was loaded from, under a cross-process lock:
+a stale snapshot is refused with `cdb/conflict`, never two successes with one
+change lost (#581).
 
 #### Default-device record (`__default__`)
 

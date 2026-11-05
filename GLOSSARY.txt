@@ -843,3 +843,11 @@ iface # the CLI Reference type `iface_enum`: an argument that names an interface
 ubit # the CLI Reference type `ubit (…)`: a set of listed bits, e.g. `ubit (pap, chap, mschap1, mschap2)`, a list of `enum` (#225)
 forcounter # the IL head `/forcounter=$i;…` that `:for i …` renders as; quoted verbatim in the #225 directive-argument probe test (#225)
 foreachcounter # the IL head `/foreachcounter=$i;…` that `:foreach i …` renders as, in any `counter=` order; quoted verbatim in the #533 reorder test (#533)
+
+# CDB write lock (#581): Windows rename-retry errno codes and process ids
+EPERM
+EBUSY
+pids
+EOPNOTSUPP # operating-system error: the requested operation is not supported
+ENOSYS # operating-system error: the requested function is not implemented
+NTFS # Windows filesystem supporting the hard links used by the CDB lock
