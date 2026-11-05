@@ -107,10 +107,15 @@ export const transferCommand: CliCommandMetadata = {
 				"Confirm a mutating fan-out (upload/remove/mkdir/copy) across multiple routers in non-interactive runs.",
 		},
 		{
-			flag: "--verify / --no-verify",
+			flag: "--verify",
 			valueName: "<size|checksum|off>",
 			description:
 				"Post-transfer integrity check. Default size; `--no-verify` skips.",
+		},
+		{
+			flag: "--no-verify",
+			description:
+				"Disable post-transfer verification; conflicts with --verify.",
 		},
 		{
 			flag: "--type",

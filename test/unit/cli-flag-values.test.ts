@@ -184,6 +184,25 @@ describe("shared CLI flag values (#625)", () => {
 });
 
 describe("rendering uses the same option metadata (#625)", () => {
+	test("transfer --no-verify is boolean and leaves following format flags visible", async () => {
+		expect(
+			parseTransferCliArgs(["router", "list", "--no-verify", "--format=json"])
+				.request,
+		).toMatchObject({ verify: "off", format: "json" });
+		const result = await run([
+			"transfer",
+			"router",
+			"upload",
+			"source.txt",
+			"destination.txt",
+			"--verify",
+			"size",
+			"--no-verify",
+			"--json",
+		]);
+		expect(result.code).toBe(1);
+		expect(JSON.parse(result.err).error.code).toBe("usage/conflicting-flags");
+	});
 	const options = executeCommand.options;
 	test("skips values and stops at the real separator", () => {
 		expect(
