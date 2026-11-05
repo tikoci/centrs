@@ -189,8 +189,9 @@ Wire, auth, TCP/UDP, and CI caveats live in `commands/btest/README.md` and the
 
 ## Current track
 
-The maintainer sets this list. Open bugs are worked alongside it without being
-selected. Unfinished grid cells and parked themes do not preempt it.
+The maintainer sets this list, and it is the only thing that schedules work.
+An open bug can be fixed without being selected; nothing requires picking one
+up. Unfinished grid cells and parked themes do not preempt the track.
 
 1. **Release 0.1.10** (in progress).
 2. **Transport selection**, the first work on `0.2.0-next`. native-api becomes
@@ -207,9 +208,11 @@ selected. Unfinished grid cells and parked themes do not preempt it.
 ## Parked themes
 
 Direction that is agreed but not scheduled. Each theme has four parts: the
-question, the current lean, what starts it, and the issues it absorbed.
-Absorbed issues are closed with the `moved-to-docs` label: transferred history,
-not rejections. When a theme is selected it moves to the current track, amends
+question, the current lean, when it is ready, and the issues it absorbed.
+Ready means eligible, not started: a ready theme waits until the maintainer
+puts it on the current track. Absorbed issues are closed with the
+`moved-to-docs` label: transferred history, not rejections. When a theme is
+selected it moves to the current track, amends
 the constitution first where it contradicts it, gets a section in its command
 README, and its slices become new issues that link back to the absorbed ones.
 A theme entry that keeps growing is being used as an issue.
@@ -227,8 +230,8 @@ A theme entry that keeps growing is being used as an issue.
 - **Lean, `centrs.db`:** SQLite, derived, deletable and secret-free; no code
   path depends on it. First tables: `seen` facts from MNDP, ARP and ping. A
   session log records verb, target and error code only until redaction exists.
-- **Starts when:** the maintainer selects it. It adds a settings layer, so the
-  constitution changes first.
+- **Ready when:** now. It adds a settings layer, so the constitution changes
+  first.
 - **Absorbed:** #92, #160.
 
 ### Devices and onboarding
@@ -241,7 +244,8 @@ A theme entry that keeps growing is being used as an issue.
   and MAC-Telnet is tried. `devices list` unions CDB records, quickchr machines,
   CMR members and twins (`twin=<quickchr-name>`). rosetta device data is opt-in
   (`devices show --specs`). `check` keeps the health battery and future rules.
-- **Starts when:** transport selection is done (current track, step 3).
+- **Ready when:** transport selection is done; the current track already
+  schedules it as step 3.
 - **Absorbed:** #149, #173, #176, #441, #449, #585.
 
 ### Auth and secrets
@@ -253,7 +257,7 @@ A theme entry that keeps growing is being used as an issue.
   keychain and OAuth helpers, per-device auth overrides. A workspace file can
   never name a password command. Exports that carry secrets get a notice
   (#542).
-- **Starts when:** workspace and local state is done, because the workspace
+- **Ready when:** workspace and local state is done, because the workspace
   trust rule bounds the unlock channel.
 - **Absorbed:** #420, #542, #603.
 
@@ -265,7 +269,7 @@ A theme entry that keeps growing is being used as an issue.
   native-api tag multiplexing (#398), an array of retrieve requests in and an
   array of envelopes out. The CLI then gets attribute projection, `.query` and
   several reads per call as flags. No query language.
-- **Starts when:** a library consumer needs it, or native-api becomes the
+- **Ready when:** a library consumer needs it, or native-api becomes the
   default.
 - **Absorbed:** #398, #401.
 
@@ -279,8 +283,8 @@ A theme entry that keeps growing is being used as an issue.
   out of the command README into their own file. rosetta owns the documentation
   dataset (versioned files with a hash) and centrs fetches it. ANSI and HTML
   renderings, policy rules and secret detection build on this.
-- **Starts when:** the maintainer selects it. Manual links can ship first as a
-  generated path → URL table.
+- **Ready when:** now. Manual links can ship first as a generated path → URL
+  table.
 - **Absorbed:** #90, #133, #223, #372, #373, #501, #507, #520, #573.
 
 ### Surface contracts
@@ -294,8 +298,7 @@ A theme entry that keeps growing is being used as an issue.
   prefixes. `execute` results become predictable (#360); catch-all error codes
   are split (#528). `--help` may carry one cheap line pointing to the skill or
   docs.
-- **Starts when:** the maintainer selects it. MCP work starts from #605's
-  `isError` fix.
+- **Ready when:** now. MCP work starts from #605's `isError` fix.
 - **Absorbed:** #95, #129, #148, #360, #528, #593, #606.
 
 ### Transfer methods
@@ -306,7 +309,7 @@ A theme entry that keeps growing is being used as an issue.
   `/tool/fetch`), File Share (`/ip/cloud/back-to-home-file`) where the router
   supports it, directory upload, a path from uploaded assets to an
   owner-accessible URL, and version-aware `mkdir`.
-- **Starts when:** a consumer needs it; routeros-muse dashboards raised it
+- **Ready when:** a consumer needs it; routeros-muse dashboards raised it
   first.
 - **Absorbed:** #147, #548, #594, #595.
 
@@ -316,11 +319,11 @@ A theme entry that keeps growing is being used as an issue.
   two full sweeps per change.
 - **Lean:** unit tests on every platform for every code push and PR; docs-only
   changes run lint only. The CHR sweep runs nightly when main or a RouterOS
-  channel version changed, and at release. A PR cannot merge while the last
-  nightly is red. Versions and npm tags align across TIKOCI repos. Snapshot CHR
-  reuse is piloted in #612.
-- **Starts when:** path gating and the nightly are next; the rest when the
-  maintainer selects it.
+  channel version changed, and at release. Ordinary PRs cannot merge while the
+  last nightly is red; a repair merges with passing evidence on its own head,
+  or by maintainer override. Versions and npm tags align across TIKOCI repos.
+  Snapshot CHR reuse is piloted in #612.
+- **Ready when:** now.
 - **Absorbed:** #97, #142.
 
 ### Docs and onboarding
@@ -332,8 +335,8 @@ A theme entry that keeps growing is being used as an issue.
   allowlist. Pages publishes `llms.txt` and the generated CLI reference, the
   README shows real envelopes, and one worked example spans retrieve → export →
   transfer → `api --stream`. TIKOCI-wide instruction files are collected in
-  `tikoci.github.io` and vendored here.
-- **Starts when:** the maintainer selects it.
+  `tikoci.github.io` and vendored here, each recording its source and revision.
+- **Ready when:** now.
 - **Absorbed:** #122, #140, #150, #151.
 
 ### RoMON, WinBox terminal and SNMP
@@ -344,13 +347,15 @@ A theme entry that keeps growing is being used as an issue.
   mapping first, with protocol knowledge from `tikoci/m2ir`; MAC-Telnet stays
   the layer-2 path meanwhile. SNMP reads come with the MIB cache described in
   `commands/retrieve/README.md`.
-- **Starts when:** the maintainer selects it.
+- **Ready when:** RoMON and WinBox terminal have reference tooling; SNMP is
+  ready now.
 - **Absorbed:** none.
 
 ## Nits
 
-A nit is one or two sentences about something small. It rides the next PR that
-touches its area, and that PR deletes the line. Anything longer is an issue.
+A nit is a small item written in one or two sentences. It is a candidate for
+the next PR in its area, not required scope. Delete the line when the nit is
+done or declined. A nit that needs more explanation is an issue.
 
 - `execute`: a lone `print` sent through `execute` could get a tip that
   `retrieve` is the read-only verb a harness can allowlist.

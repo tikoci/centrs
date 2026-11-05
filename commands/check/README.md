@@ -13,6 +13,13 @@ protocol selection, fan-out — live in
 [`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md); the `(constitution: …)`
 notes below point there rather than restating them.
 
+> **Partly superseded (2026-11).** Finding which services answer, on which
+> ports and through which address, is moving to `devices` onboarding:
+> [`docs/MATRIX.md` → Devices and onboarding](../../docs/MATRIX.md#devices-and-onboarding).
+> The reach phase below and examples 2–4 in `examples.md` are pending
+> re-specification there; do not implement them as `check` features. The
+> health battery stays with `check`.
+
 ## What changed (this is a revision, not greenfield)
 
 The prior stub scoped `check` as a **reachability probe** — "probe a router and

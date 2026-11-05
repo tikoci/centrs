@@ -551,8 +551,12 @@ offline tests do not establish new device facts. Changes to shared execution
 or transport behavior still require `bun run test:integration`. The offline
 call itself never needs a router merely to satisfy a workflow label.
 
-`CHR-passed` means a capability's examples pass on CHR. It does not mean the
-capability is finished; follow-on work is a parked theme, a nit or an issue.
+`CHR-passed` means every example in a capability's `examples.md` is green via
+`bun run test:integration` against CHR. The one exception is a command that
+does no network IO (`devices`, `settings`): its examples are fixture-backed
+integration tests that need no CHR, under the evidence contract in its command
+README. Either way, `CHR-passed` does not mean the capability is finished;
+follow-on work is a parked theme, a nit or an issue.
 
 `docs/MATRIX.md` owns capability status, the current track, parked themes and
 nits. A capability's acceptance criteria — like `explain`'s Offline baseline

@@ -73,20 +73,33 @@ across TIKOCI repos goes in a `.github/instructions/` file with a narrow
 - **Closed `moved-to-docs` issues** are transferred history, not rejections.
   Read them for background; do not reopen one to resume work. Open a new issue
   that links back.
-- **A nit** is one or two sentences in the matrix's Nits list. It rides the next
-  PR that touches its area, which deletes the line. Anything longer is an issue.
+- **A nit** is a small item, written in one or two sentences, in the matrix's
+  Nits list. It is a candidate for the next PR in its area, not required scope.
+  Delete the line when the nit is done or declined. A nit that needs more
+  explanation is an issue.
 
 ## Reviews and attribution
 
 The GitHub account that posts does not identify the agent, so attribution
 travels with the text:
 
-- Post a review as a GitHub review with inline comments, not as a prose
-  conversation comment.
+- Post a review as a GitHub review. Put located findings in inline comments;
+  cross-cutting design points go in the review body.
 - The review body's first line is
-  `Reviewer: <harness>/<model> · head <sha7> · session <link or id>`.
+  `Reviewer: <harness>/<model> · head <sha7> · session <link or id>`. Write
+  `session unavailable` when the harness exposes no session identifier.
 - Agent commits end with a `Session: <link or id>` trailer next to
   `Co-Authored-By`.
+
+CodeRabbit is a required check, but its review allowance is small, and an
+agent-to-agent review often catches more. Spend it deliberately:
+
+- Keep a PR a draft while iterating. Drafts get no automatic CodeRabbit review,
+  and marking the PR ready triggers one.
+- To skip CodeRabbit for a small change, create the PR with the `skip-review`
+  label (`gh pr create --label skip-review`).
+- Request a pass on the current head at any time with an `@coderabbitai review`
+  PR comment.
 
 How bot reviews surface and how to resolve threads before merge:
 `.github/instructions/pr-review-bots.instructions.md`.
