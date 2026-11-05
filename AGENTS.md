@@ -4,9 +4,9 @@ Three files cover this project. Read them in this order:
 
 1. `docs/CONSTITUTION.md` — the load-bearing rules. Validation, envelope,
    errors, settings, identity, protocol selection, done definition.
-2. `docs/MATRIX.md` — capability status and the selected work track, including
-   offline analysis. Follow its current priority and linked GitHub tasks;
-   unfinished protocol cells do not automatically outrank that track.
+2. `docs/MATRIX.md` — capability status, the current track, parked themes and
+   nits. Follow its current track and the issues it links; unfinished protocol
+   cells and parked themes do not outrank that track.
 3. `commands/<name>/README.md` and `commands/<name>/examples.md` — the
    executable spec for the capability you're working on.
 
@@ -55,10 +55,41 @@ Otherwise, use this index to find the path-scoped rule that may apply:
 | `.github/instructions/use-bun.instructions.md` | Bun-first TypeScript and test workflow. |
 | `.github/instructions/vscode-files.instructions.md` | VS Code workspace files and related tool config. |
 
-For new durable instructions, prefer the nearest directory `AGENTS.md` when the
-rule must be portable across harnesses. Edit an existing `.github/instructions/`
-file only when the rule is Copilot-specific or when keeping an existing
-path-scoped pointer in sync.
+These files are also how TIKOCI-wide rules travel between repos, so keep them
+as separate files rather than folding them in here. A new rule that applies
+across TIKOCI repos goes in a `.github/instructions/` file with a narrow
+`applyTo`; a centrs-only rule goes in the nearest directory `AGENTS.md`.
+
+## Where work is tracked
+
+- **Constitution:** rules for what exists, plus invariants new work must
+  respect. Direction that is not built yet does not go there.
+- **Matrix:** status, the current track, parked themes and nits.
+- **Issues:** actionable work only, meaning a bug with a reproduction or a slice
+  with acceptance criteria. Other repos and consumers may file issues in any
+  shape. When an issue carries a durable idea rather than a task, move the idea
+  into a matrix theme or a command file, then close the issue as not planned
+  with the `moved-to-docs` label and a link to its new home.
+- **Closed `moved-to-docs` issues** are transferred history, not rejections.
+  Read them for background; do not reopen one to resume work. Open a new issue
+  that links back.
+- **A nit** is one or two sentences in the matrix's Nits list. It rides the next
+  PR that touches its area, which deletes the line. Anything longer is an issue.
+
+## Reviews and attribution
+
+The GitHub account that posts does not identify the agent, so attribution
+travels with the text:
+
+- Post a review as a GitHub review with inline comments, not as a prose
+  conversation comment.
+- The review body's first line is
+  `Reviewer: <harness>/<model> · head <sha7> · session <link or id>`.
+- Agent commits end with a `Session: <link or id>` trailer next to
+  `Co-Authored-By`.
+
+How bot reviews surface and how to resolve threads before merge:
+`.github/instructions/pr-review-bots.instructions.md`.
 
 ## Rules of thumb
 
@@ -92,5 +123,5 @@ discovery data as security-sensitive surfaces.
 - Do not silently fall back to another protocol when the caller pinned `--via`.
 - Do not make generated output the hand-edited source of truth.
 - Do not add new docs to capture status, plans, or roadmaps. Use the matrix
-  and per-command files.
+  (current track, parked themes, nits) and per-command files.
 - Do not disable validation to make a test pass; validation is the product.

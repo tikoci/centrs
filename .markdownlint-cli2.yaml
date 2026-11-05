@@ -3,6 +3,7 @@ ignores:
   - ".scratch/**"
   - "AGENTS.md"
   - "CLAUDE.md"
+  - "**/CLAUDE.md"
   - ".claude/**"
   - ".github/copilot-instructions.md"
   - ".github/instructions/**"

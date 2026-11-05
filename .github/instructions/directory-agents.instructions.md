@@ -8,11 +8,12 @@ Use scoped instruction files instead of expanding root prompts.
 
 - Root `AGENTS.md` is the entrypoint.
 - Directory `AGENTS.md` files contain local constraints only.
-- New portable instructions belong in the nearest directory `AGENTS.md`, not in
-  a new `.github/instructions/*.instructions.md` file.
-- Existing `.github/instructions/*.instructions.md` files contain path-specific
-  Copilot instructions using `applyTo`; edit them to keep Copilot-specific
-  pointers and existing path scopes accurate.
-- `.github/copilot-instructions.md` is a compatibility pointer. Claude reads the
-  root `AGENTS.md` directly via the `CLAUDE.md` symlink, so no separate
-  `.claude/CLAUDE.md` pointer is kept.
+- A new centrs-only instruction belongs in the nearest directory `AGENTS.md`.
+- A rule that applies across TIKOCI repos belongs in a
+  `.github/instructions/*.instructions.md` file with a narrow `applyTo`, so it
+  can be vendored between repos. Keep centrs-specific facts out of those files.
+- Each `CLAUDE.md` is a one-line file, `@AGENTS.md`, that imports the
+  `AGENTS.md` beside it. Use an import rather than a symlink, because symlinks
+  do not survive every Windows checkout. No separate `.claude/CLAUDE.md` is
+  kept.
+- `.github/copilot-instructions.md` is a compatibility pointer.

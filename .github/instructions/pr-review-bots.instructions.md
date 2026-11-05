@@ -36,13 +36,15 @@ misread the state of the PR.
   Of the last 80 PR heads (2026-10-16), 8 showed `Review completed`; 56 showed
   the incremental skip and 12 the rate limit. Green says nothing about whether
   your fix was reviewed — see *Confirming the head was reviewed* below.
-- **Locally run reviewers post under the `mobileskyfi` account**, not a distinct
-  bot login: Codex, hermes + muse-spark, and any other harness that drives `gh`
-  as the maintainer. Their output lands as inline review threads **or** as PR
-  conversation comments. A review-shaped `mobileskyfi` comment may be one of
-  these, but the login alone does not prove it — the maintainer posts there too.
-  These reviews are maintainer-triggered: do not assume one ran, and do not wait
-  for one unless asked.
+- **Locally run reviewers post under the `mobileskyfi` or `Amm0Bot` account**,
+  not a distinct bot login: Claude, Codex, hermes + muse-spark, and any other
+  harness that drives `gh`. The login does not identify the reviewer, and the
+  maintainer posts under `mobileskyfi` too. A review's first line does:
+  `Reviewer: <harness>/<model> · head <sha7> · session <link or id>`
+  (`AGENTS.md` → Reviews and attribution). Post findings as inline review
+  threads, not as one conversation comment; older reviews may still be
+  conversation comments. These reviews are maintainer-triggered: do not assume
+  one ran, and do not wait for one unless asked.
 - **`github-advanced-security` posts code-scanning alerts as inline threads.**
   They follow the alert: when a later analysis closes the alert (code fix or a
   `codeql-config.yml` filter), the thread drops out of the unresolved list. Fix
