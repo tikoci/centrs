@@ -585,7 +585,7 @@ interoperability verification remains open (see Residual risks).
 
 ## CDB write strategy
 
-All writes go through one helper (`writeWinBoxCdb`) that, holding the CDB lock
+Revision-checked writes use one helper (`writeWinBoxCdb`) under the CDB lock
 (see "Concurrent writers" below):
 
 1. Re-reads the file and refuses with `cdb/conflict` if it changed since the
@@ -635,6 +635,9 @@ a lock.
   hostname, start time, token): it is written to a temp file and hard-linked
   into place, which never replaces an existing lock. Waiting is bounded (10 s),
   then `cdb/locked` names the lock file and holder. Reads never lock.
+  If the filesystem explicitly reports that hard links are unsupported, the
+  write fails with `cdb/lock-unsupported`; move the CDB to a filesystem that
+  supports them. Permission errors are not classified as missing support.
 - **Check under the lock.** Holding the lock, the writer re-reads the file and
   compares revisions; a mismatch is `cdb/conflict` and nothing is written (no
   backup either). Check and replacement are one critical section.

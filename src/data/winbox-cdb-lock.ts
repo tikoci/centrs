@@ -138,6 +138,7 @@ export async function withWinBoxCdbLock<T>(
 	}
 }
 
+/** Acquire a no-clobber lock, recovering dead holders within the wait budget. */
 async function acquireLock(
 	target: string,
 	options: WinBoxCdbLockOptions,
@@ -193,6 +194,16 @@ async function tryCreateLock(
 	} catch (error) {
 		if (errorCode(error) === "EEXIST") {
 			return false;
+		}
+		if (["ENOTSUP", "EOPNOTSUPP", "ENOSYS"].includes(errorCode(error) ?? "")) {
+			throw new CentrsError({
+				code: "cdb/lock-unsupported",
+				summary: `The filesystem cannot create the hard-link lock at ${lockPath}; the CDB was not changed.`,
+				remediation:
+					"Move the CDB to a filesystem that supports hard links (such as NTFS on Windows or a local filesystem on Linux/macOS), then select it with --cdb-file or CENTRS_CDB_FILE. Do not bypass the lock.",
+				context: { lockFile: lockPath },
+				cause: error,
+			});
 		}
 		throw error;
 	} finally {
@@ -270,6 +281,7 @@ async function breakDeadLock(
 	}
 }
 
+/** Release only this acquisition's token, preserving an unrelated holder. */
 async function releaseLock(
 	target: string,
 	holder: WinBoxCdbLockHolder,
@@ -281,6 +293,7 @@ async function releaseLock(
 	}
 }
 
+/** Describe a lock timeout without exposing the holder's private token. */
 function lockedError(
 	target: string,
 	lockPath: string,
@@ -311,6 +324,7 @@ function lockedError(
 	});
 }
 
+/** Read a filesystem or SQLite error code without assuming an Error subtype. */
 function errorCode(error: unknown): string | undefined {
 	return typeof error === "object" && error !== null && "code" in error
 		? String((error as { code: unknown }).code)

@@ -848,3 +848,6 @@ foreachcounter # the IL head `/foreachcounter=$i;…` that `:foreach i …` rend
 EPERM
 EBUSY
 pids
+EOPNOTSUPP # operating-system error: the requested operation is not supported
+ENOSYS # operating-system error: the requested function is not implemented
+NTFS # Windows filesystem supporting the hard links used by the CDB lock

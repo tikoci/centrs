@@ -1582,6 +1582,7 @@ export async function retryOnCdbConflict<T>(
 	}
 }
 
+/** Persist a mutation against its loaded revision and build the shared result. */
 async function persistRecords(
 	cdb: LoadedCdb,
 	records: readonly WinBoxCdbRecord[],

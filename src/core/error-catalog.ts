@@ -92,6 +92,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 			"A device record failed schema validation (blank target or wrong field type).",
 	},
 	{
+		code: "cdb/lock-unsupported",
+		summary:
+			"The CDB filesystem does not support the hard links required for write locking.",
+	},
+	{
 		code: "cdb/locked",
 		summary:
 			"Another writer held the CDB lock past the wait timeout; nothing was written.",

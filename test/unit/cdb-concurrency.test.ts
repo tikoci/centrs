@@ -6,8 +6,9 @@
  * Independent-process coverage lives in test/integration/devices.test.ts.
  */
 import { Database } from "bun:sqlite";
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { writeFileSync } from "node:fs";
+import * as fsPromises from "node:fs/promises";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -308,6 +309,39 @@ describe("writeWinBoxCdb expectedRevision", () => {
 });
 
 describe("withWinBoxCdbLock", () => {
+	for (const code of ["ENOTSUP", "EOPNOTSUPP", "ENOSYS", "EPERM", "EACCES"]) {
+		test(`lock creation handles ${code} without changing the CDB`, async () => {
+			const { dir, cdbFile } = await sandbox();
+			const original = encodeOpenWinBoxCdb([record("existing.example")]);
+			await writeFile(cdbFile, original);
+			const cause = Object.assign(new Error("link failed"), { code });
+			const createLink = spyOn(fsPromises, "link").mockRejectedValue(cause);
+			try {
+				const attempt = writeWinBoxCdb(
+					cdbFile,
+					[record("replacement.example")],
+					{
+						expectedRevision: await readWinBoxCdbRevision(cdbFile),
+					},
+				);
+				if (code === "EPERM" || code === "EACCES") {
+					await expect(attempt).rejects.toBe(cause);
+				} else {
+					await expect(attempt).rejects.toMatchObject({
+						code: "cdb/lock-unsupported",
+						context: { lockFile: winBoxCdbLockPath(cdbFile) },
+						cause,
+						remediation: expect.stringContaining("--cdb-file"),
+					});
+				}
+			} finally {
+				createLink.mockRestore();
+			}
+			expect(await readFile(cdbFile)).toEqual(Buffer.from(original));
+			expect(await readdir(dir)).toEqual(["winbox.cdb"]);
+		});
+	}
+
 	test("serializes critical sections and removes the lock afterwards", async () => {
 		const { cdbFile } = await sandbox();
 		let inside = 0;

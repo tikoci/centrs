@@ -129,6 +129,7 @@ export async function listWinBoxCdbBackups(
 		.map((name) => join(dir, name));
 }
 
+/** Order timestamps lexically and their collision suffixes numerically. */
 function compareBackupsNewestFirst(a: string, b: string): number {
 	const left = /^(.*Z)(?:-(\d+))?$/.exec(a);
 	const right = /^(.*Z)(?:-(\d+))?$/.exec(b);
@@ -140,6 +141,7 @@ function compareBackupsNewestFirst(a: string, b: string): number {
 	return a < b ? 1 : a > b ? -1 : 0;
 }
 
+/** Check whether a target is accessible before attempting its backup. */
 async function pathExists(path: string): Promise<boolean> {
 	try {
 		await stat(path);
@@ -175,6 +177,7 @@ export async function writeWinBoxCdb(
 	);
 }
 
+/** Serialize, back up, and replace a CDB after the caller establishes exclusivity. */
 async function writeUnlocked(
 	target: string,
 	records: readonly WinBoxCdbRecord[],
@@ -329,6 +332,7 @@ async function renameReplacing(
 	}
 }
 
+/** Read an operating-system error code for collision and retry decisions. */
 function errorCode(error: unknown): string | undefined {
 	return typeof error === "object" && error !== null && "code" in error
 		? String((error as { code: unknown }).code)

@@ -14,7 +14,7 @@ automatically once its pid is no longer running. A lock from another host (a
 CDB on a shared drive), an unreadable lock file, or a holder pid that the OS
 reused for another process is never removed automatically.
 
-Dead-lock recovery uses an OS-backed SQLite mutex on `<cdb>.lock.guard`.
+Stale-lock recovery uses an OS-backed SQLite mutex on `<cdb>.lock.guard`.
 That empty file persists; a crashed recovery process releases its mutex
 automatically. Leave the guard file in place.
 

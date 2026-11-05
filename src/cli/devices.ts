@@ -889,6 +889,7 @@ export async function readPasswordStdin(
 	return value;
 }
 
+/** Run a devices subcommand, replaying eligible mutations after CDB conflicts. */
 export async function runDevicesCli(args: readonly string[]): Promise<number> {
 	let parsed: DevicesCliArgs | undefined;
 	let envSnapshot: Record<string, string | undefined> | undefined;
