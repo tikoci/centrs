@@ -14,8 +14,8 @@ bunx @tikoci/centrs@latest explain '/ip/address print' --json
 Use `bunx @tikoci/centrs@latest --help` to inspect the release CLI, and
 `bunx @tikoci/centrs@latest --version` (`-V`; `--json` for an envelope) to print
 the exact version for scripts and field reports. The dist-tag follows standard
-SemVer semantics: a plain version (`0.1.9`) publishes to `latest` and carries
-`next` forward with it, while a `next` build (`0.1.10-next.23`) publishes to
+SemVer semantics: a plain version (`0.1.10`) publishes to `latest` and carries
+`next` forward with it, while a `next` build (`0.1.11-next.23`) publishes to
 `next` only and never moves `latest`. A `next` build is described by the
 next version's `## X.Y.Z — next` section of [`CHANGELOG.md`](CHANGELOG.md).
 So `@next` is the leading edge and can equal `@latest` between cuts —
@@ -44,6 +44,8 @@ product; without them this would just be a worse `curl`.
 > are planned.
 > `docs/MATRIX.md` is the single source of truth for what works today — treat
 > anything not green there as not-yet-shipped.
+> The [0.1.10 known issues](CHANGELOG.md#known-issues) cover MAC-Telnet output
+> loss (#575) and the MCP authorization race during concurrent CDB edits (#604).
 
 ## What it talks to, and how
 
@@ -171,16 +173,25 @@ so you can always see *why* a given port or transport was chosen.
 - **Discovery** writes back into the CDB: `discover --save` records MNDP
   neighbors as new entries tagged `group=discovered` with a `source=mndp`
   marker — hints to curate, not authoritative inventory.
-- **The MCP server uses the CDB as its authorization boundary.** Agents can
-  only reach targets that exist in the CDB; RouterOS write-shaped execution
-  requires the resolved entry to carry `mcp=rw` plus per-call confirmation.
+- **The MCP server uses the CDB as its authorization boundary.** The allowlist
+  checks that a target exists in the CDB; RouterOS write-shaped execution
+  requires the entry to carry `mcp=rw` plus per-call confirmation.
   `centrs_devices` can also add/set/remove CDB records in-band, and
   `centrs_discover` can save MNDP neighbors, with `confirm: true`. The allowlist
   and the write policy are *the same CDB data* you already manage — see
-  `commands/mcp/`.
+  `commands/mcp/`. Concurrent CDB edits can invalidate the checked record before
+  dialing (#604); see the [security policy](SECURITY.md#device-access-and-cdb-integrity).
 
-`devices` is the only command that writes the CDB, and it does so safely
-(timestamped backup, atomic rename, unknown WinBox fields preserved verbatim).
+`devices` owns CDB mutations, including those requested through MCP or
+`discover --save`. Record mutations use a cross-process lock, a loaded-revision check,
+timestamped backups (two retained by default), and atomic rename, preserving
+unknown WinBox fields verbatim. High-level library mutations reject stale
+`LoadedCdb` snapshots with `cdb/conflict`. The low-level `writeWinBoxCdb()`
+requires `expectedRevision` to enable locking and revision checks; omitting it
+skips both protections. `devices init` uses atomic no-clobber creation instead.
+CLI/MCP add, set and remove operations and `discover --save` reload and retry.
+Close WinBox before mutating the same file: external writers do not take the
+centrs lock.
 Encrypted-CDB reads and writes work with `--cdb-password` /
 `CENTRS_CDB_PASSWORD`; writes decrypt, mutate and re-encrypt with a fresh salt.
 `devices init --encrypt` creates an encrypted registry, and `devices encrypt`

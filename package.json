@@ -1,6 +1,6 @@
 {
 	"name": "@tikoci/centrs",
-	"version": "0.1.10-next",
+	"version": "0.1.10",
 	"main": "src/index.ts",
 	"module": "src/index.ts",
 	"repository": {
@@ -40,7 +40,7 @@
 	"bin": {
 		"centrs": "src/cli.ts"
 	},
-	"description": "All-in-one TypeScript library/CLI/MCP for interacting with MikroTik RouterOS devices (TUI stub)",
+	"description": "Validated MikroTik RouterOS access and offline analysis for Bun/TypeScript, CLI, and MCP",
 	"engines": {
 		"bun": ">=1.4.4 <2"
 	},
