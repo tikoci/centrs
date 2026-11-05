@@ -57,7 +57,10 @@ import type { ResolvedSetting } from "../resolver/settings.ts";
 import { apiCommand } from "./api.ts";
 import {
 	type CliCommandMetadata,
+	cliRenderOptions,
+	expandEqualsArgs,
 	expectValue,
+	helpRequested,
 	rejectFlagsAfterSeparator,
 	renderCommandHelp,
 	unknownFlagError,
@@ -161,6 +164,10 @@ export interface ExplainCliArgs extends Omit<ExplainLiveRequest, "input"> {
 }
 
 export function parseExplainCliArgs(args: readonly string[]): ExplainCliArgs {
+	if (helpRequested(args)) {
+		return { positionals: [], failOn: "error", facets: [], help: true };
+	}
+	args = expandEqualsArgs(args, explainCliCommand.options);
 	rejectFlagsAfterSeparator("explain", args, explainCliCommand.options);
 	const parsed: ExplainCliArgs = {
 		positionals: [],
@@ -188,44 +195,94 @@ export function parseExplainCliArgs(args: readonly string[]): ExplainCliArgs {
 				parsed.help = true;
 				break;
 			case "--via":
-				parsed.via = expectValue(args, ++index, arg);
+				parsed.via = expectValue(args, ++index, arg, explainCliCommand.options);
 				break;
 			case "--host":
-				parsed.host = expectValue(args, ++index, arg);
+				parsed.host = expectValue(
+					args,
+					++index,
+					arg,
+					explainCliCommand.options,
+				);
 				break;
 			case "--quickchr":
 				if (parsed.quickchr !== undefined)
 					throw fanoutNotSupportedError({ flag: arg });
-				parsed.quickchr = expectValue(args, ++index, arg);
+				parsed.quickchr = expectValue(
+					args,
+					++index,
+					arg,
+					explainCliCommand.options,
+				);
 				break;
 			case "--timeout":
-				parsed.timeout = expectValue(args, ++index, arg);
+				parsed.timeout = expectValue(
+					args,
+					++index,
+					arg,
+					explainCliCommand.options,
+				);
 				break;
 			case "--cdb-file":
-				parsed.cdbFile = expectValue(args, ++index, arg);
+				parsed.cdbFile = expectValue(
+					args,
+					++index,
+					arg,
+					explainCliCommand.options,
+				);
 				break;
 			case "--cdb-password":
-				parsed.cdbPassword = expectValue(args, ++index, arg);
+				parsed.cdbPassword = expectValue(
+					args,
+					++index,
+					arg,
+					explainCliCommand.options,
+				);
 				break;
 			case "--resolve":
-				parsed.resolve = expectValue(args, ++index, arg);
+				parsed.resolve = expectValue(
+					args,
+					++index,
+					arg,
+					explainCliCommand.options,
+				);
 				break;
 			case "--password":
-				parsed.password = expectValue(args, ++index, arg);
+				parsed.password = expectValue(
+					args,
+					++index,
+					arg,
+					explainCliCommand.options,
+				);
 				break;
 			case "-p":
-				parsed.password = expectValue(args, ++index, arg);
+				parsed.password = expectValue(
+					args,
+					++index,
+					arg,
+					explainCliCommand.options,
+				);
 				break;
 			case "-u":
 			case "--user":
 			case "--username":
-				parsed.username = expectValue(args, ++index, arg);
+				parsed.username = expectValue(
+					args,
+					++index,
+					arg,
+					explainCliCommand.options,
+				);
 				break;
 			case "--insecure":
 				parsed.insecure = true;
 				break;
 			case "--port": {
-				const value = expectValue(args, ++index, arg);
+				const value = expectValue(
+					args,
+					++index,
+					arg,
+					explainCliCommand.options,
+				);
 				if (!/^\d+$/.test(value))
 					throw new CentrsError({
 						code: "input/invalid-command",
@@ -236,10 +293,20 @@ export function parseExplainCliArgs(args: readonly string[]): ExplainCliArgs {
 				break;
 			}
 			case "--file":
-				parsed.filePath = expectValue(args, ++index, arg);
+				parsed.filePath = expectValue(
+					args,
+					++index,
+					arg,
+					explainCliCommand.options,
+				);
 				break;
 			case "--fail-on": {
-				const value = expectValue(args, ++index, arg);
+				const value = expectValue(
+					args,
+					++index,
+					arg,
+					explainCliCommand.options,
+				);
 				if (!(explainFailOnLevels as readonly string[]).includes(value)) {
 					throw new CentrsError({
 						code: "input/invalid-command",
@@ -259,7 +326,12 @@ export function parseExplainCliArgs(args: readonly string[]): ExplainCliArgs {
 				parsed.facets.push("--schema");
 				break;
 			case "--cursor": {
-				const value = expectValue(args, ++index, arg);
+				const value = expectValue(
+					args,
+					++index,
+					arg,
+					explainCliCommand.options,
+				);
 				if (!/^\d+$/.test(value))
 					throw new CentrsError({
 						code: "usage/invalid-cursor",
@@ -281,7 +353,12 @@ export function parseExplainCliArgs(args: readonly string[]): ExplainCliArgs {
 				parsed.tokens = true;
 				break;
 			case "--format": {
-				const value = expectValue(args, ++index, arg);
+				const value = expectValue(
+					args,
+					++index,
+					arg,
+					explainCliCommand.options,
+				);
 				if (!(explainOutputFormats as readonly string[]).includes(value)) {
 					throw new CentrsError({
 						code: "settings/invalid-format",
@@ -475,27 +552,6 @@ async function readFileInput(path: string): Promise<string> {
 	return await file.text();
 }
 
-/** Flags whose NEXT token is a value, so a scanner must skip it. */
-const VALUE_FLAGS = new Set([
-	"--file",
-	"--fail-on",
-	"--format",
-	"--via",
-	"--host",
-	"--port",
-	"--username",
-	"--user",
-	"-u",
-	"--password",
-	"-p",
-	"--timeout",
-	"--cdb-file",
-	"--cdb-password",
-	"--resolve",
-	"--quickchr",
-	"--cursor",
-]);
-
 const LIVE_CONNECTION_FLAGS = new Set([
 	"--via",
 	"--port",
@@ -525,18 +581,7 @@ function recoverRenderOptions(args: readonly string[]): {
 	format?: string;
 	verbose: boolean;
 } {
-	let format: string | undefined;
-	let verbose = false;
-	for (let index = 0; index < args.length; index += 1) {
-		const arg = args[index];
-		if (arg === undefined || arg === "--") break;
-		if (arg === "--json") format = "json";
-		else if (arg === "--yaml") format = "yaml";
-		else if (arg === "--verbose") verbose = true;
-		else if (arg === "--format") format = args[++index];
-		else if (VALUE_FLAGS.has(arg)) index += 1;
-	}
-	return { format, verbose };
+	return cliRenderOptions(args, explainCliCommand.options);
 }
 
 /**
@@ -562,6 +607,10 @@ function recoverFormat(
 }
 
 export async function runExplainCli(args: readonly string[]): Promise<number> {
+	if (helpRequested(args)) {
+		console.log(renderCommandHelp(describeCentrs(), explainCliCommand));
+		return 0;
+	}
 	const env = Bun.env;
 	let config: Record<string, string | undefined> = {};
 	try {

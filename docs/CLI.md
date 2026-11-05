@@ -8,6 +8,13 @@ Every flag below is generated from the same metadata that renders
 (`bun run docs:cli --check`). Behavior, examples, and designed-but-not-yet
 implemented flags live in each command's `commands/<name>/README.md`.
 
+Long flags that take a value accept both `--flag value` and `--flag=value`,
+including an explicit empty `--flag=` value. Missing values and another flag
+in a value slot produce `usage/missing-flag-value`. Password flags accept
+flag-shaped values; use `--password=--help` for a literal help token.
+`--help` and `-h` before `--` show help even after an incomplete option.
+`centrs help <command>` and `centrs --help <command>` also show command help.
+
 | Command | Summary |
 | ------- | ------- |
 | [`retrieve`](#retrieve) | Read RouterOS values through the shared core using the selected protocol. |

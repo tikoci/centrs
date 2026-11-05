@@ -454,9 +454,9 @@ describe("retrieveWait", () => {
 		]);
 		expect(swallowed.code).not.toBe(0);
 		const error = JSON.parse(swallowed.err).error;
-		expect(error.code).toBe("settings/invalid-timeout");
-		expect(error.summary).toContain("Received the flag: --until");
-		expect(error.context).toEqual({ flag: "--wait", value: "--until" });
+		expect(error.code).toBe("usage/missing-flag-value");
+		expect(error.summary).toContain("`--until`");
+		expect(error.context).toEqual({ flag: "--wait", got: "--until" });
 
 		// A real multi-target --wait still gets the fanout refusal.
 		const fanout = await runCliCaptured([

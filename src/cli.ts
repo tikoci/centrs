@@ -57,7 +57,24 @@ export async function runCli(
 	args: readonly string[] = Bun.argv.slice(2),
 ): Promise<number> {
 	try {
-		if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
+		// Accept the common help prefixes while leaving command positionals alone
+		// (`execute help` can address a device literally named "help").
+		if (["help", "--help", "-h"].includes(args[0] ?? "")) {
+			let index = 0;
+			while (["help", "--help", "-h"].includes(args[index] ?? "")) index += 1;
+			if (args[index] !== undefined)
+				return await runCli([
+					args[index] as string,
+					...args.slice(index + 1),
+					"--help",
+				]);
+		}
+		if (
+			args.length === 0 ||
+			args[0] === "help" ||
+			args[0] === "--help" ||
+			args[0] === "-h"
+		) {
 			console.log(renderCliHelp());
 			return 0;
 		}

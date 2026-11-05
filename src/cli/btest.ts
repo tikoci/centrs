@@ -30,7 +30,10 @@ import type { BtestDirection, BtestProtocol } from "../protocols/btest.ts";
 import {
 	type CliCommandMetadata,
 	type CliCommandOption,
+	expandEqualsArgs,
 	expectValue,
+	helpRequested,
+	inferCliFormat,
 	renderCommandHelp,
 	unknownFlagError,
 } from "./common.ts";
@@ -228,8 +231,12 @@ interface ServerCliArgs extends CommonCliArgs {
 	request: BtestServerRequest;
 }
 
-function parseClientArgs(args: readonly string[]): ClientCliArgs {
+export function parseClientArgs(args: readonly string[]): ClientCliArgs {
 	const request: BtestClientRequest = { env: Bun.env };
+	if (helpRequested(args)) {
+		return { help: true, request };
+	}
+	args = expandEqualsArgs(args, btestCommand.options);
 	const parsed: ClientCliArgs = { request };
 	for (let i = 0; i < args.length; i += 1) {
 		const arg = args[i];
@@ -240,14 +247,14 @@ function parseClientArgs(args: readonly string[]): ClientCliArgs {
 				parsed.help = true;
 				break;
 			case "--protocol": {
-				const v = expectValue(args, ++i, arg);
+				const v = expectValue(args, ++i, arg, btestCommand.options);
 				if (v !== "udp" && v !== "tcp")
 					throw new Error(`--protocol must be udp|tcp; got ${v}.`);
 				request.protocol = v as BtestProtocol;
 				break;
 			}
 			case "--direction": {
-				const v = expectValue(args, ++i, arg);
+				const v = expectValue(args, ++i, arg, btestCommand.options);
 				if (v !== "receive" && v !== "transmit" && v !== "both")
 					throw new Error(
 						`--direction must be receive|transmit|both; got ${v}.`,
@@ -256,32 +263,42 @@ function parseClientArgs(args: readonly string[]): ClientCliArgs {
 				break;
 			}
 			case "--duration":
-				request.durationMs = parseDuration(expectValue(args, ++i, arg));
+				request.durationMs = parseDuration(
+					expectValue(args, ++i, arg, btestCommand.options),
+				);
 				break;
 			case "--interval":
-				request.intervalMs = parseDuration(expectValue(args, ++i, arg));
+				request.intervalMs = parseDuration(
+					expectValue(args, ++i, arg, btestCommand.options),
+				);
 				break;
 			case "--connection-count":
 				request.connectionCount = parseIntFlag(
-					expectValue(args, ++i, arg),
+					expectValue(args, ++i, arg, btestCommand.options),
 					arg,
 				);
 				break;
 			case "--local-udp-tx-size":
-				request.localUdpTxSize = parseIntFlag(expectValue(args, ++i, arg), arg);
+				request.localUdpTxSize = parseIntFlag(
+					expectValue(args, ++i, arg, btestCommand.options),
+					arg,
+				);
 				break;
 			case "--remote-udp-tx-size":
 				request.remoteUdpTxSize = parseIntFlag(
-					expectValue(args, ++i, arg),
+					expectValue(args, ++i, arg, btestCommand.options),
 					arg,
 				);
 				break;
 			case "--local-tx-speed":
-				request.localTxSpeed = parseBandwidth(expectValue(args, ++i, arg), arg);
+				request.localTxSpeed = parseBandwidth(
+					expectValue(args, ++i, arg, btestCommand.options),
+					arg,
+				);
 				break;
 			case "--remote-tx-speed":
 				request.remoteTxSpeed = parseBandwidth(
-					expectValue(args, ++i, arg),
+					expectValue(args, ++i, arg, btestCommand.options),
 					arg,
 				);
 				break;
@@ -294,28 +311,33 @@ function parseClientArgs(args: readonly string[]): ClientCliArgs {
 			case "--username":
 			case "-u":
 			case "--user":
-				request.username = expectValue(args, ++i, arg);
+				request.username = expectValue(args, ++i, arg, btestCommand.options);
 				break;
 			case "--password":
-				request.password = expectValue(args, ++i, arg);
+				request.password = expectValue(args, ++i, arg, btestCommand.options);
 				break;
 			case "--port":
-				request.controlPort = parseIntFlag(expectValue(args, ++i, arg), arg);
+				request.controlPort = parseIntFlag(
+					expectValue(args, ++i, arg, btestCommand.options),
+					arg,
+				);
 				break;
 			case "--cdb-file":
-				request.cdbFile = expectValue(args, ++i, arg);
+				request.cdbFile = expectValue(args, ++i, arg, btestCommand.options);
 				break;
 			case "--cdb-password":
-				request.cdbPassword = expectValue(args, ++i, arg);
+				request.cdbPassword = expectValue(args, ++i, arg, btestCommand.options);
 				break;
 			case "--match":
-				request.match = expectValue(args, ++i, arg);
+				request.match = expectValue(args, ++i, arg, btestCommand.options);
 				break;
 			case "--csv":
 				parsed.format = "csv";
 				break;
 			case "--format":
-				parsed.format = parseFormat(expectValue(args, ++i, arg));
+				parsed.format = parseFormat(
+					expectValue(args, ++i, arg, btestCommand.options),
+				);
 				break;
 			default:
 				if (arg.startsWith("-"))
@@ -328,8 +350,12 @@ function parseClientArgs(args: readonly string[]): ClientCliArgs {
 	return parsed;
 }
 
-function parseServerArgs(args: readonly string[]): ServerCliArgs {
+export function parseServerArgs(args: readonly string[]): ServerCliArgs {
 	const request: BtestServerRequest = { env: Bun.env };
+	if (helpRequested(args)) {
+		return { help: true, request };
+	}
+	args = expandEqualsArgs(args, btestCommand.options);
 	const parsed: ServerCliArgs = { request };
 	for (let i = 0; i < args.length; i += 1) {
 		const arg = args[i];
@@ -348,39 +374,51 @@ function parseServerArgs(args: readonly string[]): ServerCliArgs {
 				parsed.help = true;
 				break;
 			case "--bind":
-				request.bind = expectValue(args, ++i, arg);
+				request.bind = expectValue(args, ++i, arg, btestCommand.options);
 				break;
 			case "--allocate-udp-ports-from":
 				request.allocateUdpPortsFrom = parseIntFlag(
-					expectValue(args, ++i, arg),
+					expectValue(args, ++i, arg, btestCommand.options),
 					arg,
 				);
 				break;
 			case "--max-sessions":
-				request.maxSessions = parseIntFlag(expectValue(args, ++i, arg), arg);
+				request.maxSessions = parseIntFlag(
+					expectValue(args, ++i, arg, btestCommand.options),
+					arg,
+				);
 				break;
 			case "--interval":
-				request.intervalMs = parseDuration(expectValue(args, ++i, arg));
+				request.intervalMs = parseDuration(
+					expectValue(args, ++i, arg, btestCommand.options),
+				);
 				break;
 			case "--duration":
-				request.durationMs = parseDuration(expectValue(args, ++i, arg));
+				request.durationMs = parseDuration(
+					expectValue(args, ++i, arg, btestCommand.options),
+				);
 				break;
 			case "--username":
 			case "-u":
 			case "--user":
-				request.username = expectValue(args, ++i, arg);
+				request.username = expectValue(args, ++i, arg, btestCommand.options);
 				break;
 			case "--password":
-				request.password = expectValue(args, ++i, arg);
+				request.password = expectValue(args, ++i, arg, btestCommand.options);
 				break;
 			case "--port":
-				request.port = parseIntFlag(expectValue(args, ++i, arg), arg);
+				request.port = parseIntFlag(
+					expectValue(args, ++i, arg, btestCommand.options),
+					arg,
+				);
 				break;
 			case "--csv":
 				parsed.format = "csv";
 				break;
 			case "--format":
-				parsed.format = parseFormat(expectValue(args, ++i, arg));
+				parsed.format = parseFormat(
+					expectValue(args, ++i, arg, btestCommand.options),
+				);
 				break;
 			default:
 				if (arg.startsWith("-"))
@@ -492,6 +530,10 @@ async function runServer(args: readonly string[]): Promise<number> {
 
 export async function runBtestCli(args: readonly string[]): Promise<number> {
 	try {
+		if (helpRequested(args)) {
+			console.log(renderCommandHelp(describeCentrs(), btestCommand));
+			return 0;
+		}
 		const [sub, ...rest] = args;
 		if (sub === undefined || sub === "--help" || sub === "-h") {
 			console.log(renderCommandHelp(describeCentrs(), btestCommand));
@@ -516,15 +558,16 @@ export async function runBtestCli(args: readonly string[]): Promise<number> {
 		});
 		const tips = isMissingTargetError(centrsError)
 			? await buildTargetSelectionTips({
-					cdbFile: cdbFileFromArgs(args),
+					cdbFile: cdbFileFromArgs(args, btestCommand.options),
 					env: Bun.env,
 				})
 			: [];
-		const format = args.includes("--json")
-			? "json"
-			: args.includes("--yaml")
-				? "yaml"
-				: "text";
+		const format = inferCliFormat(
+			args,
+			btestCommand.options,
+			btestOutputFormats,
+			"text",
+		);
 		if (format === "json" || format === "yaml") {
 			const out = {
 				ok: false as const,

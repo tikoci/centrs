@@ -44,4 +44,15 @@ describe("centrs --version (#463)", () => {
 		expect(result.code).toBe(1);
 		expect(result.err).toContain("input/invalid-command");
 	});
+
+	test("equals format and typed missing values use the shared grammar (#625)", async () => {
+		expect(await runCliCaptured(["--version", "--format=json"])).toEqual(
+			await runCliCaptured(["--version", "--format", "json"]),
+		);
+		for (const tail of [[], ["--json"]]) {
+			const result = await runCliCaptured(["--version", "--format", ...tail]);
+			expect(result.code).toBe(1);
+			expect(result.err).toContain("usage/missing-flag-value");
+		}
+	});
 });
