@@ -27,6 +27,7 @@
  *     `cdb/target-not-registered` and selection cannot widen the CDB allowlist.
  */
 
+import { WINBOX_CDB_ABSENT_REVISION } from "../data/winbox-cdb-lock.ts";
 import {
 	type LoadedCdb,
 	loadCdb,
@@ -188,6 +189,7 @@ export async function expandSelection(
 		entries: [],
 		warnings: [],
 		encrypted: false,
+		revision: WINBOX_CDB_ABSENT_REVISION,
 		settings,
 	});
 	let cdb: LoadedCdb;

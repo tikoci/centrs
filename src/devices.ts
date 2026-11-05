@@ -30,6 +30,10 @@ import {
 	winBoxCdbRecordType,
 } from "./data/winbox-cdb.ts";
 import {
+	type WinBoxCdbRevision,
+	winBoxCdbRevisionOf,
+} from "./data/winbox-cdb-lock.ts";
+import {
 	type WriteWinBoxCdbOptions,
 	writeWinBoxCdb,
 } from "./data/winbox-cdb-write.ts";
@@ -182,6 +186,12 @@ export interface LoadedCdb {
 	warnings: readonly DevicesWarning[];
 	/** True when the source file on disk was encrypted. */
 	encrypted: boolean;
+	/**
+	 * Revision of the on-disk bytes this snapshot was loaded from (`absent`
+	 * when there was no file). Every mutation re-checks it under the CDB lock
+	 * and fails `cdb/conflict` when the file changed since (#581).
+	 */
+	revision: WinBoxCdbRevision;
 }
 
 const DEFAULT_CDB_RELATIVE = ".config/tikoci/winbox.cdb";
@@ -404,6 +414,8 @@ export interface EncryptCdbOptions extends LoadCdbOptions {
 	 * retained untouched; without the snapshot a forgotten password is final.
 	 */
 	skipBackup?: boolean;
+	/** CDB lock wait options (tests shorten the timeout). */
+	lock?: WriteWinBoxCdbOptions["lock"];
 }
 
 export interface DevicesEncryptData {
@@ -419,7 +431,9 @@ export interface DevicesEncryptData {
 /**
  * Explicitly convert an existing open CDB with a fresh salt and atomic replacement.
  * Retain all backups: converting the active file does not protect old plaintext.
- * Close WinBox and other writers first; this is not a cross-process transaction (#581).
+ * Runs under the CDB lock with a revision check, so a concurrent centrs write is
+ * refused with `cdb/conflict` rather than lost (#581). Close WinBox first: it
+ * does not take the lock.
  * Already-encrypted files are verified with the supplied password and left untouched.
  * `skipBackup` omits the new plaintext snapshot; it never deletes older backups.
  */
@@ -441,10 +455,14 @@ export async function encryptCdb(
 					encryptWith: { password: settings.cdbPassword.value },
 					backupRetention: -1,
 					skipBackup: options.skipBackup === true,
+					expectedRevision: cdb.revision,
+					...(options.lock ? { lock: options.lock } : {}),
 				},
 			);
 			backupPath = written.backupPath;
 		} catch (cause) {
+			// A stale snapshot or a held lock keeps its own actionable code.
+			if (cause instanceof CentrsError) throw cause;
 			throw new CentrsError({
 				code: "cdb/encrypt-failed",
 				summary: `Could not encrypt the CDB at ${cdbFile}.`,
@@ -649,6 +667,7 @@ export async function loadCdb(options: LoadCdbOptions): Promise<LoadedCdb> {
 		settings,
 		warnings,
 		encrypted: parsed.mode === "encrypted",
+		revision: winBoxCdbRevisionOf(bytes),
 	};
 }
 
@@ -1525,6 +1544,44 @@ export function recordTypeFromName(name: string): number | undefined {
 	return typeof value === "number" ? value : undefined;
 }
 
+/** Attempts {@link retryOnCdbConflict} makes before surfacing `cdb/conflict`. */
+export const CDB_CONFLICT_MAX_ATTEMPTS = 5;
+
+/**
+ * Run a CDB mutation; on `cdb/conflict`, reload and replay it, up to
+ * {@link CDB_CONFLICT_MAX_ATTEMPTS} attempts in total. The CLI, MCP, and
+ * `discover --save` use this so independent processes all land their changes:
+ * writes are serialized by the CDB lock, so every round has a winner and N
+ * simultaneous writers need at most N attempts. The replay re-runs normal
+ * validation against the fresh snapshot, so `cdb/already-exists` /
+ * `cdb/not-found-target` stay honest. Direct library callers holding an old
+ * snapshot get the `cdb/conflict` and decide for themselves.
+ */
+export async function retryOnCdbConflict<T>(
+	cdb: LoadedCdb,
+	reload: () => Promise<LoadedCdb>,
+	mutate: (cdb: LoadedCdb) => Promise<T>,
+	maxAttempts: number = CDB_CONFLICT_MAX_ATTEMPTS,
+): Promise<T> {
+	let snapshot = cdb;
+	for (let attempt = 1; ; attempt += 1) {
+		try {
+			return await mutate(snapshot);
+		} catch (error) {
+			if (
+				!(error instanceof CentrsError) ||
+				error.code !== "cdb/conflict" ||
+				attempt >= maxAttempts
+			) {
+				throw error;
+			}
+		}
+		// Jitter so replaying writers do not re-collide in lockstep.
+		await Bun.sleep(Math.random() * 20 * attempt);
+		snapshot = await reload();
+	}
+}
+
 async function persistRecords(
 	cdb: LoadedCdb,
 	records: readonly WinBoxCdbRecord[],
@@ -1538,9 +1595,14 @@ async function persistRecords(
 	warnings: readonly DevicesWarning[],
 ): Promise<DevicesMutationEnvelope> {
 	const encryptWith = encryptWithFor(cdb);
-	const writeOptions: WriteWinBoxCdbOptions | undefined = encryptWith
-		? { ...(options ?? {}), encryptWith }
-		: options;
+	// Every mutation is checked against the revision it was loaded from, under
+	// the CDB lock: a stale snapshot fails `cdb/conflict` instead of silently
+	// dropping another writer's change (#581).
+	const writeOptions: WriteWinBoxCdbOptions = {
+		...(options ?? {}),
+		...(encryptWith ? { encryptWith } : {}),
+		expectedRevision: cdb.revision,
+	};
 	const written = await writeWinBoxCdb(
 		cdb.settings.cdbFile.value,
 		records,

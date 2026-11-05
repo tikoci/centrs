@@ -10,6 +10,7 @@ import {
 	stat,
 	writeFile,
 } from "node:fs/promises";
+import { hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { runCli } from "../../src/cli.ts";
 import {
@@ -2502,4 +2503,124 @@ describe("centrs devices --password-stdin (#582)", () => {
 		expect(result.stderrText).not.toContain("stdin-secret");
 		expect(await readFile(cdbPath)).toEqual(before);
 	});
+});
+
+describe("centrs devices concurrent writers (#581)", () => {
+	async function targetsIn(cdbPath: string, cdbPassword?: string) {
+		const args = ["devices", "list", "--cdb-file", cdbPath, "--json"];
+		if (cdbPassword) args.push("--cdb-password", cdbPassword);
+		const listed = await runCliProcess({ args });
+		expect(listed.exitCode).toBe(0);
+		return (
+			JSON.parse(listed.stdoutText).data as Array<{ target: string }>
+		).map((entry) => entry.target);
+	}
+
+	for (const encrypted of [false, true]) {
+		const label = encrypted ? "encrypted" : "open";
+		test(`example 69 concurrent add from independent processes all land (${label})`, async () => {
+			const cdbPath = await copyCdbFixture(`example-69-${label}`, {
+				encrypted,
+			});
+			const before = await targetsIn(
+				cdbPath,
+				encrypted ? ENCRYPTED_PASSWORD : undefined,
+			);
+			const targets = ["198.51.100.1", "198.51.100.2", "198.51.100.3"];
+			const results = await Promise.all(
+				targets.map((target) =>
+					runCliProcess({
+						args: [
+							"devices",
+							"add",
+							target,
+							"--user",
+							"racer",
+							"--cdb-file",
+							cdbPath,
+							"--json",
+							...(encrypted ? ["--cdb-password", ENCRYPTED_PASSWORD] : []),
+						],
+					}),
+				),
+			);
+			for (const result of results) {
+				expect(result.stderrText).toBe("");
+				expect(result.exitCode).toBe(0);
+			}
+			const after = await targetsIn(
+				cdbPath,
+				encrypted ? ENCRYPTED_PASSWORD : undefined,
+			);
+			expect(after.sort()).toEqual([...before, ...targets].sort());
+			expect(await Bun.file(`${cdbPath}.lock`).exists()).toBe(false);
+			if (encrypted) {
+				expect(parseWinBoxCdb(await readFile(cdbPath)).mode).toBe("encrypted");
+			}
+		}, 30_000);
+	}
+
+	test("example 70 a lock held by another host is cdb/locked and writes nothing", async () => {
+		const cdbPath = await copyCdbFixture("example-70-locked");
+		const lockFile = `${cdbPath}.lock`;
+		await writeFile(
+			lockFile,
+			JSON.stringify({
+				pid: 4242,
+				hostname: "another-host.example",
+				createdAt: "2026-11-05T00:00:00.000Z",
+				token: "foreign",
+			}),
+		);
+		const before = await readFile(cdbPath);
+		const result = await runCliProcess({
+			args: ["devices", "add", "198.51.100.9", "--cdb-file", cdbPath, "--json"],
+		});
+		expect(result.exitCode).toBe(1);
+		const envelope = JSON.parse(result.stderrText) as {
+			error: {
+				code: string;
+				remediation: string;
+				context: Record<string, unknown>;
+			};
+		};
+		expect(envelope.error.code).toBe("cdb/locked");
+		expect(envelope.error.context).toMatchObject({
+			cdbFile: cdbPath,
+			lockFile,
+			holder: { pid: 4242, hostname: "another-host.example" },
+		});
+		expect(envelope.error.remediation).toContain(lockFile);
+		expect(await readFile(cdbPath)).toEqual(before);
+		expect(await listBackups(cdbPath)).toEqual([]);
+		expect(await Bun.file(lockFile).exists()).toBe(true);
+	}, 30_000);
+
+	test("example 71 a lock left by a dead process on this host is recovered", async () => {
+		const cdbPath = await copyCdbFixture("example-71-dead-lock");
+		const exited = Bun.spawn(["bun", "--version"], { stdout: "ignore" });
+		await exited.exited;
+		await writeFile(
+			`${cdbPath}.lock`,
+			JSON.stringify({
+				pid: exited.pid,
+				hostname: hostname(),
+				createdAt: "2026-11-05T00:00:00.000Z",
+				token: "crashed",
+			}),
+		);
+		const result = await runCliProcess({
+			args: [
+				"devices",
+				"add",
+				"198.51.100.10",
+				"--cdb-file",
+				cdbPath,
+				"--json",
+			],
+		});
+		expect(result.exitCode).toBe(0);
+		expect(await targetsIn(cdbPath)).toContain("198.51.100.10");
+		expect(await Bun.file(`${cdbPath}.lock`).exists()).toBe(false);
+	}, 30_000);
 });

@@ -510,6 +510,23 @@ describe("handleDevices (CDB mutations)", () => {
 		}
 	});
 
+	test("concurrent adds all land, matching the CLI conflict contract (#581)", async () => {
+		const { path, cleanup } = await makeMcpTestCdb([]);
+		try {
+			const targets = ["box-a", "box-b", "box-c"];
+			const envelopes = await Promise.all(
+				targets.map((target) =>
+					handleDevices({ op: "add", target, confirm: true }, config(path)),
+				),
+			);
+			expect(envelopes.map((env) => env.ok)).toEqual([true, true, true]);
+			const cdb = await loadCdb({ cdbFile: path, env: {} });
+			expect(cdb.entries.map((entry) => entry.target).sort()).toEqual(targets);
+		} finally {
+			await cleanup();
+		}
+	});
+
 	test("sets comment kv-soup through the mutation path", async () => {
 		const { path, cleanup } = await makeMcpTestCdb([
 			{ target: "box", comment: "mcp=ro" },

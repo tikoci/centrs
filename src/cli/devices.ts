@@ -35,6 +35,7 @@ import {
 	removeDevice,
 	renderDevicesEnvelope,
 	resolveDevicesSettings,
+	retryOnCdbConflict,
 	setDevice,
 	showDevice,
 	winBoxCdbRecordType,
@@ -922,11 +923,15 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 			console.log(renderDevicesEnvelope(envelope, parsed.format ?? "text"));
 			return 0;
 		}
-		const cdb = await loadCdb({
+		const loadOptions = {
 			cdbFile: parsed.cdbFile,
 			cdbPassword: parsed.cdbPassword,
 			env: envSnapshot,
-		});
+		};
+		const reload = () => loadCdb(loadOptions);
+		const cdb = await reload();
+		// A stable binding for the conflict-retry closures below.
+		const cli = parsed;
 
 		let envelope: DevicesEnvelope<unknown>;
 		switch (parsed.subcommand) {
@@ -969,24 +974,27 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 						);
 					}
 				}
-				envelope = await addDevice({
-					cdb,
-					target: parsed.target,
-					recordType,
-					user: parsed.user,
-					password,
-					group: parsed.group,
-					profile: resolveProfile(parsed),
-					session: parsed.session,
-					comment: parsed.comment,
-					commentKvUpdates: [
-						...buildGeoUpdates(parsed),
-						...(parsed.kvArgs ?? []).map(parseKvArg),
-					],
-					force: parsed.force,
-					strict: parsed.strict,
-					showPassword: parsed.showPassword,
-				});
+				const target = parsed.target;
+				envelope = await retryOnCdbConflict(cdb, reload, (snapshot) =>
+					addDevice({
+						cdb: snapshot,
+						target,
+						recordType,
+						user: cli.user,
+						password,
+						group: cli.group,
+						profile: resolveProfile(cli),
+						session: cli.session,
+						comment: cli.comment,
+						commentKvUpdates: [
+							...buildGeoUpdates(cli),
+							...(cli.kvArgs ?? []).map(parseKvArg),
+						],
+						force: cli.force,
+						strict: cli.strict,
+						showPassword: cli.showPassword,
+					}),
+				);
 				break;
 			}
 			case "edit":
@@ -997,32 +1005,38 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 				if (!parsed.target) {
 					throw new Error("Missing <target> for devices set.");
 				}
-				envelope = await setDevice({
-					cdb,
-					target: parsed.target,
-					match: parsed.match,
-					updates: [
-						...buildGeoUpdates(parsed),
-						...(parsed.kvArgs ?? []).map(parseKvArg),
-					],
-					user: parsed.user,
-					password,
-					group: parsed.group,
-					profile: resolveProfile(parsed),
-					session: parsed.session,
-					strict: parsed.strict,
-					showPassword: parsed.showPassword,
-				});
+				{
+					const target = parsed.target;
+					envelope = await retryOnCdbConflict(cdb, reload, (snapshot) =>
+						setDevice({
+							cdb: snapshot,
+							target,
+							match: cli.match,
+							updates: [
+								...buildGeoUpdates(cli),
+								...(cli.kvArgs ?? []).map(parseKvArg),
+							],
+							user: cli.user,
+							password,
+							group: cli.group,
+							profile: resolveProfile(cli),
+							session: cli.session,
+							strict: cli.strict,
+							showPassword: cli.showPassword,
+						}),
+					);
+				}
 				break;
 			case "remove":
 				if (!parsed.target) {
 					throw new Error("Missing <target> for devices remove.");
 				}
-				envelope = await removeDevice({
-					cdb,
-					target: parsed.target,
-					match: parsed.match,
-				});
+				{
+					const target = parsed.target;
+					envelope = await retryOnCdbConflict(cdb, reload, (snapshot) =>
+						removeDevice({ cdb: snapshot, target, match: cli.match }),
+					);
+				}
 				break;
 			default:
 				throw new Error("Unreachable devices subcommand.");

@@ -41,6 +41,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary: "A CDB entry with that target already exists.",
 	},
 	{
+		code: "cdb/conflict",
+		summary:
+			"The CDB changed after it was loaded; the stale write was refused so no change is lost.",
+	},
+	{
 		code: "cdb/create-failed",
 		summary: "A new CDB file could not be created at the resolved location.",
 	},
@@ -85,6 +90,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		code: "cdb/invalid-record",
 		summary:
 			"A device record failed schema validation (blank target or wrong field type).",
+	},
+	{
+		code: "cdb/locked",
+		summary:
+			"Another writer held the CDB lock past the wait timeout; nothing was written.",
 	},
 	{ code: "cdb/not-found", summary: "The CDB file could not be found." },
 	{

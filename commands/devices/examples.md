@@ -832,6 +832,62 @@ CDB path/password and output flags, plus `--encrypt` for `init` or
 Test: `devices file-command help is scoped without opening a CDB` in
 `test/integration/cli-smoke.test.ts` (network-free).
 
+## Concurrent writers (#581)
+
+### 69. Concurrent `add` from independent processes all land
+
+```bash
+centrs devices add 198.51.100.1 --user racer --cdb-file $CDB --json &
+centrs devices add 198.51.100.2 --user racer --cdb-file $CDB --json &
+centrs devices add 198.51.100.3 --user racer --cdb-file $CDB --json &
+wait
+```
+
+All three exit 0 with empty stderr, and `devices list` shows the fixture
+records plus all three targets. No `$CDB.lock` remains. Run against both the
+open and the encrypted fixture (`--cdb-password centrs-test`); the encrypted
+CDB stays encrypted.
+
+### 70. A lock held by another host is `cdb/locked`
+
+`$CDB.lock` holds `{ "pid": 4242, "hostname": "another-host.example", … }`:
+
+```bash
+centrs devices add 198.51.100.9 --cdb-file $CDB --json
+```
+
+Exits 1 after the 10 s lock wait with `error.code="cdb/locked"`;
+`error.context` names `cdbFile`, `lockFile` and `holder` (pid, hostname,
+createdAt), and the remediation names the lock file to delete. The CDB is
+unchanged, no backup is written, and the foreign lock is left in place.
+
+### 71. A lock left by a dead process on this host is recovered
+
+`$CDB.lock` holds this host's name and the pid of a process that has exited:
+
+```bash
+centrs devices add 198.51.100.10 --cdb-file $CDB --json
+```
+
+Exits 0; the target is added and the lock file is removed.
+
+### 72. A stale library snapshot is refused (offline)
+
+```ts
+const a = await loadCdb({ cdbFile });
+const b = await loadCdb({ cdbFile });
+await addDevice({ cdb: a, target: "a.example", user: "test" });
+await addDevice({ cdb: b, target: "b.example", user: "test" }); // throws
+```
+
+The second call rejects with `cdb/conflict` (`context.expectedRevision` is
+`b.revision`) and writes nothing; the CDB holds `a.example` only. Wrapping the
+call in `retryOnCdbConflict(b, reload, …)` instead lands both. Same for open and
+encrypted CDBs, and for `setDevice`/`removeDevice`/`encryptCdb`. Mapped to
+`test/unit/cdb-concurrency.test.ts` → `stale-snapshot reproduction (#581)`; MCP
+parity in `test/unit/mcp-tools.test.ts` →
+`concurrent adds all land, matching the CLI conflict contract (#581)`.
+
 ## Per-service port keys (#618)
 
 ### SP1. Save service ports, then remove one to use legacy `port=`

@@ -198,6 +198,16 @@ export {
 	winBoxCdbRecordType,
 } from "./data/winbox-cdb.ts";
 export {
+	readWinBoxCdbRevision,
+	WINBOX_CDB_ABSENT_REVISION,
+	WINBOX_CDB_DEFAULT_LOCK_TIMEOUT_MS,
+	type WinBoxCdbLockOptions,
+	type WinBoxCdbRevision,
+	winBoxCdbLockPath,
+	winBoxCdbRevisionOf,
+	withWinBoxCdbLock,
+} from "./data/winbox-cdb-lock.ts";
+export {
 	listWinBoxCdbBackups,
 	WINBOX_CDB_DEFAULT_BACKUP_RETENTION,
 	type WriteWinBoxCdbOptions,
@@ -208,6 +218,7 @@ export {
 	type AddDeviceArgs,
 	addDevice,
 	buildDevicesErrorEnvelope,
+	CDB_CONFLICT_MAX_ATTEMPTS,
 	type DevicesCommand,
 	type DevicesEncryptData,
 	type DevicesEnvelope,
@@ -241,6 +252,7 @@ export {
 	removeDevice,
 	renderDevicesEnvelope,
 	resolveDevicesSettings,
+	retryOnCdbConflict,
 	type SetDeviceArgs,
 	setDevice,
 	showDevice,
