@@ -409,15 +409,7 @@ export function parseTerminalCliArgs(args: readonly string[]): ParsedTerminal {
 
 function inferRequestedFormat(
 	args: readonly string[],
-	requestFormat?: string,
 ): "text" | "json" | "yaml" {
-	if (requestFormat !== undefined) {
-		return requestFormat === "json" ||
-			requestFormat === "yaml" ||
-			requestFormat === "text"
-			? requestFormat
-			: "text";
-	}
 	return inferCliFormat(
 		args,
 		terminalCommand.options,
