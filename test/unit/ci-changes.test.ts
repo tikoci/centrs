@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { join } from "node:path";
 import { Glob } from "bun";
 import {
 	type ClassifyInput,
@@ -7,7 +8,7 @@ import {
 	PROSE_READ_BY_TESTS,
 } from "../../scripts/ci-changes.ts";
 
-const ROOT = new URL("../..", import.meta.url).pathname;
+const ROOT = `${join(import.meta.dir, "..", "..")}/`;
 
 describe("isDocsOnlyPath", () => {
 	test("prose for people and agents is docs-only", () => {
@@ -169,7 +170,8 @@ describe("docs-only guard", () => {
 			"test/unit/ci-changes.test.ts",
 		]);
 		for (const pattern of ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"]) {
-			for await (const path of new Glob(pattern).scan({ cwd: ROOT })) {
+			for await (const scanned of new Glob(pattern).scan({ cwd: ROOT })) {
+				const path = scanned.replaceAll("\\", "/");
 				if (self.has(path)) continue;
 				sources.push({
 					path,
