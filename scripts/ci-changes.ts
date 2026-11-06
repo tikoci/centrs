@@ -60,12 +60,14 @@ const CODE_DIRS = ["src/", "test/", "scripts/", "docs/errors/"];
  */
 export function isDocsOnlyPath(path: string): boolean {
 	if (ROOT_PROSE.has(path)) return true;
+	// Before any prose rule: a test may glob these directories (docs/errors/
+	// is scanned for every *.md), so even an agent guide there is code.
+	if (CODE_DIRS.some((dir) => path.startsWith(dir))) return false;
 	const base = path.slice(path.lastIndexOf("/") + 1);
-	// Directory agent guides are prose wherever they live (src/AGENTS.md too).
+	// Directory agent guides are prose elsewhere (commands/, .github/, docs/).
 	if (base === "AGENTS.md" || base === "CLAUDE.md") return true;
 	if (!path.endsWith(".md")) return false;
 	if (PROSE_READ_BY_TESTS.has(path)) return false;
-	if (CODE_DIRS.some((dir) => path.startsWith(dir))) return false;
 	if (path === "docs/CLI.md") return false; // generated, drift-tested
 	if (path.startsWith(".github/instructions/")) return true;
 	if (

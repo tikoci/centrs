@@ -3,8 +3,11 @@ import {
 	FIXES_MAIN_LABEL,
 	fingerprint,
 	GATE_JOB,
+	HEALTH_MAX_PAGES,
+	HEALTH_PAGE_SIZE,
 	type Job,
 	mainHealth,
+	mainHealthFromHistory,
 	mustPassFailures,
 	type NightlyRun,
 	nightlyDecision,
@@ -175,5 +178,48 @@ describe("mainHealth", () => {
 	test("no sweep yet is healthy", () => {
 		expect(mainHealth([nightly(5, skippedJobs)], []).ok).toBe(true);
 		expect(mainHealth([], []).ok).toBe(true);
+	});
+});
+
+describe("mainHealthFromHistory", () => {
+	/** Scheduled-run history, newest first, served in API-sized pages. */
+	function history(runs: NightlyRun[]) {
+		const jobs = new Map(runs.map((run) => [run.id, run.jobs]));
+		return {
+			listPage: async (page: number) =>
+				runs
+					.slice((page - 1) * HEALTH_PAGE_SIZE, page * HEALTH_PAGE_SIZE)
+					.map(({ jobs: _, ...run }) => run),
+			jobsFor: async (id: number) => jobs.get(id) ?? [],
+		};
+	}
+
+	test("a red sweep behind more than a page of skipped nights still blocks", async () => {
+		const skips = Array.from({ length: HEALTH_PAGE_SIZE + 5 }, (_, i) =>
+			nightly(1000 - i, skippedJobs),
+		);
+		const { listPage, jobsFor } = history([
+			...skips,
+			nightly(3, sweptJobs("failure"), "failure"),
+		]);
+		const health = await mainHealthFromHistory(listPage, jobsFor, []);
+		expect(health.ok).toBe(false);
+		expect(health.message).toContain("actions/runs/3");
+	});
+
+	test("history that ends without a sweep is healthy", async () => {
+		const { listPage, jobsFor } = history([nightly(5, skippedJobs)]);
+		expect((await mainHealthFromHistory(listPage, jobsFor, [])).ok).toBe(true);
+	});
+
+	test("the page cap reached without a sweep is not healthy", async () => {
+		const skips = Array.from(
+			{ length: HEALTH_PAGE_SIZE * HEALTH_MAX_PAGES + 1 },
+			(_, i) => nightly(10_000 - i, skippedJobs),
+		);
+		const { listPage, jobsFor } = history(skips);
+		const health = await mainHealthFromHistory(listPage, jobsFor, []);
+		expect(health.ok).toBe(false);
+		expect(health.message).toContain("No nightly sweep");
 	});
 });

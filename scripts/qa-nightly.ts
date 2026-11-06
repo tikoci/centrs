@@ -204,6 +204,40 @@ export function mainHealth(
 	};
 }
 
+export const HEALTH_PAGE_SIZE = 30;
+/** 300 scheduled runs: most of a year of nightly runs. */
+export const HEALTH_MAX_PAGES = 10;
+
+/**
+ * {@link mainHealth} over the scheduled-run history, paging back until a run
+ * that swept decides. Skipped nights can come in long streaks; stopping at a
+ * fixed count would let an older red sweep fall out of view and pass main
+ * health wrongly. History that ends without a sweep is healthy; a page cap
+ * reached without one is not, because the answer is unknown.
+ */
+export async function mainHealthFromHistory(
+	listPage: (page: number) => Promise<Omit<NightlyRun, "jobs">[]>,
+	jobsFor: (id: number) => Promise<readonly Job[]>,
+	labels: readonly string[],
+): Promise<Health> {
+	const runs: NightlyRun[] = [];
+	for (let page = 1; page <= HEALTH_MAX_PAGES; page++) {
+		const listed = await listPage(page);
+		for (const run of listed) {
+			const jobs = await jobsFor(run.id);
+			runs.push({ ...run, jobs });
+			if (run.conclusion !== "cancelled" && swept(jobs)) {
+				return mainHealth(runs, labels);
+			}
+		}
+		if (listed.length < HEALTH_PAGE_SIZE) return mainHealth(runs, labels);
+	}
+	return {
+		ok: false,
+		message: `No nightly sweep among the last ${runs.length} scheduled runs; dispatch qa.yaml on main to establish main's health.`,
+	};
+}
+
 // ── CLI ──────────────────────────────────────────────────────────────────────
 
 function env(name: string): string {
@@ -311,22 +345,20 @@ async function health(args: readonly string[]): Promise<number> {
 	if (!pr || !/^\d+$/.test(pr)) throw new Error("--pr <number> is required");
 	// Read live, not from the event payload, so adding the label and re-running
 	// this job is enough; no `labeled` trigger re-runs all of CI.
+	const summary = flag(args, "--summary");
 	const labels = (await json<{ name: string }[]>(`issues/${pr}/labels`)).map(
 		(label) => label.name,
 	);
-	const listed = await json<{
-		workflow_runs: Omit<NightlyRun, "jobs">[];
-	}>(
-		"actions/workflows/qa.yaml/runs?event=schedule&branch=main&status=completed&per_page=10",
+	const verdict = await mainHealthFromHistory(
+		async (page) =>
+			(
+				await json<{ workflow_runs: Omit<NightlyRun, "jobs">[] }>(
+					`actions/workflows/qa.yaml/runs?event=schedule&branch=main&status=completed&per_page=${HEALTH_PAGE_SIZE}&page=${page}`,
+				)
+			).workflow_runs,
+		runJobs,
+		labels,
 	);
-	const runs: NightlyRun[] = [];
-	for (const run of listed.workflow_runs) {
-		const jobs = await runJobs(run.id);
-		runs.push({ ...run, jobs });
-		if (run.conclusion !== "cancelled" && swept(jobs)) break;
-	}
-	const verdict = mainHealth(runs, labels);
-	const summary = flag(args, "--summary");
 	if (summary) {
 		await appendFile(
 			summary,
