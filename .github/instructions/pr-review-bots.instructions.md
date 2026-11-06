@@ -53,9 +53,9 @@ misread the state of the PR.
 ## What actually blocks the merge
 
 `main` is branch-protected with **required status checks** (`Repo checks`,
-`Unit tests & coverage`, `Build`, `CHR smoke (stable)`, `CodeRabbit`) **plus
-required conversation resolution**, `enforce_admins: false` (an admin can still
-override the button or merge via `gh`).
+`Unit tests & coverage`, `Build`, `CHR smoke (stable)`, `Main health (nightly QA)`,
+`CodeRabbit`) **plus required conversation resolution**, `enforce_admins: false`
+(an admin can still override the button or merge via `gh`).
 
 Because the bots and local reviewers submit `COMMENTED` (never
 `CHANGES_REQUESTED`), `gh pr view N --json reviewDecision` stays **empty** for
