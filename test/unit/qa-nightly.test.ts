@@ -226,5 +226,23 @@ describe("mainHealthFromHistory", () => {
 		const health = await mainHealthFromHistory(listPage, jobsFor, []);
 		expect(health.ok).toBe(false);
 		expect(health.message).toContain("No nightly sweep");
+		// The recovery it names must be one that clears it: a sweeping nightly.
+		expect(health.message).toContain("nightly-fingerprint.json");
+		expect(health.message).not.toContain("dispatch");
+		expect(
+			(await mainHealthFromHistory(listPage, jobsFor, [FIXES_MAIN_LABEL])).ok,
+		).toBe(true);
+	});
+
+	test("after the recovery, the next nightly sweep decides", async () => {
+		const skips = Array.from(
+			{ length: HEALTH_PAGE_SIZE * HEALTH_MAX_PAGES + 1 },
+			(_, i) => nightly(10_000 - i, skippedJobs),
+		);
+		const { listPage, jobsFor } = history([
+			nightly(20_000, sweptJobs("success")),
+			...skips,
+		]);
+		expect((await mainHealthFromHistory(listPage, jobsFor, [])).ok).toBe(true);
 	});
 });

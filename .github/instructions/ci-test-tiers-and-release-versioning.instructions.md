@@ -95,7 +95,9 @@ scheme as the reference):
   (`test/integration/chr-smoke.test.ts`, single boot). On PRs, `Main health
   (nightly QA)` fails while the latest nightly sweep failed on a must-pass
   channel, unless the PR carries the `fixes-main` label (read live: add it,
-  then re-run the job). Coverage + failing tests surface to the job summary +
+  then re-run the job). Only scheduled runs count, so a dispatched sweep does
+  not clear it; to force the next nightly to sweep, delete
+  `nightly-fingerprint.json` on the `qa-history` branch. Coverage + failing tests surface to the job summary +
   artifacts; coverage floor is a non-blocking annotation. The local pre-push
   hook runs the same `lint:ci` repo checks but leaves unit tests and build to
   these hosted jobs.

@@ -221,8 +221,10 @@ export const HEALTH_MAX_PAGES = 10;
  * {@link mainHealth} over the scheduled-run history, paging back until a run
  * that swept decides. Skipped nights can come in long streaks; stopping at a
  * fixed count would let an older red sweep fall out of view and pass main
- * health wrongly. History that ends without a sweep is healthy; a page cap
- * reached without one is not, because the answer is unknown.
+ * health wrongly. History that ends without a sweep is healthy. A page cap
+ * reached without one is unknown, so it fails (unless the PR carries
+ * {@link FIXES_MAIN_LABEL}) and names the recovery: delete the fingerprint so
+ * the next nightly sweeps. A dispatched run cannot clear it.
  */
 export async function mainHealthFromHistory(
 	listPage: (page: number) => Promise<Omit<NightlyRun, "jobs">[]>,
@@ -241,9 +243,18 @@ export async function mainHealthFromHistory(
 		}
 		if (listed.length < HEALTH_PAGE_SIZE) return mainHealth(runs, labels);
 	}
+	// Main's health is unknown. A dispatch cannot settle it (only scheduled
+	// runs count), so the recovery is to make the next nightly sweep.
+	const unknown = `No nightly sweep among the last ${runs.length} scheduled runs, so main's health is unknown.`;
+	if (labels.includes(FIXES_MAIN_LABEL)) {
+		return {
+			ok: true,
+			message: `${unknown} This PR carries \`${FIXES_MAIN_LABEL}\`, so it may merge on its own green CI.`,
+		};
+	}
 	return {
 		ok: false,
-		message: `No nightly sweep among the last ${runs.length} scheduled runs; dispatch qa.yaml on main to establish main's health.`,
+		message: `${unknown} Delete \`${FINGERPRINT_FILE}\` on the \`${QA_HISTORY_BRANCH}\` branch; the next nightly then sweeps and decides. Until then a PR needs the \`${FIXES_MAIN_LABEL}\` label.`,
 	};
 }
 
