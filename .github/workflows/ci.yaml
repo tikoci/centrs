@@ -3,16 +3,27 @@ run-name: CI • ${{ github.event_name }} • ${{ github.ref_name }}
 
 # Fast push/PR gate, staged so the cheapest signal fails first:
 #
-#   repo checks ─┬→ build
+#   changes ──┐ (docs-only → everything below `checks` skips)
+#   repo checks ─┬→ build, corpus
 #                └─┐
-#   unit+coverage ─┴→ chr-smoke (stable, x86 KVM)
+#   unit (ubuntu + coverage) ─┴→ chr-smoke (stable, x86 KVM)
+#   unit (macOS, Windows) ──┐
+#   unit (ubuntu) ──────────┴→ "Unit tests & coverage" (the required check)
+#   main-health (PRs only: is the latest nightly sweep green?)
 #
 # Why staged: a lint/unit failure is platform-agnostic, so there is no point
 # booting a ~10-min CHR until the core x86 path is green.
-# Cross-platform unit (macOS + Windows) runs in qa.yaml on push to main, so
-# escapes are caught there without slowing every PR. The full RouterOS channel
-# × OS matrix lives in qa.yaml (release.yaml reuses its result on the commit it
-# publishes); the platform/arch sweep in verify-extended.yaml. See
+#
+# Docs-only changes run repo checks (and main health) only. The `changes` job
+# classifies the diff with scripts/ci-changes.ts and every heavier job skips
+# through a job-level `if:` — never a workflow-level `paths:`: a required
+# check whose workflow never starts stays pending forever, while a job skipped
+# by `if:` reports success. Because a skip reads as green, the `if:`s test
+# `!= 'false'`: a classifier that failed or answered nothing runs everything.
+#
+# The full RouterOS channel × OS matrix is the nightly qa.yaml (release.yaml
+# reuses it on the commit it publishes, or sweeps); the platform/arch CHR sweep
+# is verify-extended.yaml. See
 # .github/instructions/ci-test-tiers-and-release-versioning.instructions.md.
 #
 # IMPORTANT: every `bun test … | tee` step runs under `set -eo pipefail` — without
@@ -47,6 +58,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Never fails: any error inside the script answers heavy=true. The job-level
+  # `if:`s below also treat a missing answer as "run".
+  changes:
+    name: Classify changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read # the PR's file list
+    outputs:
+      heavy: ${{ steps.classify.outputs.heavy }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - name: Classify the diff (docs-only or not)
+        id: classify
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun run scripts/ci-changes.ts
+
   checks:
     name: Repo checks
     runs-on: ubuntu-latest
@@ -64,8 +101,10 @@ jobs:
       - name: Repo checks (source, docs, spelling, secrets)
         run: bun run lint:ci
 
-  unit:
-    name: Unit tests & coverage
+  unit-linux:
+    name: Unit tests (ubuntu-latest) & coverage
+    needs: [changes]
+    if: ${{ !cancelled() && needs.changes.outputs.heavy != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -153,9 +192,58 @@ jobs:
             echo "::warning title=Coverage::Line coverage ${LINE_PCT}% below floor ${COVERAGE_MIN_LINES}%"
           fi
 
+  # Cross-platform unit (moved here from qa.yaml): every code PR and push to
+  # main. Windows is informational (continue-on-error) until centrs is verified
+  # Windows-clean; macOS gates through the `unit` aggregator below.
+  unit-cross:
+    name: Unit tests (${{ matrix.os }})
+    needs: [changes]
+    if: ${{ !cancelled() && needs.changes.outputs.heavy != 'false' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Unit tests
+        run: bun test test/unit/
+
+  # The required check keeps its name: it reports the Linux coverage job and the
+  # cross-platform legs as one result. Skipped (= success) for docs-only.
+  unit:
+    name: Unit tests & coverage
+    needs: [changes, unit-linux, unit-cross]
+    if: ${{ !cancelled() && needs.changes.outputs.heavy != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every unit leg passed
+        env:
+          LINUX: ${{ needs.unit-linux.result }}
+          CROSS: ${{ needs.unit-cross.result }}
+        run: |
+          echo "Linux + coverage: $LINUX; macOS/Windows: $CROSS"
+          if [ "$LINUX" != "success" ] || [ "$CROSS" != "success" ]; then
+            echo "::error title=Unit tests::Linux $LINUX, macOS/Windows $CROSS"
+            exit 1
+          fi
+
   build:
     name: Build
-    needs: [checks]
+    needs: [changes, checks]
+    if: ${{ !cancelled() && needs.checks.result == 'success' && needs.changes.outputs.heavy != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -197,7 +285,8 @@ jobs:
   # inside `lint:ci`.
   corpus:
     name: Corpus census
-    needs: [checks]
+    needs: [changes, checks]
+    if: ${{ !cancelled() && needs.checks.result == 'success' && needs.changes.outputs.heavy != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -271,7 +360,8 @@ jobs:
 
   chr-smoke:
     name: CHR smoke (stable)
-    needs: [checks, unit]
+    needs: [changes, checks, unit-linux]
+    if: ${{ !cancelled() && needs.checks.result == 'success' && needs.unit-linux.result == 'success' && needs.changes.outputs.heavy != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -370,3 +460,35 @@ jobs:
             ${{ runner.temp }}/smoke-report.jsonl
           if-no-files-found: warn
           retention-days: 7
+
+  # Main-health gate: an ordinary PR cannot merge while the latest nightly that
+  # swept (qa.yaml, scheduled) failed on a must-pass channel. A PR labelled
+  # `fixes-main` passes, so the repair merges on its own green CI. The label is
+  # read live, so after adding it re-run this job; no `labeled` trigger re-runs
+  # the whole workflow. Decisions: scripts/qa-nightly.ts (`mainHealth`).
+  main-health:
+    name: Main health (nightly QA)
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read # the nightly runs and their jobs
+      issues: read # the PR's labels
+      pull-requests: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Latest nightly sweep is green on its must-pass channels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: bun run scripts/qa-nightly.ts main-health --pr "$PR_NUMBER" --summary "$GITHUB_STEP_SUMMARY"

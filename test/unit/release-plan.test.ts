@@ -122,6 +122,42 @@ describe("qaVerdict (#484)", () => {
 		expect(verdict.message).not.toContain("::error::");
 	});
 
+	test("a nightly the pre-flight skipped tested nothing and is never reused", () => {
+		const skipped = run({ event: "schedule", swept: false });
+		expect(qaVerdict([skipped], SHA).action).toBe("sweep");
+	});
+
+	test("behind a skipped nightly, the nightly that swept the commit decides", () => {
+		const skipped = run({ event: "schedule", swept: false });
+		expect(
+			qaVerdict([skipped, run({ event: "schedule", swept: true })], SHA).action,
+		).toBe("reuse");
+		expect(
+			qaVerdict(
+				[skipped, run({ event: "schedule", conclusion: "failure" })],
+				SHA,
+			).action,
+		).toBe("refuse");
+	});
+
+	test("a nightly that failed before any CHR leg sweeps instead of refusing", () => {
+		const broken = run({
+			event: "schedule",
+			conclusion: "failure",
+			swept: false,
+		});
+		expect(qaVerdict([broken], SHA).action).toBe("sweep");
+		const red = run({ event: "schedule", conclusion: "failure", swept: true });
+		expect(qaVerdict([red], SHA).action).toBe("refuse");
+	});
+
+	test("a nightly pre-flight still running is waited for", () => {
+		const runs = [
+			run({ event: "schedule", status: "in_progress", conclusion: null }),
+		];
+		expect(qaVerdict(runs, SHA).action).toBe("wait");
+	});
+
 	test("dispatch runs and other commits do not count", () => {
 		const runs = [
 			run({ event: "workflow_dispatch" }),
