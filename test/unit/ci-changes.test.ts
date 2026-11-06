@@ -108,6 +108,22 @@ const MENTIONS: Record<string, string> = {
 		"link text written into generated error pages",
 	"test/unit/settings-registry.test.ts → commands/settings/README.md":
 		"a test title; the key list is in the test itself",
+	"scripts/release-plan.ts → CHANGELOG.md":
+		"read by release.yaml only; release-plan.test.ts uses an inline changelog",
+	"test/unit/error-pages.test.ts → README.md": "docs/errors/README.md",
+	"scripts/build-pages-site.ts → README.md": "docs/errors/README.md, for Pages",
+	...Object.fromEntries(
+		[
+			"explain-bracket-equals",
+			"explain-highlight-agreement",
+			"explain-operator-slice",
+			"explain-token-census",
+			"explain-value-census",
+		].map((script) => [
+			`scripts/${script}.ts → README.md`,
+			"commands/explain/README.md, a multi-line join() that is already code",
+		]),
+	),
 };
 
 describe("docs-only guard", () => {
@@ -156,7 +172,7 @@ describe("docs-only guard", () => {
 			const name = parts.at(-1) ?? doc;
 			const needles =
 				parts.length === 1
-					? [`../${name}`, `"..", "${name}"`]
+					? [`../${name}`, `"..", "${name}"`, `"${name}"`, `'${name}'`]
 					: [doc, parts.slice(-2).join("/"), `"${parts.at(-2)}", "${name}"`];
 			for (const { path, text } of sources) {
 				if (needles.some((needle) => text.includes(needle))) {

@@ -466,10 +466,12 @@ jobs:
             --summary "$GITHUB_STEP_SUMMARY"
       # The nightly's fingerprint, compared by tomorrow's pre-flight. Written
       # even when the gate failed (a red night is still a completed nightly),
-      # but not for a cancelled run, which reached no verdict. It is the
-      # pre-flight's own JSON; the reader rejects anything malformed.
+      # but only when the matrix resolved and its legs ran: a cancelled run, or
+      # one whose resolve failed after the pre-flight, swept nothing, and
+      # recording it would let tomorrow skip. It is the pre-flight's own JSON;
+      # the reader rejects anything malformed.
       - name: Record the nightly fingerprint
-        if: ${{ !cancelled() && github.event_name == 'schedule' }}
+        if: ${{ !cancelled() && github.event_name == 'schedule' && needs.resolve-matrix.result == 'success' && needs.chr-matrix.result != 'skipped' }}
         env:
           FINGERPRINT: ${{ needs.resolve-matrix.outputs.fingerprint }}
         run: printf '%s\n' "$FINGERPRINT" > qa-history/nightly-fingerprint.json

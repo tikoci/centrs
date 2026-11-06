@@ -95,9 +95,11 @@ CodeRabbit is a required check, but its review allowance is small, and an
 agent-to-agent review often catches more. Spend it deliberately:
 
 - Every change goes through a PR. A small docs-only update (`AGENTS.md`,
-  `README.md`, `CHANGELOG.md`, a command README) is worth recording: open a
-  docs-only PR for it. CI then runs only repo checks and main health, so the
-  ceremony is small. Push straight to main only when the maintainer directs it.
+  `README.md`, `CHANGELOG.md`) is worth recording: open a docs-only PR for it.
+  CI then runs only repo checks and main health, so the ceremony is small.
+  `isDocsOnlyPath` in `scripts/ci-changes.ts` is the exact list; prose a test
+  reads, such as `commands/explain/README.md`, runs full CI. Push straight to
+  main only when the maintainer directs it.
 - Leave PRs as drafts. Drafts get no automatic CodeRabbit review; the
   maintainer marks a PR ready, which triggers one.
 - Never add the `skip-review` label unless the maintainer directs it. It skips

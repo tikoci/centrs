@@ -138,8 +138,35 @@ describe("swept / mustPassFailures", () => {
 		]);
 	});
 
+	test("any must-pass conclusion other than success blocks", () => {
+		for (const conclusion of [
+			"startup_failure",
+			"action_required",
+			"stale",
+			"neutral",
+			null,
+		]) {
+			expect(
+				mustPassFailures(sweptJobs("success", conclusion as string)),
+			).toEqual(["long-term"]);
+		}
+	});
+
+	test("a missing must-pass leg or gate blocks", () => {
+		const noLongTerm = sweptJobs("success").filter(
+			(job) => job.name !== "CHR • long-term",
+		);
+		expect(mustPassFailures(noLongTerm)).toEqual(["long-term"]);
+		const noGate = sweptJobs("success").filter((job) => job.name !== GATE_JOB);
+		expect(mustPassFailures(noGate)).toEqual(["must-pass gate"]);
+	});
+
 	test("a failed gate with green legs still counts", () => {
-		const jobs = [job("CHR • stable", "success"), job(GATE_JOB, "failure")];
+		const jobs = [
+			job("CHR • stable", "success"),
+			job("CHR • long-term", "success"),
+			job(GATE_JOB, "failure"),
+		];
 		expect(mustPassFailures(jobs)).toEqual(["must-pass gate"]);
 	});
 });

@@ -140,23 +140,27 @@ export function swept(jobs: readonly Job[]): boolean {
 	);
 }
 
-const FAILED = new Set(["failure", "timed_out"]);
-
-/** The must-pass channels whose leg, or the gate over them, failed. */
+/**
+ * The must-pass channels whose leg, or the gate over them, did not end
+ * `success`, in a run that swept. Anything else blocks: `failure` and
+ * `timed_out`, but also `startup_failure`, `action_required`, `stale`, a leg
+ * that never appeared, or a gate that did not run. Pre-release legs never
+ * count.
+ */
 export function mustPassFailures(jobs: readonly Job[]): string[] {
 	const failed = new Set<string>();
-	for (const job of jobs) {
-		if (!job.name.startsWith(CHR_JOB_PREFIX)) continue;
-		const channel = job.name.slice(CHR_JOB_PREFIX.length).split(" • ")[0] ?? "";
-		if (
-			MUST_PASS_CHANNELS.includes(channel) &&
-			FAILED.has(job.conclusion ?? "")
-		) {
+	for (const channel of MUST_PASS_CHANNELS) {
+		const legs = jobs.filter(
+			(job) =>
+				job.name.startsWith(CHR_JOB_PREFIX) &&
+				job.name.slice(CHR_JOB_PREFIX.length).split(" • ")[0] === channel,
+		);
+		if (legs.length === 0 || legs.some((leg) => leg.conclusion !== "success")) {
 			failed.add(channel);
 		}
 	}
 	const gate = jobs.find((job) => job.name === GATE_JOB);
-	if (failed.size === 0 && gate && FAILED.has(gate.conclusion ?? "")) {
+	if (failed.size === 0 && gate?.conclusion !== "success") {
 		failed.add("must-pass gate");
 	}
 	return [...failed];

@@ -140,6 +140,17 @@ describe("qaVerdict (#484)", () => {
 		).toBe("refuse");
 	});
 
+	test("a nightly that failed before any CHR leg sweeps instead of refusing", () => {
+		const broken = run({
+			event: "schedule",
+			conclusion: "failure",
+			swept: false,
+		});
+		expect(qaVerdict([broken], SHA).action).toBe("sweep");
+		const red = run({ event: "schedule", conclusion: "failure", swept: true });
+		expect(qaVerdict([red], SHA).action).toBe("refuse");
+	});
+
 	test("a nightly pre-flight still running is waited for", () => {
 		const runs = [
 			run({ event: "schedule", status: "in_progress", conclusion: null }),

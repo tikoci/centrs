@@ -81,8 +81,10 @@ export interface WorkflowRun {
 	head_sha: string;
 	/**
 	 * Whether a completed run booted any CHR leg. A nightly whose pre-flight
-	 * found nothing changed ends `success` having tested nothing; `false` marks
-	 * it so it is never reused. Unset means unknown and is taken as swept.
+	 * found nothing changed ends `success` having tested nothing, and one that
+	 * failed before the matrix ends `failure` the same way; `false` marks both,
+	 * so neither is reused nor refuses the release. A failed CHR leg still
+	 * counts as swept and refuses. Unset means unknown and is taken as swept.
 	 */
 	swept?: boolean;
 }
@@ -257,13 +259,15 @@ async function qaRuns(sha: string): Promise<WorkflowRun[]> {
 	if (!response.ok) throw new Error(`QA run lookup: HTTP ${response.status}`);
 	const runs = ((await response.json()) as { workflow_runs: WorkflowRun[] })
 		.workflow_runs;
-	// Only a completed green nightly can be a skipped one; ask its jobs.
+	// A completed nightly may have booted no CHR leg: a skipped night, or one
+	// that failed before the matrix. Ask its jobs. A cancelled run is already
+	// passed over by qaVerdict.
 	for (const run of runs) {
 		if (
 			run.id !== undefined &&
 			run.event === "schedule" &&
 			run.status === "completed" &&
-			run.conclusion === "success"
+			run.conclusion !== "cancelled"
 		) {
 			run.swept = swept(await runJobs(run.id));
 		}
