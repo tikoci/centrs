@@ -94,10 +94,12 @@ travels with the text:
 CodeRabbit is a required check, but its review allowance is small, and an
 agent-to-agent review often catches more. Spend it deliberately:
 
-- Keep a PR a draft while iterating. Drafts get no automatic CodeRabbit review,
-  and marking the PR ready triggers one.
-- To skip CodeRabbit for a small change, create the PR with the `skip-review`
-  label (`gh pr create --label skip-review`).
+- Every change goes through a PR. Docs-only changes may go straight to main,
+  by any agent, but only when the maintainer directs it.
+- Leave PRs as drafts. Drafts get no automatic CodeRabbit review; the
+  maintainer marks a PR ready, which triggers one.
+- Never add the `skip-review` label unless the maintainer directs it. It skips
+  CodeRabbit (`gh pr create --label skip-review`).
 - Request a pass on the current head at any time with an `@coderabbitai review`
   PR comment.
 
