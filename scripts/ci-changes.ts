@@ -15,12 +15,11 @@
  * `test/unit/ci-changes.test.ts` fails when a test, script or source file
  * starts reading a path this module calls docs-only.
  *
- * Decisions ({@link classify}):
- *   - pull_request: the PR's own diff against its base is docs-only → skip.
- *   - pull_request (synchronize) and push to main: the diff since the previous
- *     head is docs-only, the previous head is an ancestor, and CI on it
- *     concluded success → skip; the heavy results carry over unchanged.
- *   - anything else (dispatch, an unknown event, a lookup error) → run.
+ * Decisions ({@link classify}): a pull_request whose whole diff against its
+ * base is docs-only skips, and so does a push to main whose diff since the
+ * previous head is. Everything else runs: a PR touching any code (a later
+ * docs-only fixup does not change that), a dispatch, a force push, a lookup
+ * error.
  *
  * Repo checks (`lint:ci`) always run, so spelling and markdown lint still gate a
  * docs-only change.
@@ -95,20 +94,17 @@ export type FileList = { files: readonly string[] } | { incomplete: string };
 
 export interface ClassifyInput {
 	event: string;
-	/** pull_request: the PR's files against its base. */
-	prFiles?: FileList;
-	/**
-	 * Push, or a pull_request synchronize: the files since the previous head,
-	 * plus whether that head is an ancestor and whether CI on it passed.
-	 */
-	sinceBefore?: {
-		files: FileList;
-		ancestor: boolean;
-		previousCi: "success" | "other" | "none";
-	};
+	/** pull_request: the PR's files against its base. push: since `before`. */
+	files?: FileList;
 }
 
-function describeDiff(list: FileList, label: string): Classification | null {
+export function classify(input: ClassifyInput): Classification {
+	if (input.event !== "pull_request" && input.event !== "push") {
+		return { heavy: true, reason: `\`${input.event}\` always runs every job` };
+	}
+	const label = input.event === "push" ? "The push" : "The PR";
+	const list = input.files;
+	if (!list) return { heavy: true, reason: `${label}'s files were not read` };
 	if ("incomplete" in list) {
 		return { heavy: true, reason: `${label}: ${list.incomplete}` };
 	}
@@ -122,53 +118,12 @@ function describeDiff(list: FileList, label: string): Classification | null {
 			reason: `${label} touches \`${code}\`, which is not docs-only`,
 		};
 	}
-	return null;
-}
-
-export function classify(input: ClassifyInput): Classification {
-	if (input.event !== "pull_request" && input.event !== "push") {
-		return { heavy: true, reason: `\`${input.event}\` always runs every job` };
-	}
-	let prReason: string | null = null;
-	if (input.event === "pull_request") {
-		if (!input.prFiles) {
-			prReason = "the PR file list was not read";
-		} else {
-			const verdict = describeDiff(input.prFiles, "The PR");
-			if (!verdict) {
-				return { heavy: false, reason: "The PR changes docs only." };
-			}
-			prReason = verdict.reason;
-		}
-	}
-	const since = input.sinceBefore;
-	if (!since) {
-		return { heavy: true, reason: prReason ?? "no previous head to compare" };
-	}
-	const prefix = prReason ? `${prReason}; ` : "";
-	if (!since.ancestor) {
-		return {
-			heavy: true,
-			reason: `${prefix}the previous head is not an ancestor (force push or rebase)`,
-		};
-	}
-	const verdict = describeDiff(since.files, "The diff since the previous head");
-	if (verdict) return { heavy: true, reason: `${prefix}${verdict.reason}` };
-	if (since.previousCi !== "success") {
-		return {
-			heavy: true,
-			reason: `${prefix}only docs changed since the previous head, but CI on it did not pass, so there is nothing to carry over`,
-		};
-	}
-	return {
-		heavy: false,
-		reason: `${prefix}only docs changed since the previous head, and CI passed on it; its results carry over.`,
-	};
+	return { heavy: false, reason: `${label} changes docs only.` };
 }
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
 
-/** GitHub caps both listings; a full page at the cap may be truncated. */
+/** GitHub caps both listings; a listing at the cap may be truncated. */
 const PR_FILES_CAP = 3000;
 const COMPARE_FILES_CAP = 300;
 
@@ -221,69 +176,42 @@ async function prFiles(pr: number): Promise<FileList> {
 
 const SHA = /^[0-9a-f]{40}$/;
 
-async function sinceBefore(
-	before: string,
-	after: string,
-	event: string,
-): Promise<ClassifyInput["sinceBefore"]> {
+/** A push's files since `before`; only a fast-forward diff is trusted. */
+async function pushFiles(before: string, after: string): Promise<FileList> {
 	const compare = await github<{ status: string; files?: ChangedFile[] }>(
 		`compare/${before}...${after}`,
 	);
+	if (compare.status !== "ahead") {
+		return { incomplete: "the previous head is not an ancestor" };
+	}
 	const files = compare.files ?? [];
-	const list: FileList =
-		files.length >= COMPARE_FILES_CAP
-			? { incomplete: `${COMPARE_FILES_CAP}+ files since the previous head` }
-			: { files: names(files) };
-	const runs = await github<{
-		workflow_runs: { status: string; conclusion: string | null }[];
-	}>(`actions/workflows/ci.yaml/runs?head_sha=${before}&event=${event}`);
-	// Newest first. Only the latest run on that head speaks for it.
-	const latest = runs.workflow_runs[0];
-	const previousCi = !latest
-		? "none"
-		: latest.status === "completed" && latest.conclusion === "success"
-			? "success"
-			: "other";
-	return { files: list, ancestor: compare.status === "ahead", previousCi };
+	return files.length >= COMPARE_FILES_CAP
+		? { incomplete: `${COMPARE_FILES_CAP}+ files since the previous head` }
+		: { files: names(files) };
 }
 
 async function gather(): Promise<ClassifyInput> {
 	const event = env("GITHUB_EVENT_NAME");
 	const payload = (await Bun.file(env("GITHUB_EVENT_PATH")).json()) as {
-		action?: string;
 		before?: string;
 		after?: string;
 		number?: number;
-		pull_request?: { head: { sha: string } };
 	};
-	const input: ClassifyInput = { event };
 	if (event === "pull_request" && payload.number !== undefined) {
-		input.prFiles = await prFiles(payload.number);
-		if (input.prFiles && "files" in input.prFiles) {
-			if (firstCodePath(input.prFiles.files) === null) return input;
-		}
-		const after = payload.after ?? payload.pull_request?.head.sha;
-		if (
-			payload.action === "synchronize" &&
-			payload.before &&
-			after &&
-			SHA.test(payload.before) &&
-			SHA.test(after)
-		) {
-			input.sinceBefore = await sinceBefore(payload.before, after, event);
-		}
+		return { event, files: await prFiles(payload.number) };
 	}
+	const { before, after } = payload;
 	if (
 		event === "push" &&
-		payload.before &&
-		payload.after &&
-		SHA.test(payload.before) &&
-		SHA.test(payload.after) &&
-		!/^0+$/.test(payload.before)
+		before &&
+		after &&
+		SHA.test(before) &&
+		SHA.test(after) &&
+		!/^0+$/.test(before)
 	) {
-		input.sinceBefore = await sinceBefore(payload.before, payload.after, event);
+		return { event, files: await pushFiles(before, after) };
 	}
-	return input;
+	return { event };
 }
 
 async function main(): Promise<number> {

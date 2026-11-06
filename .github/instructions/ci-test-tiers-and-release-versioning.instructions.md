@@ -87,8 +87,8 @@ scheme as the reference):
   reports stays pending; a job skipped by `if:` reports success). Docs-only is
   conservative: prose no test, script or build reads — not
   `commands/*/examples.md`, generated docs, or prose a test parses
-  (`test/unit/ci-changes.test.ts` guards the list). A push whose diff since a
-  green previous head is docs-only carries that head's results over. Unit runs
+  (`test/unit/ci-changes.test.ts` guards the list). A PR is docs-only when its
+  whole diff is; a push to main when its own diff is. Unit runs
   on Linux (with coverage) and macOS + Windows (Windows informational); the
   required check `Unit tests & coverage` aggregates them. Repo checks then
   unlock the build, while repo checks + Linux unit unlock **stable CHR smoke**

@@ -94,12 +94,15 @@ travels with the text:
 CodeRabbit is a required check, but its review allowance is small, and an
 agent-to-agent review often catches more. Spend it deliberately:
 
-- Every change goes through a PR. Docs-only changes may go straight to main,
-  by any agent, but only when the maintainer directs it.
+- Every change goes through a PR. A small docs-only update (`AGENTS.md`,
+  `README.md`, `CHANGELOG.md`, a command README) is worth recording: open a
+  docs-only PR for it. CI then runs only repo checks and main health, so the
+  ceremony is small. Push straight to main only when the maintainer directs it.
 - Leave PRs as drafts. Drafts get no automatic CodeRabbit review; the
   maintainer marks a PR ready, which triggers one.
 - Never add the `skip-review` label unless the maintainer directs it. It skips
-  CodeRabbit (`gh pr create --label skip-review`).
+  CodeRabbit (`gh pr create --label skip-review`) and is the maintainer's
+  escape hatch when main is blocked.
 - Request a pass on the current head at any time with an `@coderabbitai review`
   PR comment.
 

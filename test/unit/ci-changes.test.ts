@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { Glob } from "bun";
 import {
-	type ClassifyInput,
 	classify,
 	isDocsOnlyPath,
 	PROSE_READ_BY_TESTS,
@@ -53,82 +52,34 @@ describe("isDocsOnlyPath", () => {
 });
 
 describe("classify", () => {
-	const docs = { files: ["README.md", "docs/CONSTITUTION.md"] };
+	const docs = { files: ["README.md", "AGENTS.md", "CHANGELOG.md"] };
 	const code = { files: ["README.md", "src/cli.ts"] };
 
-	test("a docs-only PR skips the heavy jobs", () => {
-		expect(classify({ event: "pull_request", prFiles: docs }).heavy).toBe(
-			false,
-		);
+	test("a docs-only PR or push skips the heavy jobs", () => {
+		expect(classify({ event: "pull_request", files: docs }).heavy).toBe(false);
+		expect(classify({ event: "push", files: docs }).heavy).toBe(false);
 	});
 
-	test("a PR touching code runs them and names the file", () => {
-		const verdict = classify({ event: "pull_request", prFiles: code });
+	test("touching any code runs them and names the file", () => {
+		const verdict = classify({ event: "pull_request", files: code });
 		expect(verdict.heavy).toBe(true);
 		expect(verdict.reason).toContain("src/cli.ts");
 	});
 
-	test("an incomplete or empty file list runs them", () => {
+	test("an unread, incomplete or empty file list runs them", () => {
+		expect(classify({ event: "pull_request" }).heavy).toBe(true);
 		expect(
-			classify({ event: "pull_request", prFiles: { incomplete: "too big" } })
+			classify({ event: "push", files: { incomplete: "not an ancestor" } })
 				.heavy,
 		).toBe(true);
 		expect(
-			classify({ event: "pull_request", prFiles: { files: [] } }).heavy,
+			classify({ event: "pull_request", files: { files: [] } }).heavy,
 		).toBe(true);
 	});
 
 	test("dispatch and unknown events always run", () => {
 		expect(classify({ event: "workflow_dispatch" }).heavy).toBe(true);
 		expect(classify({ event: "merge_group" }).heavy).toBe(true);
-	});
-
-	const since = (
-		over: Partial<NonNullable<ClassifyInput["sinceBefore"]>>,
-	): NonNullable<ClassifyInput["sinceBefore"]> => ({
-		files: docs,
-		ancestor: true,
-		previousCi: "success",
-		...over,
-	});
-
-	test("a docs-only push after a green head carries its results over", () => {
-		expect(classify({ event: "push", sinceBefore: since({}) }).heavy).toBe(
-			false,
-		);
-		expect(
-			classify({
-				event: "pull_request",
-				prFiles: code,
-				sinceBefore: since({}),
-			}).heavy,
-		).toBe(false);
-	});
-
-	test("nothing carries over from a head whose CI did not pass", () => {
-		for (const previousCi of ["other", "none"] as const) {
-			const verdict = classify({
-				event: "pull_request",
-				prFiles: code,
-				sinceBefore: since({ previousCi }),
-			});
-			expect(verdict.heavy).toBe(true);
-			expect(verdict.reason).toContain("did not pass");
-		}
-	});
-
-	test("a force push or a code diff since the previous head runs", () => {
-		expect(
-			classify({ event: "push", sinceBefore: since({ ancestor: false }) })
-				.heavy,
-		).toBe(true);
-		expect(
-			classify({ event: "push", sinceBefore: since({ files: code }) }).heavy,
-		).toBe(true);
-	});
-
-	test("a push with no previous head runs", () => {
-		expect(classify({ event: "push" }).heavy).toBe(true);
 	});
 });
 
