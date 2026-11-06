@@ -27,6 +27,7 @@
 
 // cspell:ignore vnd
 import { appendFile } from "node:fs/promises";
+import { cacheSafe } from "./chr-cache-key.ts";
 import { resolveChannelPlan } from "./qa-active-channels.ts";
 import { MUST_PASS_CHANNELS } from "./qa-results-db.ts";
 
@@ -61,7 +62,15 @@ export function parseFingerprint(text: string): Fingerprint | null {
 		if (typeof value.sha !== "string" || !value.versions) return null;
 		const versions = value.versions as Record<string, unknown>;
 		if (Object.values(versions).some((v) => typeof v !== "string")) return null;
-		return fingerprint(value.sha, versions as Record<string, string>);
+		if (!/^[0-9a-f]{40}$/.test(value.sha)) return null;
+		// Read back from the qa-history branch: keep it version-shaped.
+		const safe = Object.fromEntries(
+			Object.entries(versions as Record<string, string>).map(([c, v]) => [
+				cacheSafe(c),
+				cacheSafe(v),
+			]),
+		);
+		return fingerprint(value.sha, safe);
 	} catch {
 		return null;
 	}
@@ -274,6 +283,20 @@ export async function runJobs(id: number): Promise<Job[]> {
 	).jobs;
 }
 
+/**
+ * The fields the summary prints, rebuilt from values this job controls: the
+ * link from the repository and a numeric id, the commit only when it is a SHA.
+ */
+function trustedRun(run: Omit<NightlyRun, "jobs">): Omit<NightlyRun, "jobs"> {
+	const id = Number(run.id);
+	return {
+		id,
+		html_url: `https://github.com/${env("GITHUB_REPOSITORY")}/actions/runs/${id}`,
+		head_sha: /^[0-9a-f]{40}$/.test(run.head_sha) ? run.head_sha : "unknown",
+		conclusion: run.conclusion,
+	};
+}
+
 function flag(args: readonly string[], name: string): string | undefined {
 	const index = args.indexOf(name);
 	return index >= 0 ? args[index + 1] : undefined;
@@ -295,7 +318,11 @@ async function preflight(args: readonly string[]): Promise<number> {
 	const sha = env("GITHUB_SHA");
 	const plan = await resolveChannelPlan();
 	const versions = plan
-		? Object.fromEntries(plan.statuses.map((s) => [s.channel, s.version]))
+		? Object.fromEntries(
+				// Network data reaches $GITHUB_OUTPUT, the summary and qa-history:
+				// keep only version-shaped characters, as the cache key does.
+				plan.statuses.map((s) => [cacheSafe(s.channel), cacheSafe(s.version)]),
+			)
 		: null;
 	let previous: Fingerprint | null = null;
 	let lookupError = "";
@@ -355,7 +382,7 @@ async function health(args: readonly string[]): Promise<number> {
 				await json<{ workflow_runs: Omit<NightlyRun, "jobs">[] }>(
 					`actions/workflows/qa.yaml/runs?event=schedule&branch=main&status=completed&per_page=${HEALTH_PAGE_SIZE}&page=${page}`,
 				)
-			).workflow_runs,
+			).workflow_runs.map(trustedRun),
 		runJobs,
 		labels,
 	);

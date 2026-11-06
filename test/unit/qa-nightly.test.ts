@@ -79,6 +79,11 @@ describe("fingerprint storage", () => {
 		expect(parseFingerprint("not json")).toBeNull();
 		expect(parseFingerprint('{"sha":1,"versions":{}}')).toBeNull();
 		expect(parseFingerprint('{"sha":"x","versions":{"stable":7}}')).toBeNull();
+		expect(parseFingerprint('{"sha":"x","versions":{}}')).toBeNull();
+		const odd = parseFingerprint(
+			JSON.stringify({ sha: A, versions: { stable: "7.25\n::bad::7" } }),
+		);
+		expect(odd?.versions["stable"]).toBe("7.25bad7");
 	});
 });
 
