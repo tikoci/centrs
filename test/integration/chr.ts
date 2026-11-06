@@ -1,5 +1,11 @@
 import { appendFile } from "node:fs/promises";
 import { routerOsVersionAtLeast } from "../../src/core/preflight.ts";
+import {
+	BASELINE_SNAPSHOT,
+	type ChrReuse,
+	createChrReuse,
+	type ReuseHooks,
+} from "./chr-reuse.ts";
 
 type Channel = "stable" | "long-term" | "testing" | "development";
 
@@ -52,11 +58,20 @@ interface ChrInstance {
 	/** Wait for the REST endpoint to answer; resolves true once booted. */
 	waitForBoot(timeoutMs?: number): Promise<boolean>;
 	/** Run a RouterOS console command (used here to set identity / discovery). */
-	exec(command: string): Promise<unknown>;
+	exec(
+		command: string,
+		options?: { timeout?: number },
+	): Promise<{ output: string }>;
 	/** Issue a REST request; GET is the default when no init is supplied. */
 	rest(path: string, init?: RequestInit): Promise<unknown>;
 	/** Stop and delete the machine (alias of destroy on newer quickchr). */
 	remove(): Promise<void>;
+	/** QEMU live snapshots (qcow2 boot disk; quickchr's default). */
+	snapshot: {
+		list(): Promise<{ name: string }[]>;
+		save(name?: string): Promise<{ name: string }>;
+		load(name: string): Promise<void>;
+	};
 }
 
 interface StartOptions {
@@ -83,6 +98,12 @@ interface StartOptions {
 	 * client test forwards a host TCP port onto guest 2000 ({@link ChrPortForward}).
 	 */
 	extraPorts?: readonly ChrPortForward[];
+	/**
+	 * Boot disk format. quickchr defaults to `raw`; live snapshots need
+	 * `qcow2`, so the shared reuse CHR (#612) boots with it. The guest sees the
+	 * same RouterOS either way.
+	 */
+	bootDiskFormat?: "qcow2" | "raw";
 	/**
 	 * quickchr's managed login: a `quickchr` account plus a provisioned,
 	 * batch-verified SSH key the descriptor hands to `--quickchr` consumers.
@@ -484,9 +505,209 @@ export async function prefetchIntegrationChrImage(
 	return result;
 }
 
-export async function startIntegrationChr(
-	extra: Partial<StartOptions> = {},
-): Promise<StartedChr> {
+/** Per-call options that are not quickchr boot options. */
+export interface AcquireOptions {
+	/**
+	 * Lease the process's shared default CHR, restored to its baseline snapshot,
+	 * instead of booting a private one (#612; see `chr-reuse.ts`). Only for the
+	 * default fixture: combining it with any boot override is an error, because
+	 * an override must never be dropped to attach to the shared VM. That error
+	 * is raised whether or not reuse is enabled, so a misuse cannot pass only
+	 * under the rollback switch. Otherwise `reuse` is ignored (private boot)
+	 * when `CENTRS_CHR_REUSE=0`.
+	 */
+	reuse?: boolean;
+}
+
+export function isChrReuseEnabled(
+	env: Record<string, string | undefined> = Bun.env,
+): boolean {
+	return readEnv(env, "CENTRS_CHR_REUSE")?.trim() !== "0";
+}
+
+/** Bounded readiness after a boot or a restore. */
+const REUSE_READY_TIMEOUT_MS = 60_000;
+const REUSE_MARKER = "centrsReuseDirty";
+// `:typeof` of the marker, grounded on CHR 7.25.1: `bool` once set, `nothing`
+// for a global that is declared but unset (the restored baseline).
+const MARKER_SET = "bool";
+const MARKER_UNSET = "nothing";
+/** Boot options of a CHR that will be snapshotted: live snapshots need qcow2. */
+export const REUSE_BOOT_OPTIONS: Partial<StartOptions> = {
+	bootDiskFormat: "qcow2",
+};
+
+async function waitForTcp(port: number, timeoutMs: number): Promise<void> {
+	const deadline = Date.now() + timeoutMs;
+	let lastError: unknown;
+	while (Date.now() < deadline) {
+		try {
+			const socket = await Bun.connect({
+				hostname: "127.0.0.1",
+				port,
+				socket: { data() {} },
+			});
+			socket.end();
+			return;
+		} catch (error) {
+			lastError = error;
+			await Bun.sleep(500);
+		}
+	}
+	throw new Error(
+		`TCP ${port} not accepting connections within ${timeoutMs}ms: ${String(lastError)}`,
+	);
+}
+
+/**
+ * Flush this process's stale keep-alive sockets to the CHR's REST port.
+ *
+ * Bun's `fetch` pools idle sockets per host:port. A socket pooled before a
+ * restore belongs to a TCP session the restored guest never saw, so the next
+ * request on it fails at once with ECONNRESET — measured on the first REST
+ * request of every lease. Throwaway GETs here consume (and evict) those
+ * sockets before the test runs; two consecutive successes mean the pool is
+ * clean. This is harness readiness, not a retry of anything under test.
+ */
+async function drainFetchPool(chr: ChrInstance): Promise<void> {
+	const url = `${chr.restUrl.replace(/\/$/, "")}/rest/system/identity`;
+	const auth = splitQuickChrAuth(
+		readEnv(await chr.subprocessEnv(), "QUICKCHR_AUTH") ?? "admin:",
+	);
+	const headers = {
+		authorization: `Basic ${Buffer.from(`${auth.username}:${auth.password}`).toString("base64")}`,
+	};
+	let consecutive = 0;
+	let lastError: unknown;
+	for (let attempt = 0; attempt < 10 && consecutive < 2; attempt++) {
+		try {
+			// Same init shape as the centrs REST adapter: Bun keys its socket
+			// pool on the TLS options too, so a plain fetch would drain a
+			// different pool than the one the test's requests use.
+			const response = await fetch(url, {
+				headers,
+				// A stale socket can hang instead of resetting; a live CHR answers
+				// this GET in milliseconds.
+				signal: AbortSignal.timeout(1_500),
+				tls: { rejectUnauthorized: true },
+			} as RequestInit);
+			await response.arrayBuffer();
+			if (!response.ok) throw new Error(`HTTP ${response.status}`);
+			consecutive += 1;
+		} catch (error) {
+			lastError = error;
+			consecutive = 0;
+		}
+	}
+	if (consecutive < 2) {
+		throw new Error(
+			`REST on ${chr.name} did not answer twice in a row after the restore: ${String(lastError)}`,
+		);
+	}
+}
+
+/**
+ * quickchr-backed hooks for {@link createChrReuse}. Readiness is REST
+ * (`waitForBoot`) plus the native-API port accepting a fresh TCP connection;
+ * cleanliness is a RAM-only `:global` marker set just before `loadvm`, which a
+ * real restore erases.
+ */
+export function quickChrReuseHooks(
+	boot: () => Promise<ChrInstance>,
+	log: (message: string) => void = (message) => console.error(message),
+): ReuseHooks<ChrInstance> {
+	return {
+		boot,
+		async saveBaseline(chr) {
+			// quickchr's save() reads the snapshot list back and throws when the
+			// entry is missing, so a resolved save is a verified baseline.
+			// quickchr 0.5.4+ gives savevm/loadvm their own monitor budgets
+			// (quickchr#80); 0.5.2's flat 5 s often cut a 128 MiB savevm short.
+			await chr.snapshot.save(BASELINE_SNAPSHOT);
+		},
+		async markDirty(chr) {
+			// `exec` resolves with RouterOS's error text rather than throwing, so
+			// read the marker back: only `bool` proves it was set.
+			const { output } = await chr.exec(
+				`:global ${REUSE_MARKER} true; :put [:typeof $${REUSE_MARKER}]`,
+				{ timeout: 10_000 },
+			);
+			if (output.trim() !== MARKER_SET) {
+				throw new Error(
+					`setting the reuse marker on ${chr.name} returned ${JSON.stringify(output.trim())}, not "${MARKER_SET}"`,
+				);
+			}
+		},
+		async restoreBaseline(chr) {
+			await chr.snapshot.load(BASELINE_SNAPSHOT);
+		},
+		async ready(chr) {
+			if (!(await chr.waitForBoot(REUSE_READY_TIMEOUT_MS))) {
+				throw new Error(
+					`REST not ready within ${REUSE_READY_TIMEOUT_MS}ms on ${chr.name}`,
+				);
+			}
+			await waitForTcp(chr.ports.api, REUSE_READY_TIMEOUT_MS);
+			await drainFetchPool(chr);
+		},
+		async assertClean(chr) {
+			const { output } = await chr.exec(
+				`:global ${REUSE_MARKER}; :put [:typeof $${REUSE_MARKER}]`,
+				{ timeout: 10_000 },
+			);
+			const result = output.trim();
+			if (result === MARKER_SET) {
+				throw new Error(
+					`the pre-restore marker survived on ${chr.name}: the baseline was not restored`,
+				);
+			}
+			// Anything but `nothing` (an unset global) is an unproven router, for
+			// example `syntax error (line 1 column N)` from a failed check.
+			if (result !== MARKER_UNSET) {
+				throw new Error(
+					`the reuse marker check on ${chr.name} returned ${JSON.stringify(result)}, not "${MARKER_UNSET}": the restore is unproven`,
+				);
+			}
+		},
+		async remove(chr) {
+			await chr.remove();
+		},
+		log,
+	};
+}
+
+/**
+ * A view of the shared instance whose `destroy()`/`remove()` release the lease
+ * instead of deleting the VM. Everything else reads through to the real handle.
+ */
+function leasedView(chr: ChrInstance, release: () => void): ChrInstance {
+	const view = Object.create(chr) as ChrInstance;
+	const releaseAsync = async (): Promise<void> => {
+		release();
+	};
+	Object.defineProperties(view, {
+		destroy: { value: releaseAsync },
+		remove: { value: releaseAsync },
+	});
+	return view;
+}
+
+let processChrReuse: ChrReuse<ChrInstance> | undefined;
+
+/**
+ * Remove the process's shared CHR, if one was booted. Registered as a global
+ * `afterAll` by `test/integration/preload.ts`, so it runs once after every file
+ * in the `bun test` process.
+ */
+export async function disposeProcessChrReuse(): Promise<void> {
+	const reuse = processChrReuse;
+	processChrReuse = undefined;
+	await reuse?.dispose();
+}
+
+export async function bootIntegrationChr(
+	extra: Partial<StartOptions>,
+): Promise<ChrInstance> {
 	const selection = integrationChrSelection();
 	const requestedVersion = selection.version;
 	const requestedChannel = selection.channel;
@@ -510,7 +731,42 @@ export async function startIntegrationChr(
 			start(options: StartOptions): Promise<ChrInstance>;
 		};
 	};
-	const chr = await quickChrModule.QuickCHR.start(options);
+	return quickChrModule.QuickCHR.start(options);
+}
+
+async function acquireChr(
+	extra: Partial<StartOptions>,
+	acquire: AcquireOptions,
+): Promise<ChrInstance> {
+	if (!acquire.reuse) {
+		return bootIntegrationChr(extra);
+	}
+	if (Object.keys(extra).length > 0) {
+		throw new Error(
+			`startIntegrationChr: reuse is only for the default fixture; boot overrides (${Object.keys(extra).join(", ")}) need a private CHR`,
+		);
+	}
+	if (!isChrReuseEnabled()) {
+		return bootIntegrationChr({});
+	}
+	processChrReuse ??= createChrReuse(
+		quickChrReuseHooks(() => bootIntegrationChr(REUSE_BOOT_OPTIONS)),
+	);
+	const lease = await processChrReuse.acquire();
+	if (lease === undefined) {
+		return bootIntegrationChr({});
+	}
+	return leasedView(lease.instance, lease.release);
+}
+
+export async function startIntegrationChr(
+	extra: Partial<StartOptions> = {},
+	acquire: AcquireOptions = {},
+): Promise<StartedChr> {
+	const selection = integrationChrSelection();
+	const requestedVersion = selection.version;
+	const requestedChannel = selection.channel;
+	const chr = await acquireChr(extra, acquire);
 	const env = await chr.subprocessEnv();
 
 	return {
@@ -520,7 +776,7 @@ export async function startIntegrationChr(
 		requestedVersion: requestedVersion || undefined,
 		// Env-derived, like requestedChannel/requestedVersion — reflects the
 		// CENTRS_CHR_ARCH pin, not an `extra` boot-option override.
-		requestedArch,
+		requestedArch: selection.arch,
 	};
 }
 

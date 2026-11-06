@@ -127,7 +127,7 @@ const BODIES: { input: string; twin: string }[] = [
 
 describeFast("explain spaced arguments against CHR (#350)", () => {
 	test("pairs lower to their `=` twin and flags do not pair", async () => {
-		const started = await startIntegrationChr();
+		const started = await startIntegrationChr({}, { reuse: true });
 		try {
 			for (const { input, twin, obsolete, warns } of PAIRED) {
 				const parsed = await parseOf(started.chr, input);
@@ -200,7 +200,7 @@ describeFast("explain spaced arguments against CHR (#350)", () => {
 	}, 300_000);
 
 	test("a script body may drop its `=`; any other brace may not", async () => {
-		const started = await startIntegrationChr();
+		const started = await startIntegrationChr({}, { reuse: true });
 		try {
 			for (const { input, twin } of BODIES) {
 				expect({ input, parsed: await parseOf(started.chr, input) }).toEqual({
@@ -273,7 +273,7 @@ describeFast("explain spaced arguments against CHR (#350)", () => {
 	}, 300_000);
 
 	test("a brace after a command is its operand, not a menu block (#496)", async () => {
-		const started = await startIntegrationChr();
+		const started = await startIntegrationChr({}, { reuse: true });
 		/** `:parse` accepted `input`, and its IL names every `needle`. */
 		const accepted = async (input: string, needles: string[]) => {
 			const parsed = await parseOf(started.chr, input);
@@ -414,7 +414,7 @@ describeFast("explain spaced arguments against CHR (#350)", () => {
 	}, 300_000);
 
 	test("the abbreviation guess never shields a root slot or a `where` comparison (#554)", async () => {
-		const started = await startIntegrationChr();
+		const started = await startIntegrationChr({}, { reuse: true });
 		try {
 			// Root slots: the (verb, slot) table decides, and neither slot
 			// takes a body through any spelling. The spaced rows bind like

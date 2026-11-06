@@ -54,3 +54,24 @@ time, run `CENTRS_CHR_CHANNEL=long-term bun run chr:prefetch`.
 This is prevention for *version drift*, not for flakes. A harness that mishandles
 normal teardown (an unhandled socket error when a subprocess exits, #300) is a
 different failure and only shows up by running the thing.
+
+## Reusing one CHR within a file (#612)
+
+A CHR boot costs ~25 s, and a snapshot restore ~2–4 s. When a file needs a
+clean default CHR for each of several tests, pass `{ reuse: true }`:
+`startIntegrationChr({}, { reuse: true })`. The first call boots and saves a
+baseline snapshot. Each later call restores it, so the test still starts
+from a clean router. `destroy()` releases the lease and leaves the VM
+running. The preload removes the VM once the process ends.
+
+- Only the default fixture may reuse. Any boot override (version, channel,
+  networks, ports, name) needs a private boot, and combining it with reuse
+  throws.
+- A restore rewinds the guest but not the host. Close sessions and clean up
+  host files and CDBs yourself, and connect fresh after every acquisition.
+- `CENTRS_CHR_REUSE=0` makes every call boot privately again. Use it to
+  check whether a failure comes from reuse.
+
+The contract is proved on real CHR by `test/integration/chr-reuse.test.ts`.
+Its failed-restore replacement case boots twice, so on GitHub it runs only on
+the scheduled QA run. Local runs always include it.

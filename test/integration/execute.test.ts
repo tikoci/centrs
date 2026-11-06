@@ -147,7 +147,7 @@ function idFromData(data: Record<string, unknown> | string): string {
 
 describeFast("execute against CHR", () => {
 	test("runs rest-api execute examples 1-11", async () => {
-		const started = await startIntegrationChr();
+		const started = await startIntegrationChr({}, { reuse: true });
 		const chr = started.chr;
 		try {
 			const auth = splitQuickChrAuth(
@@ -713,7 +713,7 @@ describeFast("execute against CHR", () => {
 	}, 120_000);
 
 	test("runs native-api execute examples 12-19", async () => {
-		const started = await startIntegrationChr();
+		const started = await startIntegrationChr({}, { reuse: true });
 		const chr = started.chr;
 		try {
 			const auth = splitQuickChrAuth(

@@ -9,10 +9,16 @@
  * fail over a download it doesn't need. A test that does boot one then reports
  * the real error from `QuickCHR.start`. `bun run chr:prefetch` is the strict
  * twin that CI runs as its own step.
+ *
+ * It also registers the one global `afterAll` that removes the process's
+ * shared CHR (#612, `chr-reuse.ts`). A hook defined in a preload runs once,
+ * after the last file of the `bun test` process, whether that process runs one
+ * file (the QA loop) or the whole directory (`bun run test:integration`).
  */
 
+import { afterAll } from "bun:test";
 import { prefetch } from "../../scripts/chr-prefetch.ts";
-import { isChrIntegrationEnabled } from "./chr.ts";
+import { disposeProcessChrReuse, isChrIntegrationEnabled } from "./chr.ts";
 
 if (isChrIntegrationEnabled()) {
 	try {
@@ -22,4 +28,10 @@ if (isChrIntegrationEnabled()) {
 			`CHR prefetch failed; the first CHR boot will retry it: ${String(error)}`,
 		);
 	}
+}
+
+if (isChrIntegrationEnabled()) {
+	afterAll(async () => {
+		await disposeProcessChrReuse();
+	}, 120_000);
 }

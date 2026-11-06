@@ -172,7 +172,7 @@ const CORRECTED: string[] = [
 
 describeFast("explain missing statement separator against CHR (#311)", () => {
 	test("every flagged run is refused, every control is accepted", async () => {
-		const started = await startIntegrationChr();
+		const started = await startIntegrationChr({}, { reuse: true });
 		try {
 			for (const { input, hard, names, errorByte } of FLAGGED) {
 				expect({ input, flags: separatorFlags(input).length }).toEqual({
@@ -272,7 +272,7 @@ describeFast("explain missing statement separator against CHR (#311)", () => {
 	 * attributes it lexed.
 	 */
 	test("the head's own argument list is not safe to keep", async () => {
-		const started = await startIntegrationChr();
+		const started = await startIntegrationChr({}, { reuse: true });
 		try {
 			const input =
 				"/ip/address add interface=ether1 /ip/route add placeholder";

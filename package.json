@@ -1,6 +1,6 @@
 {
 	"name": "@tikoci/centrs",
-	"version": "0.1.10",
+	"version": "0.2.0-next",
 	"main": "src/index.ts",
 	"module": "src/index.ts",
 	"repository": {
@@ -23,7 +23,7 @@
 		"typedoc": "^0.28.20"
 	},
 	"optionalDependencies": {
-		"@tikoci/quickchr": "^0.5.2"
+		"@tikoci/quickchr": "^0.5.4"
 	},
 	"peerDependencies": {
 		"typescript": "^6.0.3"

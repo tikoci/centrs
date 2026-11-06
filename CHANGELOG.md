@@ -12,6 +12,24 @@ release dates that heading and moves both `@latest` and `@next` to that release.
 `@next` stays there until another preview is published. A `-next.N` build has
 no section of its own.
 
+## 0.2.0 — next
+
+### Maintenance
+
+- Start the 0.2.0 development cycle with package version `0.2.0-next`. The
+  minor bump marks the coming transport-default change (native-api first, with
+  availability-aware fallback). Preview releases publish
+  `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
+- CHR integration tests can lease one default CHR per `bun test` process,
+  restored to a baseline QEMU snapshot before each lease, instead of booting
+  one per test (#612). Seven multi-boot files opt in with
+  `startIntegrationChr({}, { reuse: true })`. A failed restore triggers one
+  replacement boot, then fails closed. `CENTRS_CHR_REUSE=0` restores
+  private boots everywhere.
+- Bump `@tikoci/quickchr` to `^0.5.4` (from 0.5.2). Its snapshot operations
+  get their own monitor timeouts (quickchr#80); 0.5.2's flat 5 s often cut a
+  CHR `savevm` short.
+
 ## 0.1.10 — 2026-11-05
 
 Patch release with SSH argument hardening, stricter CLI option parsing, and

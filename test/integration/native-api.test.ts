@@ -19,7 +19,7 @@ const describeFast = runFastIntegration ? describe : describe.skip;
 
 describeFast("native API against CHR", () => {
 	test("logs in and runs /system/resource over the binary API", async () => {
-		const started = await startIntegrationChr();
+		const started = await startIntegrationChr({}, { reuse: true });
 		const chr = started.chr;
 		expect(await chr.waitForBoot(180_000)).toBe(true);
 		const auth = splitQuickChrAuth(
@@ -85,7 +85,7 @@ describeFast("native API against CHR", () => {
 	}, 300_000);
 
 	test("maps bad credentials to transport/auth-failed", async () => {
-		const started = await startIntegrationChr();
+		const started = await startIntegrationChr({}, { reuse: true });
 		const chr = started.chr;
 		expect(await chr.waitForBoot(180_000)).toBe(true);
 
