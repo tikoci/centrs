@@ -9,6 +9,7 @@ import {
 	mainHealth,
 	mainHealthFromHistory,
 	mustPassFailures,
+	mustPassLegsRecorded,
 	type NightlyRun,
 	nightlyDecision,
 	parseFingerprint,
@@ -271,5 +272,31 @@ describe("mainHealthFromHistory", () => {
 			...skips,
 		]);
 		expect((await mainHealthFromHistory(listPage, jobsFor, [])).ok).toBe(true);
+	});
+});
+
+describe("mustPassLegsRecorded", () => {
+	const leg = (channel: string) => `qa-results-${channel}/qa-results.sqlite`;
+
+	test("every must-pass leg recorded → the night counts", () => {
+		expect(
+			mustPassLegsRecorded([leg("stable"), leg("long-term"), leg("testing")]),
+		).toBe(true);
+	});
+
+	test("a must-pass leg that broke in setup recorded nothing → it does not", () => {
+		expect(mustPassLegsRecorded([leg("long-term"), leg("development")])).toBe(
+			false,
+		);
+		expect(mustPassLegsRecorded([])).toBe(false);
+	});
+
+	test("a pre-release leg is never required, and Windows paths work", () => {
+		expect(
+			mustPassLegsRecorded([
+				"qa-results-stable\\qa-results.sqlite",
+				leg("long-term"),
+			]),
+		).toBe(true);
 	});
 });

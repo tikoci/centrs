@@ -105,8 +105,9 @@ scheme as the reference):
   `workflow_call`, no push trigger. The `resolve-matrix` job is also the
   nightly pre-flight (`scripts/qa-nightly.ts preflight`): it sweeps only when
   main's HEAD or a resolved channel version differs from
-  `nightly-fingerprint.json` on the `qa-history` branch, which the sweeping
-  nightly writes. A dispatch applies the pre-flight with `if-changed=true`; a
+  `nightly-fingerprint.json` on the `qa-history` branch. A scheduled nightly
+  writes it only when every must-pass leg recorded a result, so a leg that
+  broke in setup is swept again the next night. A dispatch applies the pre-flight with `if-changed=true`; a
   release sweep never does. A skipped night ends `success` having booted
   nothing, so its readers (release plan, main health) inspect jobs, not the run
   conclusion. The active set is **recency-aware**, resolved via quickchr

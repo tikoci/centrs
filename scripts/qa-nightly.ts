@@ -23,6 +23,9 @@
  *     appends run=true|false and fingerprint=<json> to $GITHUB_OUTPUT.
  *   bun run scripts/qa-nightly.ts main-health --pr <number> [--summary FILE]
  *     env: GH_TOKEN, GITHUB_REPOSITORY. Exits 1 while main is unhealthy.
+ *   bun run scripts/qa-nightly.ts legs-recorded --legs DIR
+ *     appends recorded=true|false to $GITHUB_OUTPUT: whether every must-pass
+ *     leg left a per-leg result under DIR (the downloaded qa-results-*).
  */
 
 // cspell:ignore vnd
@@ -164,6 +167,23 @@ export function mustPassFailures(jobs: readonly Job[]): string[] {
 		failed.add("must-pass gate");
 	}
 	return [...failed];
+}
+
+/**
+ * Whether every must-pass leg reached a verdict, given the downloaded per-leg
+ * result paths (`<dir>/qa-results-<channel>/qa-results.sqlite`). A leg records
+ * a result only when its test step passed or failed. One that broke in setup
+ * (an apt or image-download hang) records nothing, so its night tested
+ * nothing on that channel. Recording that night's fingerprint would make the
+ * following nights skip and leave the setup failure deciding main health.
+ */
+export function mustPassLegsRecorded(paths: readonly string[]): boolean {
+	const normalized = paths.map((path) => path.replaceAll("\\", "/"));
+	return MUST_PASS_CHANNELS.every((channel) =>
+		normalized.some((path) =>
+			path.endsWith(`qa-results-${channel}/qa-results.sqlite`),
+		),
+	);
 }
 
 export interface NightlyRun {
@@ -415,9 +435,33 @@ async function health(args: readonly string[]): Promise<number> {
 	return 0;
 }
 
+async function legsRecorded(args: readonly string[]): Promise<number> {
+	const dir = flag(args, "--legs");
+	if (!dir) throw new Error("--legs DIR is required");
+	const paths: string[] = [];
+	for await (const path of new Bun.Glob("**/qa-results.sqlite").scan({
+		cwd: dir,
+		onlyFiles: true,
+	})) {
+		paths.push(path);
+	}
+	const recorded = mustPassLegsRecorded(paths);
+	const output = process.env["GITHUB_OUTPUT"];
+	if (output) await appendFile(output, `recorded=${recorded}\n`);
+	console.log(
+		recorded
+			? "Every must-pass leg recorded a result."
+			: "A must-pass leg recorded no result (it broke before testing); the fingerprint is not recorded, so the next nightly sweeps again.",
+	);
+	return 0;
+}
+
 if (import.meta.main) {
 	const [command, ...args] = process.argv.slice(2);
 	if (command === "preflight") process.exit(await preflight(args));
 	if (command === "main-health") process.exit(await health(args));
-	throw new Error("usage: qa-nightly.ts preflight | main-health --pr <n>");
+	if (command === "legs-recorded") process.exit(await legsRecorded(args));
+	throw new Error(
+		"usage: qa-nightly.ts preflight | main-health --pr <n> | legs-recorded --legs DIR",
+	);
 }
