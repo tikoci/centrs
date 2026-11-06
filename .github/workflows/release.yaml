@@ -18,10 +18,12 @@ run-name: Release • ${{ inputs.channel }}${{ inputs.dry-run && ' (dry run)' ||
 #           tag v<version> + GitHub Release from its CHANGELOG section. Commit the
 #           version and the dated `## X.Y.Z — YYYY-MM-DD` heading first.
 #
-# Gate: lint/unit/build on the commit (~1.5 min), and the CHR gate reuses main's
-# QA on that commit instead of sweeping again — wait if it is running, sweep via
-# qa.yaml only if every run was cancelled, refuse if it failed. The decisions are
-# scripts/release-plan.ts (unit-tested). A dry run reports the CHR gate as it
+# Gate: lint/unit/build on the commit (~1.5 min), and the CHR gate reuses the
+# nightly QA sweep on that commit instead of sweeping again — wait if one is
+# running, sweep via qa.yaml when no nightly swept it (none yet, a skipped
+# night, or only cancelled runs), refuse if it failed. QA no longer runs on
+# push, so releasing a commit newer than the last nightly sweeps here. The
+# decisions are scripts/release-plan.ts (unit-tested). A dry run reports the CHR gate as it
 # stands — it neither waits nor sweeps — so a green dry run is not a QA result.
 # A pushed v* tag no longer triggers anything.
 #
@@ -78,7 +80,7 @@ jobs:
         with:
           bun-version-file: package.json
           no-cache: true
-      - name: Plan the version and check main's QA on this commit
+      - name: Plan the version and check the nightly QA on this commit
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
@@ -109,8 +111,8 @@ jobs:
       - name: Lint CI, unit, build
         run: bun run ci
 
-  # Only when main's QA never finished on this commit (a newer push cancelled
-  # it). qa.yaml's accumulate-and-gate commits to qa-history, and a reusable
+  # Only when no nightly swept this commit (scripts/release-plan.ts →
+  # qaVerdict). A called run never applies the nightly pre-flight. qa.yaml's accumulate-and-gate commits to qa-history, and a reusable
   # workflow cannot get more than its caller grants, hence contents: write.
   qa:
     name: CHR sweep

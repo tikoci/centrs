@@ -26,6 +26,7 @@
 
 // cspell:ignore vnd
 import { appendFile } from "node:fs/promises";
+import { runJobs, swept } from "./qa-nightly.ts";
 
 export type Channel = "next" | "latest";
 
@@ -73,10 +74,17 @@ export function changelogSection(
 }
 
 export interface WorkflowRun {
+	id?: number;
 	event: string;
 	status: string;
 	conclusion: string | null;
 	head_sha: string;
+	/**
+	 * Whether a completed run booted any CHR leg. A nightly whose pre-flight
+	 * found nothing changed ends `success` having tested nothing; `false` marks
+	 * it so it is never reused. Unset means unknown and is taken as swept.
+	 */
+	swept?: boolean;
 }
 
 // Run conclusions as GitHub documents them. A verdict echoes one of these
@@ -104,11 +112,13 @@ export interface QaVerdict {
 /**
  * What to do about the CHR gate for `sha`, from `qa.yaml`'s runs on that commit.
  *
- * Only push and schedule runs count: they always fan the full active channel set,
- * while a dispatch may have pinned one channel. A green run anywhere on the commit
- * is enough; one still running is worth waiting for; a newer push cancels QA on
- * main, so a commit with only cancelled runs gets its own sweep; a real failure
- * refuses the release.
+ * Only schedule runs (the nightly) and push runs (before the nightly replaced
+ * them) count: they always fan the full active channel set, while a dispatch
+ * may have pinned one channel. A nightly the pre-flight skipped tested nothing
+ * and is ignored; the earlier nightly on the same commit, if any, still speaks
+ * for it. A green run anywhere on the commit is enough; one still running is
+ * worth waiting for; a commit with no run, or only cancelled ones, gets its own
+ * sweep; a real failure refuses the release.
  */
 export function qaVerdict(
 	runs: readonly WorkflowRun[],
@@ -117,7 +127,8 @@ export function qaVerdict(
 	const relevant = runs.filter(
 		(run) =>
 			run.head_sha === sha &&
-			(run.event === "push" || run.event === "schedule"),
+			(run.event === "push" || run.event === "schedule") &&
+			run.swept !== false,
 	);
 	const green = relevant.find((run) => run.conclusion === "success");
 	if (green) {
@@ -141,7 +152,7 @@ export function qaVerdict(
 	return {
 		action: "sweep",
 		message:
-			"No completed QA run on this commit (none, or every run was cancelled by a newer push); the release runs its own sweep.",
+			"No nightly swept this commit (none ran on it yet, or every run was cancelled); the release runs its own sweep.",
 	};
 }
 
@@ -244,8 +255,20 @@ async function qaRuns(sha: string): Promise<WorkflowRun[]> {
 		`actions/workflows/qa.yaml/runs?head_sha=${sha}&per_page=50`,
 	);
 	if (!response.ok) throw new Error(`QA run lookup: HTTP ${response.status}`);
-	return ((await response.json()) as { workflow_runs: WorkflowRun[] })
+	const runs = ((await response.json()) as { workflow_runs: WorkflowRun[] })
 		.workflow_runs;
+	// Only a completed green nightly can be a skipped one; ask its jobs.
+	for (const run of runs) {
+		if (
+			run.id !== undefined &&
+			run.event === "schedule" &&
+			run.status === "completed" &&
+			run.conclusion === "success"
+		) {
+			run.swept = swept(await runJobs(run.id));
+		}
+	}
+	return runs;
 }
 
 async function npmState(name: string): Promise<NpmState> {

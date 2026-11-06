@@ -2,20 +2,31 @@ name: QA
 run-name: QA • ${{ github.event_name }} • ${{ github.ref_name }}
 
 # QA is the *definitive* RouterOS surface: every active channel booted on a real
-# CHR via quickchr, with results recorded to a bun:sqlite store. It runs on every
-# push to main (the integrated branch), a weekly cron, on demand, and is
-# workflow_call-able by release.yaml, which sweeps only when main's QA never
-# finished on the commit it publishes (#484). The fast
-# lint/unit/build/CHR-smoke gate is ci.yaml; security scanning is codeql.yaml —
-# neither runs here, so there is no duplicate test/coverage/CodeQL work.
+# CHR via quickchr, with results recorded to a bun:sqlite store. It runs
+# nightly, on demand, and is workflow_call-able by release.yaml, which sweeps
+# only when no nightly swept the commit it publishes (#484). It no longer runs
+# on push to main: one sweep per change was two full sweeps per PR.
+#
+# The nightly sweeps only when main's HEAD or a resolved RouterOS channel
+# version changed since the last completed nightly (scripts/qa-nightly.ts,
+# `preflight`); the run that sweeps commits that fingerprint to the qa-history
+# branch for the next night. A skipped night reports success having booted
+# nothing — release.yaml and ci.yaml's main-health job read the jobs, not the
+# run conclusion, so they pass over it. Dispatch can apply the same pre-flight
+# (`if-changed`); a release sweep never does.
+#
+# The fast lint/unit (all three OSes)/build/CHR-smoke gate is ci.yaml; security
+# scanning is codeql.yaml — neither runs here.
 
 on:
-  push:
-    branches: [main]
   schedule:
-    - cron: "23 5 * * 1"
+    - cron: "23 5 * * *"
   workflow_dispatch:
     inputs:
+      if-changed:
+        description: Apply the nightly pre-flight — skip the sweep when main's HEAD and every channel version match the last nightly
+        type: boolean
+        default: false
       routeros_channel:
         description: RouterOS channel — "all" fans the active set into one matrix run
         type: choice
@@ -44,16 +55,12 @@ on:
 permissions:
   contents: read
 
-# Event-aware concurrency: a newer push to main cancels the older QA run (no point
-# piling up stale full-matrix runs), but dispatched / scheduled / called runs each
-# get a unique group (github.run_id) so they never cancel one another — manual
-# multi-channel verification stays independent. (Fixes the same-ref self-cancel
-# that forced serial-by-hand channel dispatch.) The ref check matters for called
-# runs, which see the caller's event: a release sweep triggered by a tag push
-# joined the main-push group and cancelled main's QA (#484).
+# Every run gets its own group, so a nightly, a dispatch and a release sweep
+# never cancel one another (a shared group once let a release sweep cancel
+# main's QA, #484).
 concurrency:
-  group: qa-${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'main-push' || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+  group: qa-${{ github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   # Recency-aware matrix axis (B-2 / quickchr#3). quickchr resolves the live
@@ -61,14 +68,20 @@ jobs:
   # (stable, long-term) always, plus any pre-release (testing, development) at or
   # ahead of stable, since the four channels are not monotonically ordered
   # (testing can lag stable as a stale rc, then leapfrog it). A concrete dispatch
-  # channel pins a single leg; "all" / push / schedule / the release sweep fan the
+  # channel pins a single leg; "all" / schedule / the release sweep fan the
   # active set. The "what's worth booting" smarts live in quickchr; centrs keeps
   # only the must-pass gate (see accumulate-and-gate).
+  #
+  # The same job is the nightly pre-flight: on a schedule (or a dispatch with
+  # `if-changed`) it first decides whether anything changed since the last
+  # nightly. `run` defaults to true whenever the pre-flight did not run.
   resolve-matrix:
-    name: Resolve active channels
+    name: Pre-flight + active channels
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
+      run: ${{ steps.preflight.outputs.run || 'true' }}
+      fingerprint: ${{ steps.preflight.outputs.fingerprint }}
       channels: ${{ steps.matrix.outputs.channels }}
     steps:
       # Read-only job (resolves the matrix axis; no commits), so it needs no git
@@ -88,8 +101,17 @@ jobs:
       # to the released channels (never drops a must-pass leg). The requested
       # channel/version arrive via env (never inlined into the run block); an
       # explicit version pins a single leg rather than fanning the active set.
+      # Reads the previous fingerprint from the qa-history branch through the
+      # contents API (contents: read); any failure there answers "sweep".
+      - name: Nightly pre-flight (sweep only if something changed)
+        id: preflight
+        if: ${{ github.event_name == 'schedule' || inputs.if-changed }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun run scripts/qa-nightly.ts preflight --summary "$GITHUB_STEP_SUMMARY"
       - name: Resolve active channel set
         id: matrix
+        if: ${{ steps.preflight.outputs.run != 'false' }}
         env:
           REQUESTED_CHANNEL: ${{ inputs.routeros_channel || '' }}
           REQUESTED_VERSION: ${{ inputs.routeros_version || '' }}
@@ -111,6 +133,8 @@ jobs:
   # analyzer clear a write, which is the one direction that costs correctness.
   explain-menus-drift:
     name: Explain menu table drift
+    needs: resolve-matrix
+    if: ${{ needs.resolve-matrix.outputs.run == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -142,6 +166,8 @@ jobs:
   # says what to do when it fires.
   explain-catalog-drift:
     name: Explain catalog drift (report)
+    needs: resolve-matrix
+    if: ${{ needs.resolve-matrix.outputs.run == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     continue-on-error: true
@@ -174,6 +200,7 @@ jobs:
   chr-matrix:
     name: CHR • ${{ matrix.routeros_channel }}${{ inputs.routeros_version && format(' • {0}', inputs.routeros_version) || '' }}
     needs: resolve-matrix
+    if: ${{ needs.resolve-matrix.outputs.run == 'true' }}
     runs-on: ubuntu-latest
     # Budget = warm-cache suite + one cold image download. Each test file boots
     # its own CHR (~25s, GH#612), so the warm suite alone was ~34 minutes by
@@ -345,8 +372,8 @@ jobs:
       # never changes the job outcome. All run-block values arrive via env (or
       # built-in $RUNNER_TEMP/$GITHUB_SHA) so user-controllable inputs
       # (routeros_version) are treated as data, never code — no template injection.
-      # Only a test step that reached a verdict is recorded. `cancelled` (a push
-      # superseded under cancel-in-progress) and `skipped` (an earlier setup step
+      # Only a test step that reached a verdict is recorded. `cancelled` (a run
+      # someone or a timeout cancelled) and `skipped` (an earlier setup step
       # failed; that reds this job on its own) are not RouterOS results, and
       # writing them as `fail` faked regressions in qa-history (#442). A run with
       # no legs recorded passes the gate with a warning (scripts/qa-history.ts).
@@ -376,45 +403,18 @@ jobs:
           path: ${{ runner.temp }}/qa-results.sqlite
           if-no-files-found: warn
 
-  # Cross-platform unit tests (macOS + Windows). Runs in parallel with chr-matrix
-  # because it needs no CHR; results are informational for Windows (continue-on-error)
-  # and gating for macOS. Moved here from ci.yaml to keep CI fast on PRs — pushes to
-  # main catch escapes via this job. Does not feed into accumulate-and-gate (CHR gate
-  # only); a macOS failure reds the QA run directly via the job's own outcome.
-  cross-platform-unit:
-    name: Unit tests (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    # Windows is informational until centrs is verified Windows-clean: it runs for
-    # signal (the ssh `/dev/null` vs `NUL` sink, path handling) but never gates.
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: package.json
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-      - name: Unit tests
-        run: bun test test/unit/
-
   # Cross-run accumulation + the must-pass gate (the harder half of JG-18). Runs
   # once after the matrix: pulls every per-leg result, appends them to a durable
   # append-log on the `qa-history` branch (artifact retention is finite, and the
   # channel→version drift is the whole point of keeping long history), and fails
   # only when a *released* channel regressed. Beta/test legs are recorded but
   # never gate — see scripts/qa-history.ts.
+  #
+  # Its name is read back by scripts/qa-nightly.ts (GATE_JOB); rename both.
   accumulate-and-gate:
     name: Accumulate + must-pass gate
-    needs: chr-matrix
-    if: always()
+    needs: [resolve-matrix, chr-matrix]
+    if: ${{ always() && needs.resolve-matrix.outputs.run == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -464,6 +464,15 @@ jobs:
             --legs incoming \
             --history qa-history/qa-runs.jsonl \
             --summary "$GITHUB_STEP_SUMMARY"
+      # The nightly's fingerprint, compared by tomorrow's pre-flight. Written
+      # even when the gate failed (a red night is still a completed nightly),
+      # but not for a cancelled run, which reached no verdict. It is the
+      # pre-flight's own JSON; the reader rejects anything malformed.
+      - name: Record the nightly fingerprint
+        if: ${{ !cancelled() && github.event_name == 'schedule' }}
+        env:
+          FINGERPRINT: ${{ needs.resolve-matrix.outputs.fingerprint }}
+        run: printf '%s\n' "$FINGERPRINT" > qa-history/nightly-fingerprint.json
       # Persist even when the gate failed (a failing run must still land in
       # history) — so this is `always()` and ordered after the gate step.
       - name: Commit accumulated history
@@ -474,6 +483,7 @@ jobs:
           set -eo pipefail
           cd qa-history
           git add qa-runs.jsonl
+          if [ -f nightly-fingerprint.json ]; then git add nightly-fingerprint.json; fi
           if git diff --cached --quiet; then
             echo "No history change to commit."
             exit 0

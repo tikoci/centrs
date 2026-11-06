@@ -193,7 +193,10 @@ The maintainer sets this list, and it is the only thing that schedules work.
 An open bug can be fixed without being selected; nothing requires picking one
 up. Unfinished grid cells and parked themes do not preempt the track.
 
-1. **Release 0.1.10** (in progress).
+1. **CI cleanup** (in progress): docs-only changes run lint only, unit runs on
+   every OS, and the CHR channel sweep moves to a nightly run with a
+   main-health gate on PRs. Then #612 PR 2 (cross-file CHR reuse), designed for
+   the nightly.
 2. **Transport selection**, the first work on `0.2.0-next`. native-api becomes
    the default for `retrieve`, `api` and `execute`. Automatic selection falls
    back to the next available transport and reports each hop; a pinned `--via`
@@ -201,7 +204,7 @@ up. Unfinished grid cells and parked themes do not preempt the track.
    Issues: #588, #620, #621, #622, #131.
    [Protocol selection](CONSTITUTION.md#protocol-selection) changes in the
    same PR.
-3. **Next: [Devices and onboarding](#devices-and-onboarding).** Port discovery
+3. **[Devices and onboarding](#devices-and-onboarding).** Port discovery
    moves from `check` into `devices`, so an agent can add a device without
    reading `/ip/service` and storing ports by hand.
 
@@ -317,13 +320,13 @@ A theme entry that keeps growing is being used as an issue.
 
 - **Question:** how much testing runs for each event, across platforms, without
   two full sweeps per change.
-- **Lean:** unit tests on every platform for every code push and PR; docs-only
-  changes run lint only. The CHR sweep runs nightly when main or a RouterOS
-  channel version changed, and at release. Ordinary PRs cannot merge while the
-  last nightly is red; a repair merges with passing evidence on its own head,
-  or by maintainer override. Versions and npm tags align across TIKOCI repos.
-  Snapshot CHR reuse is piloted in #612.
-- **Ready when:** now.
+- **Lean:** versions and npm tags align across TIKOCI repos. Snapshot CHR
+  reuse within a file landed in #612; cross-file reuse (#612 PR 2) is next and
+  is designed for the nightly. Docs-only CI, cross-platform unit, the nightly
+  sweep and the main-health gate are the current track's first step; once
+  merged they are described in
+  `.github/instructions/ci-test-tiers-and-release-versioning.instructions.md`.
+- **Ready when:** now; the current track schedules it as step 1.
 - **Absorbed:** #97, #142.
 
 ### Docs and onboarding
@@ -361,3 +364,6 @@ done or declined. A nit that needs more explanation is an issue.
   `retrieve` is the read-only verb a harness can allowlist.
 - `.github/instructions/`: trim Copilot-era verbosity when the TIKOCI-wide
   files are collected in `tikoci.github.io`.
+- `test/integration/api-stream-command.test.ts` fails intermittently in the
+  unit tier: its fake server sends "Invalid RouterOS API length descriptor
+  0xfb" (1 of 7 local runs, 2026-11-05).
