@@ -6,8 +6,8 @@ in one envelope — a device *doctor* that also hands later `retrieve` / `execut
 / `api` calls the context they'd otherwise splunk for themselves.
 
 Status: `designed` over `rest-api`, `native-api`, `ssh`, and `mac-telnet` (the
-execute-capable transports the battery can ride); `snmp` and
-`romon` / `winbox-terminal` stay `not-started`. See `docs/MATRIX.md` for the row.
+execute-capable transports the battery can ride); `romon` /
+`winbox-terminal` stay `not-started`. See `docs/MATRIX.md` for the row.
 Load-bearing rules — envelope, errors, settings precedence, identity, validation,
 protocol selection, fan-out — live in
 [`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md); the `(constitution: …)`
@@ -179,7 +179,7 @@ column names its source command. `default`: `on` runs in the smart battery;
 | `cloud`        | health | on      | tip/meta       | `/ip/cloud` — ddns-name, `ddns-enabled=auto` semantics; Back To Home fields may be absent on stock/trial CHR |
 | `dns`          | health | on      | warn/meta      | `/resolve` — warn (not error) if resolution fails |
 | `ipv6`         | health | on      | tip/meta       | `/ipv6/settings` — `disable-ipv6` |
-| `snmp`         | health | on      | warn/tip/meta  | `/snmp/community` — version/scope/count; community string **redacted**; warns on unrestricted enabled read scope (`0.0.0.0/0` or `::/0`) or default `public` with `security=none`; tips toward `snmp-community=` for future `retrieve --via snmp` |
+| `snmp`         | health | on      | warn/tip/meta  | `/snmp/community` — version/scope/count; community string **redacted**; warns on unrestricted enabled read scope (`0.0.0.0/0` or `::/0`) or default `public` with `security=none` |
 | `certificates` | health | trig    | warn/meta      | `/certificate` when `www-ssl` off / near expiry |
 | `cpu-detail`   | health | trig    | warn/meta      | `/system/resource/cpu` when `resource` load is high |
 | `routerboard`  | health | on²     | tip/meta       | `/system/routerboard` — firmware vs routeros; absent on CHR |
@@ -282,12 +282,10 @@ for a multi-record selection):
 - **Newly-learned lookup keys** — `mac=` / `identity=` / `ip=` when the record
   lacks them.
 
-**SNMP boundary.** The `snmp` check *reports* a usable community (redacted) and
-*tips* toward storing it — but `--save` does **not** silently persist a community,
-because it is a credential and there may be several. Persisting it is an explicit,
-separate act (`devices set <t> snmp-community=…`, consumed by the future
-`retrieve --via snmp`); whether `--save --with-snmp` should opt into that is an
-open item below.
+**SNMP boundary.** The `snmp` check *reports* a usable community (redacted), but
+`--save` does **not** persist it, because it is a credential and there may be
+several. Whether centrs stores SNMP credentials at all is part of
+[`docs/MATRIX.md` → SNMP and OIDs](../../docs/MATRIX.md#snmp-and-oids).
 
 Plain `check` (no `--save`) writes nothing.
 
@@ -384,6 +382,4 @@ against a real CHR through `bun run test:integration`. See
 - **`data.profile` shape not yet normative** — deferred to #137/#149.
 - **Naming is provisional** — flag/check/preset names here are for the concept;
   rationalize holistically before code.
-- **Still open:** whether `--save` should grow `--with-snmp` to persist a
-  community as `snmp-community=` comment-kv (and adding that key to the `devices`
-  allowlist); whether `--save` should also capture `ddns-name`.
+- **Still open:** whether `--save` should also capture `ddns-name`.

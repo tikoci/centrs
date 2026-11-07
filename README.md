@@ -54,8 +54,8 @@ product; without them this would just be a worse `curl`.
   (future).
 - **Protocols:** REST API and native API for reads and writes; SSH / MAC-Telnet
   for execution and interactive terminals; SFTP for file transfer; MNDP for
-  discovery; bandwidth test for peer measurement. SNMP, RoMON and WinBox
-  Terminal are planned. centrs picks the protocol for you (and lets you pin one
+  discovery; bandwidth test for peer measurement. RoMON and WinBox Terminal
+  are planned. centrs picks the protocol for you (and lets you pin one
   with `via=` or `--via`).
 - **Commands:** every router-facing command resolves a *target* — a router you
   name on the CLI — to a real address, credentials, and a protocol, then runs.
@@ -64,7 +64,7 @@ product; without them this would just be a worse `curl`.
 
 | Command    | Purpose |
 | ---------- | ------- |
-| `retrieve` | Read RouterOS state over REST/native API. `--follow` keeps a menu's rows current over native API (snapshot, then a line per change; NDJSON); `--sample <interval>` re-reads it on a timer for counters; `--query` filters on the router with the `print where` grammar; `--wait` retries until a read succeeds (or an optional `--until` condition holds), up to a deadline. SNMP OID/MIB reads are planned. |
+| `retrieve` | Read RouterOS state over REST/native API. `--follow` keeps a menu's rows current over native API (snapshot, then a line per change; NDJSON); `--sample <interval>` re-reads it on a timer for counters; `--query` filters on the router with the `print where` grammar; `--wait` retries until a read succeeds (or an optional `--until` condition holds), up to a deadline. |
 | `execute`  | Run RouterOS CLI-shaped read/write commands (add/set/remove) over native API, REST, SSH or MAC-Telnet. |
 | `api`      | Structured RouterOS API passthrough (gh-api style): one command per operation, structured in/out, can write, over REST or native API. Follow changes with `api … <menu>/listen`; `--stream` streams any command's replies (native API; NDJSON). |
 | `terminal` | Open an interactive console, primarily SSH or MAC-Telnet. |

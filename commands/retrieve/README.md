@@ -3,13 +3,12 @@
 Status: `CHR-passed` over `rest-api` and `native-api`, including multi-target
 fan-out (see **Target selection**), `--query` row filters (see **Query**),
 `--follow` over `native-api` (see **Follow**) and `--sample` over both (see
-**Sample**) and bounded readiness/conditions (see **Wait**). `snmp` is
-`not-started`. Matches `docs/MATRIX.md`.
+**Sample**) and bounded readiness/conditions (see **Wait**). Matches
+`docs/MATRIX.md`.
 
 Read RouterOS state. RouterOS menu reads model `<path>/<verb>` where the verb
 is `print`-style (`print`, `get`, and async POST-shaped reads as they're
-added). SNMP reads use `retrieve <router> snmp <oid|MIB name>` and resolve
-names through a MikroTik MIB cache downloaded from mikrotik.com.
+added).
 
 > "POST-shaped reads" are RouterOS menu reads that require a request body
 > (e.g. paged or query-driven `print`) and are therefore issued as REST `POST`
@@ -25,7 +24,6 @@ humans.
 
 ```text
 centrs retrieve <router> <path>[/<shortcut>] [flags]
-centrs retrieve <router> snmp <oid|MIB name> [flags]
 ```
 
 - `<router>` — IP, DNS, MAC, or CDB-resolved name. See constitution: identity.
@@ -39,9 +37,6 @@ centrs retrieve <router> snmp <oid|MIB name> [flags]
   caller takes the match. `--query`/`--filter` always return an array — there is
   no singleton-by-name shape. (Decided: the old `<.id|name>` positional is
   dropped.)
-- `snmp <oid|MIB name>` — planned retrieve-only SNMP form. OIDs are used
-  directly; MIB names are resolved from the cached MikroTik MIB that matches
-  the selected RouterOS version/channel once that cache is implemented.
 
 ## Flags
 
@@ -71,8 +66,6 @@ Spec-tier flags with no implementation yet — today they fail as unknown flags:
 | `--max-bytes <n>`                   | Byte budget for the rendered payload. If the response would exceed it, centrs truncates to fit, keeps `ok: true`, and adds a warning + `meta.truncated`. Not an error. (Will replace the implemented `--max-results`, which fails instead of truncating.) |
 | `--max-rows <n>`                    | Maximum row count for list reads. Excess rows are clipped; `ok: true` with a warning + `meta.truncated`.                                    |
 | `--yaml`                            | Shortcut for `--format yaml`.                                                             |
-| `--ros-version <version>`           | SNMP MIB lookup only: pin the MikroTik MIB version to cache/download.                     |
-| `--ros-channel <channel>`           | SNMP MIB lookup only: `stable`, `long-term`, `testing`, or `development`; default `stable`. |
 
 ## Validation
 
@@ -112,46 +105,6 @@ character, or a `.`/`..` segment (including the percent-encoded `%2e%2e` and
 `.%2E` forms, which the URL parser also collapses) for every command. RouterOS
 does not decode percent-escapes in REST paths, so nothing else changes the
 target.
-
-SNMP validation is separate from RouterOS `/console/inspect`: OIDs and MIB
-names must resolve through the MIB cache before any SNMP request is sent.
-
-## SNMP MIB cache policy
-
-Signed off (2026-06-06): cache MikroTik MIBs under the XDG cache root,
-`${XDG_CACHE_HOME:-~/.cache}/tikoci/snmp-mibs`, not beside the CDB. The cache is
-derived data; deleting it must never remove inventory or credentials. Use one
-subdirectory per exact RouterOS version, for example
-`routeros/7.23/mikrotik.mib`, plus metadata containing source URL, ETag,
-Last-Modified, SHA-256, fetched-at, and the channel (if a channel resolved it).
-
-Version selection for MIB-name lookup is deterministic. `--ros-version` wins and
-downloads `https://download.mikrotik.com/routeros/<version>/mikrotik.mib`.
-Otherwise `--ros-channel` (default `stable`) is resolved through
-`https://upgrade.mikrotik.com/routeros/NEWESTa7.<channel>` and that exact version
-is used. If target metadata already carries a RouterOS version from a trusted
-source, it may supply the default version, but the SNMP path must not make an
-extra REST/native call merely to discover a version.
-
-Invalidation is by exact version plus HTTP validators. A missing version cache is
-downloaded before lookup; an existing cache is reused offline. When online, a
-cache older than 24h is revalidated with ETag/Last-Modified and replaced
-atomically if MikroTik republishes the file. Channel pointers are short-lived:
-re-resolve the channel after 24h, then use the cache for the resulting exact
-version.
-
-Offline behavior is intentionally conservative. Numeric OIDs do not require the
-MIB cache and proceed normally. MIB-name lookup succeeds only when the selected
-exact version is already cached; if not, fail before SNMP I/O with
-`snmp/mib-cache-miss` and a fix that tells the caller to go online once or pass a
-cached `--ros-version`. Do not silently fall back to a different version's MIB.
-
-RouterOS grounding: MikroTik documents SNMP as retrieve/write-capable but centrs
-uses it as retrieve-only; the same page points users to the MikroTik MIB download
-surface. The per-version `mikrotik.mib` URL under `download.mikrotik.com` has
-been verified for current stable/development versions, but treating it as the
-long-term canonical URL is an assumption until the implementation has fallback
-handling.
 
 ## Output shape
 
@@ -578,8 +531,6 @@ reach green is forbidden. See `docs/CONSTITUTION.md` for the full done rule.
   Validation still runs through `/console/inspect` (issued as a native-API
   command). Attribute values arrive as strings because the binary API carries
   no JSON scalar types; the envelope shape is otherwise identical to REST.
-- **snmp** — retrieve-only OID/MIB reads. It does not validate through
-  `/console/inspect` and does not execute RouterOS CLI.
 - **ssh / mac-telnet / romon / winbox-terminal** — execute surfaces, not
   retrieve surfaces.
 - **tips** — when a `<router>` fails to resolve against an empty CDB, retrieve

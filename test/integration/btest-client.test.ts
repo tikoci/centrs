@@ -3,7 +3,7 @@
  * QEMU host→guest TCP forward.
  *
  * This is the gated `CHR-passed` evidence for the **client** cell (`docs/MATRIX.md`,
- * "Peer measurement"). It is the mirror of `btest.test.ts` (which gates the
+ * Components). It is the mirror of `btest.test.ts` (which gates the
  * *server* cell with a CHR client → centrs server): here centrs is the client and
  * real RouterOS is the bandwidth server, so it validates the half the server test
  * cannot — centrs's **EC-SRP5 client proof** verified by RouterOS's own server

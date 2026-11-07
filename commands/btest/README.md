@@ -21,7 +21,7 @@ multi-connection (`connection-count > 1`) data fan-out is implemented for
 unauthenticated tests (the client joins the negotiated extra connections; the join
 format is grounded against RouterOS 7.23.1); authenticated sessions stay
 single-stream. See
-`docs/MATRIX.md` ("Peer measurement (`btest`)") for the cell states — that is the
+`docs/MATRIX.md` → Components (the `btest` rows) for the cell states — that is the
 only status surface. v1 scope: **both** modes (client + server), **EC-SRP5 +
 unauthenticated** auth, **TCP and UDP** tests. Legacy pre-6.43 double-MD5 is out of
 scope.

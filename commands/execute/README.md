@@ -9,7 +9,7 @@ Status: `rest-api`, `native-api`, `mac-telnet`, and `ssh` are `CHR-passed` (see
 12–19 over the native API, 20–22 over mac-telnet, and S1–S5 over ssh, green via
 `bun run test:integration`), including multi-target fan-out (see **Target
 selection**, examples F1–F5). `romon` and `winbox-terminal` remain
-`not-started`. SNMP is retrieve-only and rejects `execute`.
+`not-started`.
 
 Known limitation [#575](https://github.com/tikoci/centrs/issues/575): MAC-Telnet
 can silently drop `:put` output for single-line sends with a trailing newline,
@@ -155,7 +155,7 @@ remains open in 0.1.10.
   `tip/no-devices` tip, steering toward `centrs discover --save` /
   `centrs devices add`.
 - Protocol surfaces are native API, REST, mac-telnet, and SSH. RoMON and
-  WinBox Terminal are later. SNMP is retrieve-only and must reject execute.
+  WinBox Terminal are later.
 - For a MAC target not resolved from CDB, auto-selection defaults to
   mac-telnet. Callers that want IP-level execution may opt into ARP-based
   MAC → IP resolution with `--resolve arp` (plus `--via native-api`/`rest-api`)
@@ -316,6 +316,8 @@ client is never dialed, so a client behind NAT or reachable only through its
 controller works the same way. CMR is a selection source, not a protocol:
 `--via` pins the **controller** transport (native-api, the default, or
 rest-api). A CMR failure never falls back to dialing a client directly.
+The other surfaces that touch CMR, and the builds it is checked on, are in
+[`components/cmr/README.md`](../../components/cmr/README.md).
 
 CMR is beta-only: it first shipped in 7.26beta1, and the controller also needs
 the optional `cmr` package. When the target has no `/cmr/device`, centrs reads
@@ -429,7 +431,8 @@ when the target is itself a CMR client.
   can also be reached directly; otherwise re-run a read through `--cmr`.
 - **Not on MCP** until delegated authorization is designed (#449). That design
   must not assume RouterOS refuses a fleet write for a `!write` login (see
-  above). `retrieve --cmr` is deferred (#441).
+  above). `retrieve --cmr` is deferred: `docs/MATRIX.md` → CMR across
+  surfaces.
 
 `/cmr/device/dashboard` is an interactive console view, refused as
 `cmr/console-only`. A plain path, abbreviated or not (`/cmr/dev/dash`), is
