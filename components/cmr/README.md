@@ -1,8 +1,10 @@
 # cmr
 
 Status: `CHR-passed` on 7.26beta1, through the `execute` rest-api and
-native-api cells. Later betas are not covered yet (see [Builds](#builds)).
-Matches `docs/MATRIX.md` → Components.
+native-api cells; its examples are CMR0–CMR18 in
+[`commands/execute/examples.md`](../../commands/execute/examples.md#cmr-clients-through-a-controller-450).
+Later betas are not covered yet (see [Builds](#builds)). Matches
+`docs/MATRIX.md` → Components.
 
 Code:
 
@@ -43,9 +45,9 @@ before 7.26beta1 and `cmr/not-a-controller` after.
 
 | Build | What is known |
 | ----- | ------------- |
-| 7.26beta1 | Lab baseline: CMR1–CMR7 and CMR10–CMR14 pass over rest-api and native-api, CMR8–CMR9 over native-api. A login without `write` or `reboot` still writes through `run-script` (#456, CMR15). |
+| 7.26beta1 | Lab baseline: CMR1–CMR7 and CMR10–CMR18 pass over rest-api and native-api, CMR8–CMR9 over native-api. A login without `write` or `reboot` still writes through `run-script` (#456, CMR15). |
 | 7.26beta3 | A restricted login's `run-script` is refused: `not enough permissions (9)` over native-api, a dropped connection over REST. An admin `run-script numbers=<client>` returned `no devices selected` (#527). |
-| 7.26beta5 | The lab fails at CMR-D1. The client is paired and connected on both sides (`/cmr/client` status `paired,connected`; the controller's row has `state="pair: device:ok, cmr:ok"`). With `pairing-requirement=none` it paired itself about a second after it was enabled, before the lab's `pair` command. Yet an admin `run-script` selects only the controller: `labels=all` returns the controller's rows alone, and `labels=<client identity>` or `numbers=<client .id>` is `no devices selected`, over REST and the console (2026-11-07). |
+| 7.26beta5 | The lab fails at CMR-D1. The client is paired and connected on both sides (`/cmr/client` status `paired,connected`; the controller's row has `state="pair: device:ok, cmr:ok"`). With `pairing-requirement=none` it paired itself about a second after it was enabled, before the lab's `pair` command. Yet an admin `run-script` selects only the controller: `labels=all` returns the controller's rows alone, and `labels=<client identity>` or `numbers=<client .id>` is `no devices selected`, over REST and the console (2026-11-07; details on #527). |
 
 The lab boots `CMR_SINCE` (7.26beta1). `CENTRS_CMR_VERSION` boots another
 build. The lab should follow the development channel, so a beta that changes

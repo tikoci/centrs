@@ -18,8 +18,8 @@ When those three are clear, write code or tests. Do not write more prose.
 ## Done definition
 
 Live capabilities require examples green on real CHR via
-`bun run test:integration`. Offline analysis requires its command README's
-baseline acceptance criteria in full — examples, contract checks,
+`bun run test:integration`. Offline analysis requires its command or component
+README's baseline acceptance criteria in full — examples, contract checks,
 measured/consumer gates, and committed CHR-grounded semantic evidence;
 offline verification does not advance a live protocol cell. The
 **normative** definition is

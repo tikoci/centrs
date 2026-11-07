@@ -7,7 +7,8 @@ applyTo: "src/**,test/**,commands/**,docs/MATRIX.md,docs/CONSTITUTION.md,AGENTS.
 Read `docs/CONSTITUTION.md` before changing anything that touches RouterOS,
 errors, settings, or the result envelope. Read `docs/MATRIX.md` to find the
 capability and the current track. Read `commands/<name>/README.md` and
-`commands/<name>/examples.md` for the executable spec.
+`commands/<name>/examples.md` (or the `components/<name>/` pair for a part
+that spans commands) for the executable spec.
 
 ## Evidence follows the capability
 
@@ -15,7 +16,7 @@ The **normative** done definition lives in
 [`docs/CONSTITUTION.md` → Done definition](../../docs/CONSTITUTION.md#done-definition);
 this section is the Copilot-workflow procedure for satisfying it.
 Offline analysis follows the constitution's `verified` criteria and the
-baseline acceptance criteria in the command README. Run the named offline
+baseline acceptance criteria in its command or component README. Run the named offline
 examples and contract checks; retain reproducible CHR evidence for semantic
 claims. New or changed RouterOS semantics require live grounding with controls.
 Changes to shared execution/transport behavior also require the procedure below.

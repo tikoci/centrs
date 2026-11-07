@@ -19,10 +19,10 @@ capability is complete.
 | -------------- | --------------------------------------------------------------- |
 | `—`            | Not applicable / out of scope for this protocol                 |
 | `not-started` | No code and no design                                           |
-| `designed`     | `commands/<name>/README.md` describes intent and flags          |
+| `designed`     | Its spec (`commands/<name>/README.md` or `components/<name>/README.md`) describes intent and flags |
 | `coded`        | Implementation exists in `src/`                                 |
-| `verified`     | Offline capability meets its command README's baseline acceptance criteria in full (examples, contract checks, measured/consumer gates, and CHR-grounded evidence). |
-| `CHR-passed`   | Every example in `commands/<name>/examples.md` is green on CHR  |
+| `verified`     | Offline capability meets its spec's baseline acceptance criteria in full (examples, contract checks, measured/consumer gates, and CHR-grounded evidence). |
+| `CHR-passed`   | Every example in its spec's `examples.md` is green on CHR; a component without one names the command examples it rides |
 
 A cell advances only with the matching evidence in the same change.
 

@@ -543,10 +543,10 @@ the **normative** done definition; `AGENTS.md` and
 `.github/instructions/done-definition.instructions.md` point here (the latter
 carries the Copilot-workflow procedure for satisfying it).
 
-Offline analysis is `verified` when its applicable command examples and
-contract checks pass without a router, its RouterOS semantic claims have
-committed CHR-grounded evidence, and the command's baseline acceptance criteria
-are satisfied. New or changed RouterOS semantics still require live grounding
+Offline analysis is `verified` when its applicable examples and contract
+checks pass without a router, its RouterOS semantic claims have committed
+CHR-grounded evidence, and the baseline acceptance criteria in its command or
+component README are satisfied. New or changed RouterOS semantics still require live grounding
 with accepted and rejected controls plus a reproducible capture/replay path;
 offline tests do not establish new device facts. Changes to shared execution
 or transport behavior still require `bun run test:integration`. The offline

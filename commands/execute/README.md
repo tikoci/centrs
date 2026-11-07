@@ -9,7 +9,7 @@ Status: `rest-api`, `native-api`, `mac-telnet`, and `ssh` are `CHR-passed` (see
 12–19 over the native API, 20–22 over mac-telnet, and S1–S5 over ssh, green via
 `bun run test:integration`), including multi-target fan-out (see **Target
 selection**, examples F1–F5). `romon` and `winbox-terminal` remain
-`not-started`. SNMP is retrieve-only and rejects `execute`.
+`not-started`.
 
 Known limitation [#575](https://github.com/tikoci/centrs/issues/575): MAC-Telnet
 can silently drop `:put` output for single-line sends with a trailing newline,
@@ -155,7 +155,7 @@ remains open in 0.1.10.
   `tip/no-devices` tip, steering toward `centrs discover --save` /
   `centrs devices add`.
 - Protocol surfaces are native API, REST, mac-telnet, and SSH. RoMON and
-  WinBox Terminal are later. SNMP is retrieve-only and must reject execute.
+  WinBox Terminal are later.
 - For a MAC target not resolved from CDB, auto-selection defaults to
   mac-telnet. Callers that want IP-level execution may opt into ARP-based
   MAC → IP resolution with `--resolve arp` (plus `--via native-api`/`rest-api`)
