@@ -1472,7 +1472,7 @@ function resolveProtocol(
 			code: "routeros/unsupported-capability",
 			summary: `Protocol ${via.value} does not support the retrieve capability.`,
 			remediation:
-				"Choose a retrieve-capable protocol such as `rest-api`, `native-api`, or `snmp`.",
+				"Choose a retrieve-capable protocol: `rest-api` or `native-api`.",
 			context: { via: via.value, capability: "retrieve" },
 		});
 	}

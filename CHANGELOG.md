@@ -14,7 +14,20 @@ no section of its own.
 
 ## 0.2.0 — next
 
+### Changed
+
+- `centrs --help` lists only the protocols that work today. `snmp`, `romon`
+  and `winbox-terminal` are no longer advertised; `--via` with one of them
+  still fails as `routeros/protocol-not-implemented`. The fix text for a
+  protocol that cannot retrieve no longer suggests `snmp`, and the retrieve
+  docs no longer describe a planned SNMP form.
+
 ### Maintenance
+
+- A new `components/` tree holds specs for parts of centrs that span
+  commands, starting with `components/cmr/`. The matrix's four side tables
+  merge into one Components table, and its parked themes gain CMR across
+  surfaces, Provisioning, and a separate SNMP and OIDs theme.
 
 - Start the 0.2.0 development cycle with package version `0.2.0-next`. The
   minor bump marks the coming transport-default change (native-api first, with

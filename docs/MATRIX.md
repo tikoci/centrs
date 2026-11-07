@@ -1,10 +1,12 @@
 # Matrix
 
 This file owns **capability status, the current track, parked themes and
-nits**. The command × protocol grid covers live operations; offline analysis,
-frontends, and peer measurement have separate entries below. A capability's
-acceptance criteria live in its `commands/<name>/README.md`; GitHub issues own
-the actionable tasks that satisfy them.
+nits**. The command × protocol grid covers live operations; the
+[Components](#components) table covers the parts that span commands: offline
+analysis, transports, target sources, frontends and peer measurement. A
+capability's acceptance criteria live in its `commands/<name>/README.md`, or in
+`components/<name>/README.md` for a component; GitHub issues own the actionable
+tasks that satisfy them.
 
 Start with [Current track](#current-track), then the command's README,
 examples, and linked issue. Verification follows `docs/CONSTITUTION.md` →
@@ -30,18 +32,18 @@ their command-specific evidence contracts.
 
 ## Grid
 
-| Command  | rest-api      | native-api    | ssh           | mac-telnet    | snmp          | mndp          | romon         | winbox-terminal |
-| -------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ---------------- |
-| retrieve | `CHR-passed`  | `CHR-passed`  | —             | —             | `not-started` | —             | —             | —                |
-| api      | `CHR-passed`  | `CHR-passed`  | —             | —             | —             | —             | —             | —                |
-| execute  | `CHR-passed`  | `CHR-passed`  | `CHR-passed`  | `CHR-passed`  | —             | —             | `not-started` | `not-started`    |
-| terminal | —             | —             | `CHR-passed`  | `CHR-passed`  | —             | —             | —             | —                |
-| transfer | `CHR-passed`  | `CHR-passed`  | `CHR-passed`  | —             | —             | —             | —             | —                |
-| devices  | —             | —             | —             | —             | —             | —             | —             | —                |
-| discover | —             | —             | —             | —             | —             | `CHR-passed`  | —             | —                |
-| check    | `designed`    | `designed`    | `designed`    | `designed`    | `not-started` | `not-started` | `not-started` | `not-started`    |
-| explain  | `CHR-passed`  | `CHR-passed`  | —             | —             | —             | —             | —             | —                |
-| settings | —             | —             | —             | —             | —             | —             | —             | —                |
+| Command  | rest-api      | native-api    | ssh           | mac-telnet    | mndp          | romon         | winbox-terminal |
+| -------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ---------------- |
+| retrieve | `CHR-passed`  | `CHR-passed`  | —             | —             | —             | —             | —                |
+| api      | `CHR-passed`  | `CHR-passed`  | —             | —             | —             | —             | —                |
+| execute  | `CHR-passed`  | `CHR-passed`  | `CHR-passed`  | `CHR-passed`  | —             | `not-started` | `not-started`    |
+| terminal | —             | —             | `CHR-passed`  | `CHR-passed`  | —             | —             | —                |
+| transfer | `CHR-passed`  | `CHR-passed`  | `CHR-passed`  | —             | —             | —             | —                |
+| devices  | —             | —             | —             | —             | —             | —             | —                |
+| discover | —             | —             | —             | —             | `CHR-passed`  | —             | —                |
+| check    | `designed`    | `designed`    | `designed`    | `designed`    | `not-started` | `not-started` | `not-started`    |
+| explain  | `CHR-passed`  | `CHR-passed`  | —             | —             | —             | —             | —                |
+| settings | —             | —             | —             | —             | —             | —             | —                |
 
 ## Status pointers
 
@@ -57,12 +59,9 @@ and implementation sequencing in the linked issues.
   fan-out contracts from `docs/CONSTITUTION.md`; command-specific boundaries and
   evidence are in their command READMEs and integration tests.
 - `execute --cmr` (#450) is not a grid column: CMR is a selection source, and
-  its controller transports are the `execute` rest-api/native-api cells.
-  CMR1–CMR7 and CMR10–CMR14 pass on a 7.26beta1 CHR lab over both, and
-  CMR8–CMR9 over native-api (`test/integration/execute-cmr.test.ts`). CMR0 (a
-  router without CMR) runs on the channel's CHR in `execute.test.ts`.
-- There is no `update` command. RouterOS CLI-shaped writes ride `execute`; the
-  structured operation surface is `api`.
+  its controller transports are the `execute` rest-api/native-api cells. Its
+  row is in [Components](#components); evidence and the builds it follows are
+  in `components/cmr/README.md`.
 - `api --stream` absorbs the former `stream`/`tail` surface; native-api stream
   details are in `commands/api/README.md` and `src/protocols/native-api.ts`.
   #399 extends it to incremental command replies and truthful terminal outcomes.
@@ -97,7 +96,7 @@ and implementation sequencing in the linked issues.
   `test/integration/discover.test.ts`.
 - `check` is `designed` (`commands/check/README.md`): a reach + health battery
   whose reads ride the execute-capable transports (rest-api/native-api/ssh/
-  mac-telnet), so those four cells are `designed`; `snmp` and `romon`/
+  mac-telnet), so those four cells are `designed`; `mndp`, `romon` and
   `winbox-terminal` stay `not-started`. Its reach half (finding which services
   answer, and on which ports) moves to `devices` onboarding
   ([Devices and onboarding](#devices-and-onboarding)); the health battery stays
@@ -111,7 +110,7 @@ and implementation sequencing in the linked issues.
   argument `syntax`. Examples 7–16, 19, 24, 48 and 52–53 pass on REST and
   native API in `test/integration/explain-live*.test.ts`, on stable 7.24.5 and
   long-term 7.23.8. `runtimeAcceptance` stays `not-proven`. Offline analysis
-  has its own capability entry below. The generated structure tables
+  has its own row in [Components](#components). The generated structure tables
   `src/explain/menus.ts` and `src/explain/catalog.ts` keep analysis offline;
   their ownership and regeneration contracts live in `commands/explain/README.md`.
 - `transfer / ssh` means the SFTP-backed transfer method. Deferred file-transfer
@@ -123,75 +122,56 @@ and implementation sequencing in the linked issues.
 - MAC-Telnet grounding for `execute` and `terminal` lives in
   `commands/execute/README.md`, `commands/terminal/README.md`, and the
   `src/protocols/mac-telnet*.ts` module headers.
-- Transport wire-format and delivery caveats belong in `src/protocols/*.ts`
-  module headers. Do not expand this file with per-packet or per-router findings.
 
-### Offline analysis
+## Components
 
-This capability opens no protocol connection. It is usable independently and
-provides shared analysis for future integrations across the command grid.
+Parts of centrs that span commands. A component has a
+`components/<name>/README.md` when its contract has no single command README to
+live in (`components/AGENTS.md`); the others point at their code and command
+READMEs. Cell states are the same as the grid's.
 
-| Capability | State | Contract and evidence | Work |
-| ---------- | ----- | --------------------- | ---- |
-| explain / offline baseline | `verified` | `commands/explain/README.md` → Offline baseline acceptance; offline examples in `test/unit/explain.test.ts`, focused `test/unit/explain-*` suites, and CHR captures under `test/fixtures/explain/`. The token partition is scored against device `highlight` by `test/unit/explain-highlight-agreement.test.ts` and `test/fixtures/explain/highlight-agreement.json`. The public entry is `@tikoci/centrs/explain`; its dependency boundary and executed browser-consumer proof are gated by `test/unit/explain-browser-entry.test.ts` (`bun run explain:browser-consumer`). #322's fixed-size 16× depth guard and deterministic structural-work guards close the bounded-execution criterion. | Closed history: #90 (correctness, token agreement #264/#263, consumer verification, bounded execution #322). Follow-on work: [Explain for agents](#explain-for-agents). |
+| Component | Kind | State | Contract and evidence |
+| --------- | ---- | ----- | --------------------- |
+| explain / offline baseline | analysis | `verified` | `commands/explain/README.md` → Offline baseline acceptance; offline examples in `test/unit/explain.test.ts`, focused `test/unit/explain-*` suites, and CHR captures under `test/fixtures/explain/`. The token partition is scored against device `highlight` by `test/unit/explain-highlight-agreement.test.ts` and `test/fixtures/explain/highlight-agreement.json`. The public entry is `@tikoci/centrs/explain`; its dependency boundary and executed browser-consumer proof are gated by `test/unit/explain-browser-entry.test.ts` (`bun run explain:browser-consumer`). #322's fixed-size 16× depth guard and deterministic structural-work guards close the bounded-execution criterion. Closed history: #90 (correctness, token agreement #264/#263, consumer verification, bounded execution #322). Follow-on work: [Explain for agents](#explain-for-agents). |
+| cmr | target source | `CHR-passed` (7.26beta1) | `components/cmr/README.md`: the surfaces that touch CMR, `test/integration/execute-cmr.test.ts`, and what is known per beta. Later betas are not covered yet (#527). |
+| native-api | transport | grid | Used by `retrieve`, `api`, `execute`, and `transfer`; wire facts in `src/protocols/native-api.ts`. |
+| ssh / sftp | transport | grid | Used by `transfer`, `execute`, and `terminal`; facts in `src/protocols/ssh.ts`, `src/protocols/sftp.ts`, and `src/terminal.ts`. |
+| mac-telnet | transport | grid | Used by `execute` and `terminal`; facts in `src/protocols/mac-telnet.ts`, `src/protocols/mac-telnet-console.ts`, `src/protocols/mtwei.ts`, and `src/protocols/adapter.ts`. |
+| ts-api | frontend | `CHR-passed` | `src/index.ts`: the root TypeScript library surface; everything else adapts it. |
+| cli | frontend | `coded` | `src/cli/`: every command in `cliCommands` (`src/cli.ts`) is wired: `retrieve`/`execute`/`api`/`transfer`/`terminal`/`explain`/`devices`/`discover`/`btest`/`mcp`/`settings`, plus the `upload`/`download` shortcuts. |
+| mcp | frontend | `CHR-passed` | `commands/mcp/README.md` and `test/integration/mcp.test.ts`: the scoped-verb stdio server, its CDB-as-allowlist safety model and the `mcp=rw` + `confirm:true` write gate (examples 1–10). |
+| tui | frontend | `not-started` | `src/tui.ts` stub. |
+| proxy | frontend | `not-started` | `src/webproxy.ts` stub. |
+| btest / server | peer measurement | `CHR-passed` | `test/integration/btest.test.ts`; `commands/btest/README.md`. |
+| btest / client | peer measurement | `CHR-passed` | `test/integration/btest-client.test.ts`; `commands/btest/README.md`. |
 
-The CLI/library expose structure, diagnostics, token partitions, symbols, and
-flow-sensitive value facts. `verified` records the offline acceptance evidence;
-it is not a parser-coverage score and does not advance either live protocol cell.
-Live probes (#236), MCP response alignment and future configuration policies
-([Explain for agents](#explain-for-agents)) are distinct work, not
-prerequisites for using offline analysis.
-
-### Transport-base readiness
-
-The grid above tracks command cells. The transports those cells ride are
-implemented and grounded in their `src/protocols/*.ts` **module headers** — the
-single home for wire-format, auth, and delivery facts.
-
-| Transport | Status pointer |
-| --------- | -------------- |
-| native-api | Used by `retrieve`, `api`, `execute`, and `transfer`; wire facts in `src/protocols/native-api.ts`. |
-| ssh / sftp | Used by `transfer`, `execute`, and `terminal`; facts in `src/protocols/ssh.ts`, `src/protocols/sftp.ts`, and `src/terminal.ts`. |
-| mac-telnet | Used by `execute` and `terminal`; facts in `src/protocols/mac-telnet.ts`, `src/protocols/mac-telnet-console.ts`, `src/protocols/mtwei.ts`, and `src/protocols/adapter.ts`. |
-
-### Frontend surfaces (orthogonal to the command grid)
-
-Frontends adapt the shared analysis and device-operation core and carry their
-own state, tracked here:
-
-| Surface | State | Spec | Notes |
-| ------- | ----- | ---- | ----- |
-| ts-api | `CHR-passed` | `src/index.ts` | Root TypeScript library surface; everything else adapts it. |
-| cli | `coded` | `src/cli/` | Every command in `cliCommands` (`src/cli.ts`) is wired: `retrieve`/`execute`/`api`/`transfer`/`terminal`/`explain`/`devices`/`discover`/`btest`/`mcp`/`settings`, plus the `upload`/`download` shortcuts. |
-| mcp | `CHR-passed` | `commands/mcp/` | Scoped-verb stdio MCP server; details in `commands/mcp/README.md` and `test/integration/mcp.test.ts`. |
-| tui | `not-started` | `src/tui.ts` | Stub. |
-| proxy | `not-started` | `src/webproxy.ts` | Stub. |
-
-A surface advances to `CHR-passed` only when every example in its spec
-(`commands/<surface>/examples.md`, where one exists) is green via
-`bun run test:integration`. The `mcp` surface's tool list, CDB-as-allowlist safety
-model, and CHR test shape (examples 1–10, the `mcp=rw` + `confirm:true` write gate)
-are documented in `commands/mcp/README.md` and `commands/mcp/examples.md`.
-
-### Peer measurement (`btest`) — orthogonal to the command grid
-
-`btest` is the MikroTik bandwidth test (peer measurement, TCP/UDP port 2000),
-not a RouterOS-command transport. It sits outside the command×protocol grid as
-its own capability axis and is exempt from the RouterOS command-validation gate.
-
-| Mode           | State        | Evidence |
-| -------------- | ------------ | -------- |
-| btest / server | `CHR-passed` | `test/integration/btest.test.ts`; details in `commands/btest/README.md`. |
-| btest / client | `CHR-passed` | `test/integration/btest-client.test.ts`; details in `commands/btest/README.md`. |
-
-Wire, auth, TCP/UDP, and CI caveats live in `commands/btest/README.md` and the
-`src/protocols/btest*.ts` / `src/protocols/ec-srp5.ts` module headers.
+- **Offline analysis** opens no protocol connection and is usable on its own.
+  It exposes structure, diagnostics, token partitions, symbols and
+  flow-sensitive value facts. `verified` records its acceptance evidence; it
+  is not a parser-coverage score and does not advance either live `explain`
+  cell. Live probes (#236), MCP response alignment and configuration policies
+  are separate work, not prerequisites.
+- **Transports** show `grid` because their state is the command cells they
+  carry. Their `src/protocols/*.ts` module headers are the single home for
+  wire-format, auth, and delivery facts; do not expand this file with
+  per-packet or per-router findings.
+- **Frontends** adapt the shared core. A frontend advances to `CHR-passed` only
+  when every example in its spec (`commands/<surface>/examples.md`, where one
+  exists) is green via `bun run test:integration`.
+- **btest** is the MikroTik bandwidth test (TCP/UDP port 2000), a peer
+  measurement rather than a RouterOS-command transport, and is exempt from the
+  RouterOS command-validation gate. Wire, auth, TCP/UDP and CI caveats live in
+  `commands/btest/README.md` and the `src/protocols/btest*.ts` /
+  `src/protocols/ec-srp5.ts` module headers.
 
 ## Current track
 
 The maintainer sets this list, and it is the only thing that schedules work.
 An open bug can be fixed without being selected; nothing requires picking one
-up. Unfinished grid cells and parked themes do not preempt the track.
+up. Unfinished grid cells and parked themes do not preempt the track. The same
+holds for [consumer repos](CONSTITUTION.md#consumers): a bug they file is fixed
+like any bug, and a feature they need is noted on its parked theme until the
+maintainer adds it here.
 
 1. **CI cleanup** (in progress): docs-only changes run lint only, unit runs on
    every OS, and the CHR channel sweep moves to a nightly run with a
@@ -215,10 +195,10 @@ question, the current lean, when it is ready, and the issues it absorbed.
 Ready means eligible, not started: a ready theme waits until the maintainer
 puts it on the current track. Absorbed issues are closed with the
 `moved-to-docs` label: transferred history, not rejections. When a theme is
-selected it moves to the current track, amends
-the constitution first where it contradicts it, gets a section in its command
-README, and its slices become new issues that link back to the absorbed ones.
-A theme entry that keeps growing is being used as an issue.
+selected it moves to the current track, amends the constitution first where it
+contradicts it, gets a section in its command or component README, and its
+slices become new issues that link back to the absorbed ones. A theme entry
+that keeps growing is being used as an issue.
 
 ### Workspace and local state
 
@@ -250,6 +230,43 @@ A theme entry that keeps growing is being used as an issue.
 - **Ready when:** transport selection is done; the current track already
   schedules it as step 3.
 - **Absorbed:** #149, #173, #176, #441, #449, #585.
+
+### CMR across surfaces
+
+- **Question:** where CMR concepts appear in the CLI and MCP beyond
+  `execute --cmr`, so an agent gets rich access to CMR features.
+- **Lean:** the controller's own `/cmr/*` menus already read through
+  `retrieve` and `api`; build on those first. `retrieve` stays the read-only
+  route. Reading clients through `run-script` is considered only if CMR ships
+  no other way, and the read-only rules still apply then. Every CMR build has
+  `:serialize to=json`, so the older-version reason against serialize wrappers
+  does not hold there. Members in `devices list` belong to Devices and
+  onboarding, MCP access waits on delegated authorization (#449), and CMR setup
+  (package, pairing, labels) is a Provisioning operation.
+- **Ready when:** a consumer needs a CMR feature, or CMR leaves beta.
+- **Absorbed:** none.
+
+### Provisioning
+
+- **Question:** several writes run as one validated operation: a user with an
+  SSH key, device-mode, VLANs, pairing a CMR client.
+- **Lean:** centrs owns the code. quickchr's post-boot steps (user and SSH
+  key, packages, device-mode, license) are the first set, re-spun as generic
+  operations: their logic is vendored, not their code, and quickchr stays as it
+  is for CHR testing. Each operation is named and safe to re-run: it checks,
+  plans, then applies. It is not a generic `update`, which the constitution
+  still rules out, and version gates and the validation gate apply to every
+  step.
+- **Lean, hard parts first:** a step can depend on an earlier one (`/cmr`
+  exists only after the package is installed and the router reboots), so the
+  device cannot validate a whole operation up front; the likely rule is to gate
+  each step just before it runs. Reboots reuse `retrieve --wait` readiness.
+  RouterOS has no transaction across commands and a sent write is never
+  retried, so recovery is re-running the operation. `--yes` and MCP's `confirm`
+  cover the whole operation, not each step.
+- **Ready when:** now. The step-validation rule is the first slice and amends
+  the constitution.
+- **Absorbed:** none.
 
 ### Auth and secrets
 
@@ -283,7 +300,7 @@ A theme entry that keeps growing is being used as an issue.
 - **Lean:** the default is the verdict, problems (error, warn, tip), a manual
   link and one tip, plus a nudge to run it live when it ran offline. Today's
   structure, tokens and evidence move behind `--syntax`. Parser internals move
-  out of the command README into their own file. rosetta owns the documentation
+  out of the command README into `components/offline-analysis/`. rosetta owns the documentation
   dataset (versioned files with a hash) and centrs fetches it. ANSI and HTML
   renderings, policy rules and secret detection build on this.
 - **Ready when:** now. Manual links can ship first as a generated path → URL
@@ -342,16 +359,34 @@ A theme entry that keeps growing is being used as an issue.
 - **Ready when:** now.
 - **Absorbed:** #122, #140, #150, #151.
 
-### RoMON, WinBox terminal and SNMP
+### RoMON and WinBox terminal
 
-- **Question:** the `not-started` cells `execute / romon`,
-  `execute / winbox-terminal` and `retrieve / snmp`.
-- **Lean:** RoMON and WinBox terminal need reference tooling and typed failure
-  mapping first, with protocol knowledge from `tikoci/m2ir`; MAC-Telnet stays
-  the layer-2 path meanwhile. SNMP reads come with the MIB cache described in
-  `commands/retrieve/README.md`.
-- **Ready when:** RoMON and WinBox terminal have reference tooling; SNMP is
-  ready now.
+- **Question:** the `not-started` cells `execute / romon` and
+  `execute / winbox-terminal`.
+- **Lean:** both need reference tooling and typed failure mapping first, with
+  protocol knowledge from `tikoci/m2ir`; MAC-Telnet stays the layer-2 path
+  meanwhile. Their protocol specs go in `components/<protocol>/`, not the
+  `terminal` or `execute` README.
+- **Ready when:** they have reference tooling.
+- **Absorbed:** none.
+
+### SNMP and OIDs
+
+- **Question:** how an agent setting up an NMS gets the OIDs for RouterOS
+  properties, and whether centrs speaks SNMP at all.
+- **Lean:** two parts. (a) OIDs over the API: `print` returns an `oid` for
+  properties that SNMP exposes
+  ([API manual → OID](https://manual.mikrotik.com/docs/developer-guides/api/#oid)),
+  so `explain` or `retrieve` can show the property → OID map over rest-api or
+  native-api, with no SNMP. (b) SNMP as a transport (MIB cache, community or v3
+  credentials, new settings) waits for a consumer, and whether it becomes
+  `retrieve --via snmp` is open. Until then `snmp` stays a known protocol id
+  that fails as not implemented, and help and docs do not advertise it.
+- **Lean, MIB cache:** a policy was signed off on 2026-06-06: XDG cache root,
+  one directory per exact RouterOS version, never another version's MIB. Its
+  full text left `commands/retrieve/README.md`; recover it with
+  `git log -S "SNMP MIB cache policy" -- commands/retrieve/README.md`.
+- **Ready when:** (a) now; (b) a consumer needs it.
 - **Absorbed:** none.
 
 ## Nits
@@ -362,6 +397,7 @@ done or declined. A nit that needs more explanation is an issue.
 
 - `execute`: a lone `print` sent through `execute` could get a tip that
   `retrieve` is the read-only verb a harness can allowlist.
+- `centrs --help` lists the `tui` and `proxy` surfaces, which are stubs.
 - `.github/instructions/`: trim Copilot-era verbosity when the TIKOCI-wide
   files are collected in `tikoci.github.io`.
 - `test/integration/api-stream-command.test.ts` fails intermittently in the

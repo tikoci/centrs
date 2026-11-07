@@ -21,7 +21,7 @@ is the root surface; everything else is an adapter over it. The CLI is the
 primary and most-audited surface: it needs no configuration, and its `--help`
 and envelopes show what centrs offers. The other surfaces keep the same shapes
 and differ only where a surface must. The initial consumers are other TIKOCI
-tools (routeros-muse first), agents working in a project directory, and
+tools (see [Consumers](#consumers)), agents working in a project directory, and
 developers building integrations or UIs over centrs.
 
 The product is *not* "REST/SSH/native API wrappers." The product is
@@ -147,7 +147,8 @@ validator, with CHR evidence.
 There is no `update` verb: generalizing RouterOS add/set/remove into one abstract
 write would need too many heuristics, so writes ride `execute`'s
 canonicalize → validate → run path while `retrieve` stays read-only (see Protocol
-selection).
+selection). Several writes run as one named operation are a different shape,
+parked in `docs/MATRIX.md` → Provisioning.
 
 **Disabling validation to make a call work is forbidden.** If the validator
 rejects something a real router accepts, the validator is wrong; fix the
@@ -440,6 +441,8 @@ the members, and the command runs on each through the controller's
 
 The contract and its device evidence are in
 [`commands/execute/README.md` → CMR](../commands/execute/README.md#cmr-clients-through-their-controller---cmr).
+Which surfaces touch CMR, and how centrs follows its beta builds, is in
+[`components/cmr/README.md`](../components/cmr/README.md).
 
 ### MCP surface: the CDB is the allowlist
 
@@ -467,7 +470,7 @@ Per-operation preferences, downgrade order in parens:
 
 | Operation | Preferred | Downgrade order |
 | --------- | --------- | --------------- |
-| retrieve  | rest-api, native-api (`--sample` too); snmp for OID/MIB reads (future); `--follow` native-api only | rest-api, native-api (`--follow`: no downgrade) |
+| retrieve  | rest-api, native-api (`--sample` too); `--follow` native-api only | rest-api, native-api (`--follow`: no downgrade) |
 | api       | rest-api, native-api; `--stream` and `/listen` native-api only | rest-api, native-api (no silent downgrade) |
 | execute   | native-api → rest-api → mac-telnet | native-api, rest-api, mac-telnet, ssh, romon, winbox-terminal |
 | terminal  | ssh | mac-telnet (L2 only when ssh fails or MAC given) |
@@ -478,8 +481,7 @@ Per-operation preferences, downgrade order in parens:
 Rules:
 
 - **Read vs write:** `retrieve` is read-only (rest-api/native-api); `execute` is
-  the read **and** write surface — writes (add/set/remove) ride `execute`, and
-  there is no `update` operation.
+  the read **and** write surface — writes (add/set/remove) ride `execute`.
 - **Never silently downgrade across `--via`.** If the caller pinned a transport
   that cannot do the operation, error out with a `transport/*` code.
   Auto-selection (no `--via`) may downgrade *within* the table, but every hop is
@@ -489,17 +491,16 @@ Rules:
   `apiFanout` must call `assertApiProtocolSupported`/`validateApiRequestShape`;
   scoped to `apiFanout` only today).
 - **Execute vs retrieve surfaces:** native-api, rest-api, ssh, mac-telnet (and
-  later RoMON / WinBox Terminal) are execute surfaces; SNMP is **retrieve-only**.
-  mac-telnet is the default execute path for an unresolved-MAC target — IP-level
-  access needs explicit ARP opt-in.
+  later RoMON / WinBox Terminal) are execute surfaces. mac-telnet is the
+  default execute path for an unresolved-MAC target — IP-level access needs
+  explicit ARP opt-in.
 - **`measure` (btest) is explicit-only** — never in the auto-select/downgrade
   chain, never a substitute, and no other command rides it.
 - Per-command selection **depth** lives in the command READMEs: `api`'s
   literal `--stream`/NDJSON contract and the REST-cannot-follow constraint
   (`commands/api/README.md`), `transfer`'s size/direction-aware method
   selection and the explicit-only `scp`/`ftp`/`fetch`
-  (`commands/transfer/README.md`), SNMP's MIB-cache
-  (`commands/retrieve/README.md`), and btest's port/auth
+  (`commands/transfer/README.md`), and btest's port/auth
   (`commands/btest/README.md`).
 
 REST-specific constraint: RouterOS REST has a 60-second hard timeout. Do not
@@ -560,8 +561,9 @@ follow-on work is a parked theme, a nit or an issue.
 
 `docs/MATRIX.md` owns capability status, the current track, parked themes and
 nits. A capability's acceptance criteria — like `explain`'s Offline baseline
-acceptance — live in its `commands/<name>/README.md`; GitHub issues own the
-actionable tasks that satisfy those criteria, not the criteria themselves.
+acceptance — live in its `commands/<name>/README.md`, or in
+`components/<name>/README.md` for a part that spans commands; GitHub issues own
+the actionable tasks that satisfy those criteria, not the criteria themselves.
 Status advances only with matching evidence in the same change.
 Record test names, fixture provenance, and CHR versions where applicable.
 Offline verification never advances a live protocol cell to `CHR-passed`.
@@ -612,6 +614,17 @@ stdio-only and grows no listener of its own.
   behavior depends on RouterOS.
 - Generated docs are preferred when the source of truth is code, CLI metadata,
   or schema.
+
+## Consumers
+
+Repos that build on centrs and file issues against it:
+
+- `tikoci/routeros-muse` — web console prototype over TIKOCI RouterOS tooling;
+  its dashboards raised the transfer-methods theme.
+- `tikoci/app-t3code` — a RouterOS `/app` container for T3 Code that uses
+  centrs. It is under active testing, so expect issues from it that find gaps.
+
+How their issues become work is in `AGENTS.md` → Where work is tracked.
 
 ## Adjacent projects (grounding sources)
 

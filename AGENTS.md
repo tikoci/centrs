@@ -8,7 +8,10 @@ Three files cover this project. Read them in this order:
    nits. Follow its current track and the issues it links; unfinished protocol
    cells and parked themes do not outrank that track.
 3. `commands/<name>/README.md` and `commands/<name>/examples.md` — the
-   executable spec for the capability you're working on.
+   executable spec for the capability you're working on. A part that spans
+   commands (a transport, a target source such as CMR, an analysis layer) has
+   `components/<name>/README.md` instead; `components/AGENTS.md` says when one
+   is made.
 
 When those three are clear, write code or tests. Do not write more prose.
 
@@ -68,8 +71,13 @@ across TIKOCI repos goes in a `.github/instructions/` file with a narrow
 - **Issues:** actionable work only, meaning a bug with a reproduction or a slice
   with acceptance criteria. Other repos and consumers may file issues in any
   shape. When an issue carries a durable idea rather than a task, move the idea
-  into a matrix theme or a command file, then close the issue as not planned
+  into a matrix theme or a command or component file, then close the issue as not planned
   with the `moved-to-docs` label and a link to its new home.
+- **Consumer issues** (`tikoci/routeros-muse`, `tikoci/app-t3code`; see
+  `docs/CONSTITUTION.md` → Consumers): a bug is fixed like any bug, without
+  being selected. A feature request does not go straight to a PR: note it on
+  the parked theme it belongs to, and it becomes work when the maintainer puts
+  it on the current track.
 - **Closed `moved-to-docs` issues** are transferred history, not rejections.
   Read them for background; do not reopen one to resume work. Open a new issue
   that links back.
@@ -114,7 +122,8 @@ How bot reviews surface and how to resolve threads before merge:
 ## Rules of thumb
 
 - Prefer `rosetta` MCP tools for RouterOS facts before web search.
-- Update the constitution, the matrix, or a per-command file — not a new doc.
+- Update the constitution, the matrix, or a per-command or per-component
+  file — not a new doc.
 - A directory `AGENTS.md` is for local constraints only.
 - `.scratch/` is not authoritative and must not be referenced from durable
   files. Treat it as in-flight only.
@@ -143,5 +152,5 @@ discovery data as security-sensitive surfaces.
 - Do not silently fall back to another protocol when the caller pinned `--via`.
 - Do not make generated output the hand-edited source of truth.
 - Do not add new docs to capture status, plans, or roadmaps. Use the matrix
-  (current track, parked themes, nits) and per-command files.
+  (current track, parked themes, nits) and per-command or per-component files.
 - Do not disable validation to make a test pass; validation is the product.

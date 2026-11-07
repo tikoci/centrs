@@ -14,7 +14,8 @@ import { runTerminalCli, terminalCommand } from "./cli/terminal.ts";
 import { runTransferCli, transferCommand } from "./cli/transfer.ts";
 import { runVersionCli } from "./cli/version.ts";
 import { asCentrsError, formatCentrsErrorText } from "./errors.ts";
-import { describeCentrs, plannedProtocols, plannedSurfaces } from "./index.ts";
+import { describeCentrs, plannedSurfaces } from "./index.ts";
+import { protocolPlans } from "./protocols/index.ts";
 
 /** Every CLI command's metadata, in help/docs order. `scripts/gen-cli-docs.ts` renders `docs/CLI.md` from this. */
 export const cliCommands: ReadonlyArray<CliCommandMetadata> = [
@@ -31,6 +32,12 @@ export const cliCommands: ReadonlyArray<CliCommandMetadata> = [
 	settingsCommand,
 ];
 
+// Help lists only what a caller can use today; a planned protocol is not
+// advertised (it still fails clearly as not implemented under `--via`).
+const implementedProtocols = protocolPlans
+	.filter((protocol) => protocol.implemented)
+	.map((protocol) => protocol.id);
+
 const commandSummaries: ReadonlyArray<{ name: string; summary: string }> =
 	cliCommands.map((command) => ({
 		name: command.name,
@@ -42,7 +49,7 @@ export function renderCliHelp(): string {
 		describeCentrs(),
 		"",
 		`Surfaces: ${plannedSurfaces.join(", ")}`,
-		`Protocols: ${plannedProtocols.join(", ")}`,
+		`Protocols: ${implementedProtocols.join(", ")}`,
 		"",
 		"Commands:",
 		...commandSummaries.map(

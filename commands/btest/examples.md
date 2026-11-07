@@ -2,7 +2,7 @@
 
 Each numbered example is an executable spec. btest is a peer protocol (no router
 *command* is run), so the examples are validated by two peers — matching the
-matrix's honest grounding split (`docs/MATRIX.md`, "Peer measurement (`btest`)"):
+matrix's honest grounding split (`docs/MATRIX.md` → Components, the `btest` rows):
 
 - **Gated `CHR-passed` (server cell): CHR client → centrs server** — examples
   **1–3** are the asserted set. `@tikoci/quickchr` boots a CHR; its

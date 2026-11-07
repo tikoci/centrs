@@ -2,7 +2,7 @@
  * `btest` server against a real CHR bandwidth-test **client**, over QEMU SLIRP.
  *
  * This is the gated `CHR-passed` evidence for the **server** cell (`docs/MATRIX.md`,
- * "Peer measurement"). A `user`/SLIRP CHR reaches the host at the gateway
+ * Components). A `user`/SLIRP CHR reaches the host at the gateway
  * `10.0.2.2`; the centrs btest server binds the host on TCP/UDP 2000, and the
  * CHR's `/tool/bandwidth-test address=10.0.2.2 …` dials it. Guest→host is plain
  * SLIRP outbound, so **no hostfwd** is needed.

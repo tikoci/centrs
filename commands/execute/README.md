@@ -316,6 +316,8 @@ client is never dialed, so a client behind NAT or reachable only through its
 controller works the same way. CMR is a selection source, not a protocol:
 `--via` pins the **controller** transport (native-api, the default, or
 rest-api). A CMR failure never falls back to dialing a client directly.
+The other surfaces that touch CMR, and the builds it is checked on, are in
+[`components/cmr/README.md`](../../components/cmr/README.md).
 
 CMR is beta-only: it first shipped in 7.26beta1, and the controller also needs
 the optional `cmr` package. When the target has no `/cmr/device`, centrs reads
@@ -429,7 +431,8 @@ when the target is itself a CMR client.
   can also be reached directly; otherwise re-run a read through `--cmr`.
 - **Not on MCP** until delegated authorization is designed (#449). That design
   must not assume RouterOS refuses a fleet write for a `!write` login (see
-  above). `retrieve --cmr` is deferred (#441).
+  above). `retrieve --cmr` is deferred: `docs/MATRIX.md` → CMR across
+  surfaces.
 
 `/cmr/device/dashboard` is an interactive console view, refused as
 `cmr/console-only`. A plain path, abbreviated or not (`/cmr/dev/dash`), is

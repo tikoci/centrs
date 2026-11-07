@@ -12,7 +12,7 @@ validation): the cheap, safe knowledge tier in front of the runners
 Status: offline baseline `verified`; live probes over `rest-api` and `native-api`
 `CHR-passed`. **`centrs explain '<input>'` runs without a router or CDB**, and
 `centrs explain <router> '<input>'` adds read-only device evidence.
-[`docs/MATRIX.md`](../../docs/MATRIX.md#offline-analysis) tracks these separately;
+[`docs/MATRIX.md`](../../docs/MATRIX.md#components) tracks these separately;
 [#90](https://github.com/tikoci/centrs/issues/90) indexes the remaining tasks.
 The spec is ratified on the [phase-0 grounding lab](#phase-0-ratification-185).
 Load-bearing rules — envelope, errors, settings precedence, identity,

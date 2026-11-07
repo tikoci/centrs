@@ -77,8 +77,9 @@ export function isDocsOnlyPath(path: string): boolean {
 		return true;
 	}
 	if (path === "docs/CONSTITUTION.md") return true;
-	// commands/<name>/README.md and AGENTS.md; examples.md is the executable spec.
-	return /^commands\/[^/]+\/README\.md$/.test(path);
+	// commands/<name>/ and components/<name>/ READMEs; examples.md is the
+	// executable spec.
+	return /^(commands|components)\/[^/]+\/README\.md$/.test(path);
 }
 
 /** The first path that is not docs-only, or null when every one is. */

@@ -147,6 +147,7 @@ MNDP
 NAND # NAND flash memory; write-back caches file writes up to ~40s on some MikroTik boards
 netmiko # [Multi-vendor library to simplify Paramiko SSH connections to network devices](https://github.com/ktbyers/netmiko)
 netwatch
+NMS # network management system; polls devices over SNMP
 nullglob # bash shopt that makes an unmatched glob expand to zero words instead of the literal pattern
 npk # MikroTik package format
 nvme-over-tcp # supported by RouterOS **with** rose-storage.npk extra-package

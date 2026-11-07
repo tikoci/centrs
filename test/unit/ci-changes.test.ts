@@ -19,6 +19,8 @@ describe("isDocsOnlyPath", () => {
 			"docs/CONSTITUTION.md",
 			"commands/api/README.md",
 			"commands/api/AGENTS.md",
+			"components/cmr/README.md",
+			"components/AGENTS.md",
 			"docs/AGENTS.md",
 			".github/instructions/linting.instructions.md",
 			".github/pull_request_template.md",
@@ -30,6 +32,7 @@ describe("isDocsOnlyPath", () => {
 	test("specs, generated docs, parsed prose and everything else are code", () => {
 		for (const path of [
 			"commands/api/examples.md",
+			"components/cmr/examples.md",
 			"docs/CLI.md",
 			"docs/errors/README.md",
 			"docs/errors/CENTRS_X.md",
