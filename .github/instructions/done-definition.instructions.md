@@ -1,5 +1,5 @@
 ---
-applyTo: "src/**,test/**,commands/**,docs/MATRIX.md,docs/CONSTITUTION.md,AGENTS.md,**/AGENTS.md"
+applyTo: "src/**,test/**,commands/**,components/**,docs/MATRIX.md,docs/CONSTITUTION.md,AGENTS.md,**/AGENTS.md"
 ---
 
 # Done definition
@@ -7,8 +7,9 @@ applyTo: "src/**,test/**,commands/**,docs/MATRIX.md,docs/CONSTITUTION.md,AGENTS.
 Read `docs/CONSTITUTION.md` before changing anything that touches RouterOS,
 errors, settings, or the result envelope. Read `docs/MATRIX.md` to find the
 capability and the current track. Read `commands/<name>/README.md` and
-`commands/<name>/examples.md` (or the `components/<name>/` pair for a part
-that spans commands) for the executable spec.
+`commands/<name>/examples.md` for the executable spec. For a part that spans
+commands, read `components/<name>/README.md`, plus its `examples.md` when one
+exists; otherwise the README names the command examples it rides.
 
 ## Evidence follows the capability
 

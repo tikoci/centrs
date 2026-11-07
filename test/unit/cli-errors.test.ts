@@ -73,6 +73,23 @@ describe("runCli dispatch", () => {
 		expect(code).toBe(0);
 		expect(out).toContain("Commands:");
 	});
+
+	test("--help lists only implemented protocols", async () => {
+		const { out } = await run(["--help"]);
+		const line = out.split("\n").find((l) => l.startsWith("Protocols: "));
+		const ids = (line ?? "").slice("Protocols: ".length).split(", ");
+		expect(ids).toEqual([
+			"rest-api",
+			"native-api",
+			"ssh",
+			"mndp",
+			"mac-telnet",
+			"btest",
+		]);
+		for (const planned of ["snmp", "romon", "winbox-terminal"]) {
+			expect(ids).not.toContain(planned);
+		}
+	});
 });
 
 // #111: the shared `unknownFlagError` "Did you mean?" contract, once wired into
