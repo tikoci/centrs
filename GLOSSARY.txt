@@ -47,6 +47,9 @@ mtu
 #   https://github.com/tikoci/tikdns
 #
 # External references
+# %LYSS: network-device security controls and read-only audit tool; future rule reference.
+#   https://github.com/lyss-project/lyss
+LYSS
 # %mac-telnet: MikroTik MAC Telnet tooling by haakonnessjoen.
 #   https://github.com/haakonnessjoen/mac-telnet
 # %netmiko: multi-vendor SSH abstraction; reference for SSH transport patterns.

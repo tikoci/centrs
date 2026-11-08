@@ -307,6 +307,42 @@ that keeps growing is being used as an issue.
   table.
 - **Absorbed:** #90, #133, #223, #372, #373, #501, #507, #520, #573.
 
+### Security rule references
+
+- **Question:** which security rules are worth collecting for future RouterOS
+  diagnostics beyond syntax, whether in `explain`, `check`, or a new command.
+- **Lean:** collect references and candidate rules first; the command, rule
+  format and integration are undecided. Starting reference:
+  [LYSS](https://github.com/lyss-project/lyss), found through the author's
+  [MikroTik forum introduction](https://forum.mikrotik.com/t/open-source-read-only-audit-of-routeros-security-settings-factory-defaults-cisa-kev-versions/274319).
+  Its [draft specification](https://github.com/lyss-project/lyss/blob/832d12e808d87ca364fe7adf0a02daf5e5dd8602/spec/lyss-spec.yaml)
+  has 25 controls across Baseline, Hardened and Advanced levels:
+  - **Management:** disable Telnet and plain HTTP; SSHv2; idle timeouts;
+    authorized source networks; a dedicated management VLAN; a warning banner;
+    modern SSH algorithms.
+  - **Authentication:** avoid default SNMP communities; strong privileged-account
+    password hashes; non-reversible local passwords; protected AAA shared
+    secrets; central AAA with local fallback; SNMPv3 authentication and privacy
+    or SNMP disabled.
+  - **Logging and time:** remote syslog and NTP synchronization.
+  - **Firmware:** vendor support and known critical or exploited vulnerabilities.
+  - **Backups:** automatic configuration backups.
+  - **Access ports:** disable unused ports; spanning-tree guard; DHCP snooping;
+    ARP inspection; 802.1X or MAC authentication; storm control; restrict
+    neighbor discovery on untrusted ports.
+  The [RouterOS adapter](https://github.com/lyss-project/lyss/blob/832d12e808d87ca364fe7adf0a02daf5e5dd8602/adapters/mikrotik.yaml)
+  supplies platform checks; controls carry stable IDs and evidence requirements.
+  These are reference candidates, not adopted centrs policy. LYSS's
+  [validation notes](https://github.com/lyss-project/lyss/blob/832d12e808d87ca364fe7adf0a02daf5e5dd8602/docs/VALIDATION.md)
+  report CHR 7.25.1 coverage, with hardware validation still open. Export-default
+  assumptions and version advisories need independent grounding before use.
+  Its [licensing notice](https://github.com/lyss-project/lyss/blob/832d12e808d87ca364fe7adf0a02daf5e5dd8602/NOTICE)
+  separates the CC BY 4.0 specification/data from AGPL-3.0-only software/adapters
+  with additional terms.
+- **Ready when:** the maintainer selects candidate rules to investigate; this
+  reference does not schedule implementation or select a command.
+- **Absorbed:** none.
+
 ### Surface contracts
 
 - **Question:** how the CLI, library, MCP and future web surfaces keep one
