@@ -578,6 +578,12 @@ interface FileRow {
 	name: string;
 	type?: string;
 	size?: number;
+	/**
+	 * The file has no `/file print` row (it sits under a container root, #636)
+	 * and is addressed by its pathname: `id` is the pathname, which RouterOS
+	 * accepts as `.id` for `/file/get`, `set` and `remove`.
+	 */
+	byPath?: boolean;
 }
 
 /**
@@ -628,7 +634,7 @@ class AdapterFileBackend implements FileBackend {
 		})) as Record<string, unknown>[];
 		const match = rows.find((row) => readString(row, "name") === name);
 		if (!match) {
-			return undefined;
+			return this.findFileByPath(name);
 		}
 		return {
 			id: readString(match, ".id") ?? "",
@@ -636,6 +642,46 @@ class AdapterFileBackend implements FileBackend {
 			type: readString(match, "type"),
 			size: readNumber(match, "size"),
 		};
+	}
+
+	/**
+	 * `/file print` omits the children of a container root, but RouterOS still
+	 * answers a direct `/file/get .id=<pathname>` for them (CHR 7.25.1 and
+	 * 7.24.6, #636). A missing pathname answers "no such item" (native) or 404
+	 * (REST), both mapped to `routeros/unknown-path`: that is absence. Any other
+	 * error is real and propagates.
+	 */
+	private async findFileByPath(name: string): Promise<FileRow | undefined> {
+		// A leading `*` would be read as an internal id, not a pathname.
+		if (name.length === 0 || name.startsWith("*")) {
+			return undefined;
+		}
+		let result: ProtocolExecuteResult;
+		try {
+			result = await this.adapter.execute({
+				path: "/file",
+				command: "get",
+				attributes: { ".id": name, "value-name": "size" },
+			});
+		} catch (error) {
+			if (
+				error instanceof CentrsError &&
+				error.code === "routeros/unknown-path"
+			) {
+				return undefined;
+			}
+			throw error;
+		}
+		const raw =
+			typeof result.ret === "string"
+				? result.ret
+				: result.records[0]
+					? (readString(result.records[0], "ret") ??
+						readString(result.records[0], "size"))
+					: undefined;
+		const size =
+			raw === undefined ? undefined : readNumber({ size: raw }, "size");
+		return { id: name, name, size, byPath: true };
 	}
 
 	async writeFile(
@@ -664,7 +710,10 @@ class AdapterFileBackend implements FileBackend {
 		await this.adapter.execute({
 			path: "/file",
 			command: "set",
-			attributes: { ".id": id, contents: bytes.toString("latin1") },
+			attributes: {
+				".id": existing?.byPath ? binaryWord(id) : id,
+				contents: bytes.toString("latin1"),
+			},
 			binary: true,
 		});
 	}
@@ -675,7 +724,10 @@ class AdapterFileBackend implements FileBackend {
 			const result = await this.adapter.execute({
 				path: "/file",
 				command: "get",
-				attributes: { ".id": row.id, "value-name": "contents" },
+				attributes: {
+					".id": row.byPath ? binaryWord(row.id) : row.id,
+					"value-name": "contents",
+				},
 				binary: true,
 			});
 			return Buffer.from(extractContents(result), "latin1");
@@ -689,7 +741,7 @@ class AdapterFileBackend implements FileBackend {
 				path: "/file",
 				command: "read",
 				attributes: {
-					file: Buffer.from(row.name, "utf8").toString("latin1"),
+					file: binaryWord(row.name),
 					offset: String(offset),
 					"chunk-size": String(FILE_READ_CHUNK_BYTES),
 				},
@@ -820,6 +872,15 @@ async function withTempFile<T>(
 	}
 }
 
+/**
+ * A text value inside a `binary: true` request. The adapters send those
+ * attributes as byte strings (#404), so a UTF-8 file name must be passed as
+ * its UTF-8 bytes in a latin1 string.
+ */
+function binaryWord(value: string): string {
+	return Buffer.from(value, "utf8").toString("latin1");
+}
+
 async function verifyWrittenSize(
 	resolved: ResolvedTransferRequest,
 	backend: FileBackend,
@@ -839,6 +900,20 @@ async function verifyWrittenSize(
 	}
 	const row = await backend.findFile(remote);
 	const actual = row?.size;
+	// REST/native report a size for every file they can find. With no size there
+	// is nothing to compare, so do not claim `size` (#636, #589). sftp rows carry
+	// no size by design and trust the protocol's complete-transfer guarantee.
+	if (actual === undefined && isRestFamily(resolved.method)) {
+		throw new CentrsError({
+			code: "transport/incomplete-transfer",
+			summary: row
+				? `RouterOS reports no size for ${remote} after the upload, so it could not be verified.`
+				: `RouterOS shows no file named ${remote} after the upload, so it could not be verified.`,
+			remediation:
+				"The upload was sent, but its result is unconfirmed. Check the file with `transfer list` or `retrieve /file`, then re-run with --force if it is wrong.",
+			context: { remote, expected },
+		});
+	}
 	if (actual !== undefined && actual !== expected) {
 		throw new CentrsError({
 			code: "transport/incomplete-transfer",

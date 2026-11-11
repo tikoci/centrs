@@ -278,7 +278,9 @@ than re-reading a size. Two RouterOS facts shape the `/file`-size path:
   against the uncompressed byte count we sent stays valid.
 
 A confirmed shortfall (clear truncation after the poll window) is
-`transport/incomplete-transfer`. `--verify checksum` is stronger but only where
+`transport/incomplete-transfer`. So is an upload whose result RouterOS cannot
+show at all (no row and no size): the write was sent, but nothing confirms it,
+so `verified: "size"` is never claimed without an observed size (#636). `--verify checksum` is stronger but only where
 RouterOS exposes a usable digest; otherwise it degrades to `size` with a warning.
 
 ## Output shape
@@ -326,6 +328,16 @@ The `/file` menu path is fixed, so there is no `/console/inspect` path/attribute
 gate as in `retrieve` / `execute`; RouterOS's own menu errors (missing remote
 file, permission denied) map to `routeros/*`, and SFTP/SCP/fetch errors map to
 `transport/*` and `auth/*`.
+
+Over `rest`/`native` the probe reads `/file print` first. That listing omits
+the files under a container's root directory (it shows the root itself, type
+`container store`, but none of its children; CHR 7.25.1 and 7.24.6), so when
+no row matches, centrs asks for the pathname directly
+(`/file/get .id=<path> value-name=size`). RouterOS answers that for those
+files, and centrs then reads, overwrites and removes them by pathname. A
+missing pathname (REST 404, native `no such item`) is absence; any other error
+on that probe is reported as itself (#636). `transfer list` still shows only
+what `/file print` shows.
 
 `meta.validation` reports that existence probe as one `device` stage. `list`
 runs no probe, so it is not a gate: its `meta.validation` is

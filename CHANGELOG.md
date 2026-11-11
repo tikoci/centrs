@@ -22,6 +22,17 @@ no section of its own.
   protocol that cannot retrieve no longer suggests `snmp`, and the retrieve
   docs no longer describe a planned SNMP form.
 
+### Fixed
+
+- `transfer` over rest/native works on files under a container's root
+  directory, which `/file print` does not list: a lookup with no listed row
+  now asks for the pathname directly, so `upload --force` overwrites instead
+  of failing "file already exists", and `download` and `remove` find the file
+  (#636). Grounded on CHR 7.25.1 and 7.24.6.
+- `transfer upload` no longer reports `verified: "size"` when RouterOS shows
+  no size for the uploaded file; that is now `transport/incomplete-transfer`
+  (#636, #589).
+
 ### Maintenance
 
 - A new `components/` tree holds specs for parts of centrs that span
