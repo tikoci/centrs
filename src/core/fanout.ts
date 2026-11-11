@@ -129,7 +129,6 @@ const DROPPED_REPLY_CODES: readonly string[] = [
  * #639: RouterOS dropping a dispatched command's reply is the same unknown
  * outcome (see {@link DROPPED_REPLY_CODES}).
  */
-
 export function sentWriteWarnings(
 	write: boolean,
 	error: unknown,
