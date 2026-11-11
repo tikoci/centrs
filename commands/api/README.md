@@ -223,6 +223,18 @@ with no RouterOS response prints a compact `{code,message}` to stderr. Exit code
 Without `--stream`, bounded commands return their accumulated rows as an ordinary
 array. REST retains its **60 s** cap; native API collects replies until `!done`.
 
+A few RouterOS commands carry their own reply limit on any transport, and over
+native API they trap with `action timed out (13)`, which maps to
+`routeros/action-timed-out` (#639). `/container/shell` cuts its reply at about
+60 s, at a fixed time (`sleep 65` → 62 s, `sleep 130` → 61 s on CHR 7.25), while
+the command keeps running; `/execute` with `as-string` traps when a script that
+ran past about 60 s finishes (7.25 and later; 7.24.6 traps at a fixed 60 s). `--timeout` does not change either. The command
+may still be running or may have finished, and a write that ends this way
+carries `transport/write-outcome-unknown`. Bound `/container/shell` with its own
+`timeout=<seconds>` (bare seconds; it only lowers the limit), or start long work
+in the background and poll it
+([execute → Commands that drop their reply](../execute/README.md#commands-that-drop-their-reply-639)).
+
 `--stream` emits the literal command's native replies incrementally, whether
 the command is finite or open-ended (#402: one wire reply, one line).
 `--via rest-api --stream` fails with `transport/capability-unsupported`;

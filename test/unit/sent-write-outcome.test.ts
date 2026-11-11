@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { type ApiStreamLine, apiEnvelope, apiStream } from "../../src/api.ts";
 import { apiFanout } from "../../src/api-fanout.ts";
 import { sentWriteWarnings } from "../../src/core/fanout.ts";
+import { mapRouterOsError } from "../../src/core/routeros-errors.ts";
 import { CentrsError } from "../../src/errors.ts";
 import { executeEnvelope } from "../../src/execute.ts";
 import {
@@ -514,5 +515,72 @@ describe("a refused multi-statement write warns that it may be partly applied (#
 		);
 		refused(structured);
 		expect(warned(structured)).toBe(false);
+	});
+});
+
+/**
+ * #639: RouterOS dropping a dispatched command's reply (native `action timed
+ * out (13)` past a command's own ~60 s limit, REST `Session closed`) is an
+ * unknown outcome: the command may still be running, or may have finished.
+ */
+describe("a write whose reply RouterOS dropped says its outcome is unknown (#639)", () => {
+	for (const [raw, transport, code] of [
+		["action timed out (13)", "native-api", "routeros/action-timed-out"],
+		["Session closed", "rest-api", "routeros/session-closed"],
+	] as const) {
+		test(`${code}: a dispatched write warns; a read or an unsent write does not`, () => {
+			const error = mapRouterOsError(raw, { transport });
+			expect(error.code).toBe(code);
+			expect(sentWriteWarnings(true, error, { dispatched: true })).toEqual([
+				expect.objectContaining({
+					code: "transport/write-outcome-unknown",
+					context: { cause: code },
+				}),
+			]);
+			expect(sentWriteWarnings(false, error, { dispatched: true })).toEqual([]);
+			expect(sentWriteWarnings(true, error, { dispatched: false })).toEqual([]);
+		});
+	}
+
+	test("execute: a native write trapped with `action timed out` warns", async () => {
+		const reader = new SentenceReader();
+		const router = Bun.listen<undefined>({
+			hostname: "127.0.0.1",
+			port: 0,
+			socket: {
+				data(socket, chunk) {
+					for (const words of reader.push(new Uint8Array(chunk))) {
+						const tag = words.filter((w) => w.startsWith(".tag="));
+						if (words[0] !== "/login") {
+							socket.write(
+								encodeSentence([
+									"!trap",
+									"=message=action timed out (13)",
+									...tag,
+								]),
+							);
+						}
+						socket.write(encodeSentence(["!done", ...tag]));
+					}
+				},
+			},
+		});
+		try {
+			const envelope = await executeEnvelope(
+				{
+					...common,
+					via: "native-api",
+					port: router.port,
+					command: ':delay 65s; /system/note/set note="x"',
+				},
+				ENV,
+			);
+			expect(!envelope.ok && envelope.error.code).toBe(
+				"routeros/action-timed-out",
+			);
+			expect(warned(envelope)).toBe(true);
+		} finally {
+			router.stop(true);
+		}
 	});
 });

@@ -413,6 +413,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 
 	// routeros/*
 	{
+		code: "routeros/action-timed-out",
+		summary:
+			"RouterOS dropped a command's reply at that command's own limit (native-API `action timed out`); the command may still be running or may have finished.",
+	},
+	{
 		code: "routeros/api-fatal",
 		summary: "The RouterOS native API returned a fatal sentence.",
 	},

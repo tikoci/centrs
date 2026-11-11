@@ -1063,9 +1063,9 @@ function assertNotStructuredDashboard(
  * error keeps its own code and the device stage reads `not reached`.
  */
 const PREFLIGHT_NO_ANSWER_CODES: ReadonlySet<string> = new Set([
+	"routeros/action-timed-out",
 	"routeros/session-closed",
 ]);
-const PREFLIGHT_NO_ANSWER_DETAIL = /\baction timed out\b/i;
 
 /**
  * True when a `:parse` preflight error is not a parse answer: a transport,
@@ -1074,17 +1074,10 @@ const PREFLIGHT_NO_ANSWER_DETAIL = /\baction timed out\b/i;
  * `validation/syntax`.
  */
 function isPreflightTransportError(error: CentrsError): boolean {
-	if (error.code.startsWith("transport/") || error.code.startsWith("auth/")) {
-		return true;
-	}
-	if (PREFLIGHT_NO_ANSWER_CODES.has(error.code)) {
-		return true;
-	}
-	const detail = error.context?.["detail"];
 	return (
-		error.code.startsWith("routeros/") &&
-		typeof detail === "string" &&
-		PREFLIGHT_NO_ANSWER_DETAIL.test(detail)
+		error.code.startsWith("transport/") ||
+		error.code.startsWith("auth/") ||
+		PREFLIGHT_NO_ANSWER_CODES.has(error.code)
 	);
 }
 

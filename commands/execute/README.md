@@ -217,6 +217,39 @@ Spec-tier flags with no implementation yet — today they fail as unknown flags:
 | `--strict`                      | Treat any warning on a successful run as an error (`ok: false`, nonzero exit), like `-Werror`. Default is lenient (`ok: true` + `warnings`). |
 | `--max-bytes <n>`               | Byte budget for the rendered envelope; excess output is truncated with a warning + `meta.truncated` (not an error), matching `retrieve`. (Will replace the implemented `--max-results`, which fails instead of truncating.) |
 
+## Commands that drop their reply (#639)
+
+Some RouterOS commands stop waiting for their own reply at about 60 seconds.
+The command keeps running or finishes; only its reply is lost. These are
+per-command limits, not a native-API one: structured native-API commands
+collect replies until `!done` ([api](../api/README.md#multi-frame-results-and-incremental-replies)).
+REST's 60-second cap on every request is a separate limit
+(`routeros/session-closed`).
+
+| Command | Limit | Measured |
+| ------- | ----- | -------- |
+| `/execute` with `as-string` | 7.25 and later: traps when a script that ran longer than about 60 s *finishes*. 7.24.6: traps at a fixed 60 s while the script keeps running. | `:delay 65s` → trap at 65 s on 7.25 and 7.25.1, at 60 s on 7.24.6; the script ran to the end on both (example R3). `sleep 130` / `sleep 250` inside `/container/shell` → 131 s / 251 s (7.25). |
+| `/container/shell` | Cuts its reply off at about 60 s, at a fixed time; the command keeps running. | Through `api` on 7.25: `sleep 65` → 62 s, `sleep 130` → 61 s; `sleep 90; date > file` wrote its file about 30 s after the trap. |
+
+The change between 7.24.6 and 7.25 is bracketed, not pinned
+(`EXECUTE_AS_STRING_TRAPS_AT_SCRIPT_END_SINCE` in `test/integration/chr.ts`).
+
+`execute` sends every script over native API as `/execute as-string`, so a
+script that runs past about 60 s fails (on 7.25 and later, when it ends) as
+`routeros/action-timed-out` (RouterOS's `action timed out (13)`). Over REST
+the same script hits the 60-second session cap first. `--timeout` extends
+neither, and no transport avoids them. A write that ends this way, or with
+`routeros/session-closed` after it was sent, carries
+`transport/write-outcome-unknown`.
+
+For long work, start it in the background and poll: `:execute {…}` without
+`as-string` runs the script as a `/system/script/job` and returns at once,
+then `centrs retrieve … --wait --until …` waits on what it changes. Where a
+command has its own timeout, bound it below the limit:
+`/container/shell timeout=<seconds>` takes bare seconds (`timeout=200s` is
+rejected), kills the command cleanly (`ret=exited with signal 9`, no trap),
+and only lowers the limit; values above 60 still trap at about 60 s.
+
 ## SSH key selection
 
 Signed off (settings names): SSH transports use one shared setting, `sshKey`,

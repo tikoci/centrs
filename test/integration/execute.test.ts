@@ -4,8 +4,10 @@ import type { CentrsError } from "../../src/errors.ts";
 import { executeEnvelope } from "../../src/execute.ts";
 import { executeCmr } from "../../src/execute-cmr.ts";
 import { retrieve } from "../../src/retrieve.ts";
+import { retrieveWait } from "../../src/retrieve-wait.ts";
 import {
 	CMR_SINCE,
+	EXECUTE_AS_STRING_TRAPS_AT_SCRIPT_END_SINCE,
 	exampleIds,
 	isChrIntegrationEnabled,
 	readEnv,
@@ -1014,4 +1016,95 @@ describeFast("execute against CHR", () => {
 			await chr.destroy();
 		}
 	}, 120_000);
+});
+
+describeFast("RouterOS drops a long /execute script's reply (R3, #639)", () => {
+	test("native-api: action timed out past ~60 s; a write carries write-outcome-unknown", async () => {
+		const started = await startIntegrationChr({}, { reuse: true });
+		const chr = started.chr;
+		try {
+			const auth = splitQuickChrAuth(
+				readEnv(started.env, "QUICKCHR_AUTH") ?? "admin:",
+			);
+			const login = {
+				targetInput: "127.0.0.1",
+				via: "native-api" as const,
+				port: chr.ports.api,
+				username: auth.username,
+				password: auth.password,
+			};
+			const comment = "centrs-r3-dropped-reply";
+			const timed = async (command: string, yes: boolean) => {
+				const begin = performance.now();
+				// The limit is the router's, per command: a generous centrs
+				// timeout must not change the outcome.
+				const envelope = await executeEnvelope({
+					...login,
+					command,
+					yes,
+					timeout: "200s",
+				});
+				return { envelope, seconds: (performance.now() - begin) / 1000 };
+			};
+			// Both scripts run at once on separate API sessions.
+			const [read, write] = await Promise.all([
+				timed(":delay 65s; :put centrs-r3", false),
+				timed(
+					`:delay 65s; /ip/address/add address=198.51.100.39/32 interface=ether1 comment=${comment}`,
+					true,
+				),
+			]);
+			console.error(
+				`R3 on ${chr.state.version}: read ${read.seconds.toFixed(1)} s, write ${write.seconds.toFixed(1)} s`,
+			);
+
+			// Newer builds report the trap when the script ends; older ones at a
+			// fixed ~60 s while it keeps running.
+			const atScriptEnd = routerOsAtLeast(
+				chr.state.version,
+				EXECUTE_AS_STRING_TRAPS_AT_SCRIPT_END_SINCE,
+			);
+			for (const run of [read, write]) {
+				const failure = expectExecuteFailure(
+					run.envelope,
+					"native-api",
+					"routeros/action-timed-out",
+				);
+				expect(failure.error.context?.["detail"]).toMatch(/action timed out/);
+				expect(run.seconds).toBeGreaterThan(atScriptEnd ? 64 : 59);
+				expect(run.seconds).toBeLessThan(atScriptEnd ? 75 : 64);
+				// The script got past the gate and was dispatched.
+				expect(failure.meta.validation?.result).toBe("passed");
+			}
+			const warned = (run: typeof read) =>
+				run.envelope.warnings.some(
+					(w) => w.code === "transport/write-outcome-unknown",
+				);
+			expect(warned(read)).toBe(false);
+			expect(warned(write)).toBe(true);
+
+			// The outcome was unknown to centrs, but the write runs: poll for
+			// it, as the remediation says.
+			const landed = await retrieveWait({
+				...login,
+				path: "/ip/address",
+				until: `comment=${comment}`,
+				wait: "20s",
+			});
+			expect(landed.ok).toBe(true);
+
+			await recordIntegrationEvidence({
+				quickChrName: chr.name,
+				routerosVersion: chr.state.version,
+				requestedChannel: started.requestedChannel,
+				requestedVersion: started.requestedVersion,
+				suite: "RouterOS drops a long /execute script's reply",
+				command: "execute",
+				protocol: "native-api",
+				exampleIds: ["R3"],
+			});
+		} finally {
+			await chr.destroy();
+		}
+	}, 180_000);
 });

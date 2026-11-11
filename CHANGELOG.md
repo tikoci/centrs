@@ -89,6 +89,17 @@ no section of its own.
   no sign of the session, such as an unreachable host, says the connection or
   login may not have completed instead (`context.sessionReached`), and a write
   that never left gets no unknown-outcome warning (#592).
+- RouterOS's native-API `action timed out (13)` trap now has its own code,
+  `routeros/action-timed-out`, instead of the `routeros/api-trap` catch-all
+  that said "the router may be busy". It comes from commands with their own
+  reply limit of about 60 s: `/execute as-string`, which `execute` uses for
+  every script over native API (it traps when the script ends on 7.25 and
+  later, at a fixed 60 s on 7.24.6), and `/container/shell`. The fix text says the
+  command may still be running or may have finished, that `--timeout` does not
+  extend the limit, and how to run long work in the background. REST
+  `Session closed` now says the same about a sent command, and keeps its own
+  60-second cap. A write that ends with either after it was sent carries
+  `transport/write-outcome-unknown` (#639).
 
 ### Maintenance
 

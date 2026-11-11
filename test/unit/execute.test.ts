@@ -146,14 +146,14 @@ describe("execute preflight keeps a device non-answer's own code (#638)", () => 
 		).rejects.toMatchObject({ code: "routeros/session-closed" });
 	});
 
-	test("native-API `action timed out` keeps its trap code", async () => {
+	test("native-API `action timed out` keeps routeros/action-timed-out (#639)", async () => {
 		await expect(
 			validateRouterOsScript(
 				"/ip/address/print",
 				parseThrowing("action timed out (13)", "native-api"),
 				"native-api",
 			),
-		).rejects.toMatchObject({ code: "routeros/api-trap" });
+		).rejects.toMatchObject({ code: "routeros/action-timed-out" });
 	});
 
 	test("a RouterOS rejection that is a parse answer is still validation/syntax", async () => {

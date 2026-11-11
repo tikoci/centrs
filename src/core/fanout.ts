@@ -104,6 +104,18 @@ export const NOT_SENT_TRANSPORT_CODES: readonly string[] = [
 ];
 
 /**
+ * RouterOS errors that mean the router stopped answering a command it had
+ * already started (#639), not that it refused it: a command's own reply limit
+ * (`routeros/action-timed-out`, e.g. `/execute as-string` past ~60 s) and
+ * REST's `routeros/session-closed`. The command may still be running, or may
+ * have finished.
+ */
+const DROPPED_REPLY_CODES: readonly string[] = [
+	"routeros/action-timed-out",
+	"routeros/session-closed",
+];
+
+/**
  * #448: a write whose request was already sent when a transport failure ended
  * it may have run on the router. It is never retried, and its error envelope
  * says the outcome is unknown rather than implying nothing happened.
@@ -113,7 +125,11 @@ export const NOT_SENT_TRANSPORT_CODES: readonly string[] = [
  * before the refused one already ran. A single refused statement did not run
  * (#541), so it stays silent; the caller passes whether the dispatch carried
  * more than one statement.
+ *
+ * #639: RouterOS dropping a dispatched command's reply is the same unknown
+ * outcome (see {@link DROPPED_REPLY_CODES}).
  */
+
 export function sentWriteWarnings(
 	write: boolean,
 	error: unknown,
@@ -129,6 +145,8 @@ export function sentWriteWarnings(
 		// (#576).
 	} else if (error.code === "routeros/permission-denied") {
 		if (!multiStatement) return [];
+	} else if (DROPPED_REPLY_CODES.includes(error.code)) {
+		// The router stopped answering; it did not refuse the command.
 	} else if (
 		!error.code.startsWith("transport/") ||
 		NOT_SENT_TRANSPORT_CODES.includes(error.code)

@@ -737,6 +737,24 @@ Envelope: `ok: true`. Returned-text classification uses anchored grounded
 shapes; it does not fail arbitrary output merely because it contains an error
 phrase.
 
+### R3. A script past ~60 s over native API: RouterOS drops the reply (#639)
+
+```bash
+centrs execute $A ':delay 65s; :put x' --via native-api --port $API_PORT --timeout 200s --username $U --password $P --json
+```
+
+Envelope: `ok: false`, `error.code=routeros/action-timed-out`,
+`error.context.detail` carrying RouterOS's `action timed out (13)`, and
+`meta.validation.result="passed"`: the script was dispatched. RouterOS 7.25 and
+later report it when the script ends (about 65 s); 7.24.6 at a fixed 60 s,
+while the script keeps running. `--timeout 200s` changes neither. The
+write-shaped form (`:delay 65s; /ip/address/add …` with `--yes`) fails the same
+way and carries `transport/write-outcome-unknown`, and
+`centrs retrieve $A /ip/address --until comment=… --wait 20s` then finds the
+address: the script ran to the end.
+
+`test/integration/execute.test.ts` runs both at once on one CHR.
+
 ## Target selection (fan-out)
 
 These exercise the shared target-selection grammar
