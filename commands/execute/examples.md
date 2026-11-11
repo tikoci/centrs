@@ -391,24 +391,34 @@ OpenSSH's nonzero exit and `Permission denied` diagnostic. The test disables
 interactive prompts on its terminal relay. Controls using `$KEY`, or omitting
 `--ssh-key` to use the private agent, succeed for all three commands.
 
-### S6. Multi-line menu navigation is refused by RouterOS, reported as the router's answer
+### S6. A multi-line script runs as one unit over ssh
 
-Over SSH exec, RouterOS runs each line of a script on its own: menu context,
-`:local` values and `{ }` blocks do not carry from one line to the next, and a
-later line that succeeds can still exit 0 after an earlier one failed (CHR
-7.25.1 and 7.24.6, #576). The `:parse` gate checks the script as one unit, so
-it passes this:
+Over SSH exec, RouterOS ends the prompt at every LF (and CRLF): each line would
+run on its own, so menu context, `:local` values and `{ }` blocks would not
+carry across lines, and a later line could exit 0 after an earlier one failed.
+A CR is a line break inside the prompt, like Enter inside a console block. So
+centrs sends a script's line breaks as CR, and it runs the way `:parse`
+validated it and the way REST and native-API `/execute` run it (CHR 7.25.1 and
+7.24.6, #576).
 
 ```bash
-centrs execute 127.0.0.1 $'/ip/firewall/address-list\nprint\n' --via ssh --port $SSH_PORT --username $U --ssh-key $KEY --insecure --yes --json
+centrs execute 127.0.0.1 $'/ip/firewall/address-list\nprint where list=centrs-s6\n' --via ssh --port $SSH_PORT --username $U --ssh-key $KEY --insecure --yes --json
+centrs execute 127.0.0.1 $':local x 17\n:put $x' --via ssh --port $SSH_PORT --username $U --ssh-key $KEY --insecure --yes --json
+centrs execute 127.0.0.1 $':put before\n:error boom\n:put after' --via ssh --port $SSH_PORT --username $U --ssh-key $KEY --insecure --yes --json
 ```
 
-Envelope: `ok: false`, `error.code=routeros/unknown-path` (from RouterOS's
-`bad command name print (line 1 column 1)` on stdout), `error.context` carries
-`exitCode: 1`, the `output`, and `partialRunPossible: true`; a write that fails
-like this also gets `transport/write-outcome-unknown`. It used to be
-`transport/network` with the diagnostic dropped. For a multi-line script, join
-the lines with `;` or use `--via rest-api` / `--via native-api`.
+The first two are `ok: true`: the `print` runs in the address-list menu, and
+`data.ret` of the second is `17`. The third passes `:parse` (`:error` fails at
+run time) and stops at its second line: `ok: false`,
+`error.code=routeros/command-failed`, and `error.context` carries
+`exitCode: 1`, the `output` (`before` and `boom (:error; line 2)`, never
+`after`) and `partialRunPossible: true`; a write that fails like this also gets
+`transport/write-outcome-unknown`. Over SSH, a RouterOS diagnostic the error
+table recognizes keeps its specific code instead (for example
+`bad command name …` is `routeros/unknown-path` with its position). A raw line
+break inside a quoted string cannot be sent this way and is refused before
+anything is sent (`transport/capability-unsupported`); write it as `\n` inside
+the string.
 
 ### S7. A cut-off script is an execution timeout that keeps its partial output
 

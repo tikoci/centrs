@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { CentrsError } from "../../src/errors.ts";
 import {
 	cleanConsoleOutput,
+	encodeSshScript,
 	SshExecClient,
 	type SshExecResult,
 	sshCommonOptions,
@@ -212,7 +213,7 @@ describe("SshExecClient: remote exit status (#576)", () => {
 		});
 	});
 
-	test("an unrecognized diagnostic is routeros/command-failed and names the line-by-line rule", async () => {
+	test("an unrecognized diagnostic is routeros/command-failed and says earlier lines ran", async () => {
 		const error = (await client({
 			exitCode: 1,
 			stdout: "something RouterOS said\r\n",
@@ -222,9 +223,7 @@ describe("SshExecClient: remote exit status (#576)", () => {
 			.catch((e) => e)) as CentrsError;
 		expect(error.code).toBe("routeros/command-failed");
 		expect(error.summary).toContain("exit 1: something RouterOS said");
-		expect(error.remediation).toContain(
-			"runs each line of a multi-line script",
-		);
+		expect(error.remediation).toContain("the lines before it have already run");
 		expect(error.context?.["stderr"]).toBe(KNOWN_HOSTS);
 	});
 
@@ -277,5 +276,55 @@ describe("SshExecClient: timeout keeps what it saw (#592)", () => {
 			partialOutput: "begin",
 			outputComplete: false,
 		});
+	});
+});
+
+// Over SSH exec, LF ends RouterOS's prompt (each line runs on its own) and CR is
+// a line break inside it, so a script is sent with CR line breaks to run as one
+// unit (CHR 7.25.1 and 7.24.6, #576).
+describe("encodeSshScript (#576)", () => {
+	test("LF and CRLF line breaks become CR; a trailing break is dropped", () => {
+		expect(encodeSshScript("/ip/firewall/address-list\nprint\n")).toBe(
+			"/ip/firewall/address-list\rprint",
+		);
+		expect(encodeSshScript(":local x 17\r\n:put $x")).toBe(
+			":local x 17\r:put $x",
+		);
+		expect(encodeSshScript("{\n:local n 0\n:put $n\n}")).toBe(
+			"{\r:local n 0\r:put $n\r}",
+		);
+	});
+
+	test("a single line is sent unchanged", () => {
+		expect(
+			encodeSshScript('/ip/address/add address=192.0.2.1/32 comment="a b"'),
+		).toBe('/ip/address/add address=192.0.2.1/32 comment="a b"');
+	});
+
+	test("an escaped newline inside a string is kept as written", () => {
+		expect(encodeSshScript(':put "a\\nb"\n:put c')).toBe(
+			':put "a\\nb"\r:put c',
+		);
+		expect(encodeSshScript(':put "say \\"hi\\""\n:put c')).toBe(
+			':put "say \\"hi\\""\r:put c',
+		);
+	});
+
+	test("a quote inside a # comment line does not open a string", () => {
+		expect(encodeSshScript("# it's \"odd\n:put 1")).toBe(
+			"# it's \"odd\r:put 1",
+		);
+	});
+
+	test("a raw line break inside a quoted string is refused", () => {
+		for (const script of [
+			':put "a\nb"',
+			':put "a\\\nb"',
+			'{ :put "a\r\nb" }',
+		]) {
+			expect(() => encodeSshScript(script)).toThrow(
+				expect.objectContaining({ code: "transport/capability-unsupported" }),
+			);
+		}
 	});
 });

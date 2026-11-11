@@ -221,6 +221,75 @@ export function mapSshConnectError(
  * each line's trailing column padding, and drop leading/trailing blank lines.
  * Leading indentation (RouterOS's `print` alignment) is preserved — it is content.
  */
+/**
+ * Encode a script for one `ssh host "<command>"` exec. Over SSH exec, RouterOS
+ * ends the prompt at every LF (and CRLF): each line runs on its own, so menu
+ * context, `:local` values and `{ }` blocks do not carry across lines. A CR is
+ * a line break *inside* the prompt, like Enter inside a console block: the
+ * script runs as one unit, and an error stops the rest with a nonzero exit.
+ * Measured on CHR 7.25.1 and 7.24.6 (#576). So line breaks outside quoted
+ * strings are sent as CR, which runs the script the way `:parse` validated it
+ * and the way REST and native-API `/execute` run it.
+ *
+ * A raw line break inside a quoted string cannot be sent faithfully (an LF
+ * ends the prompt mid-string; a CR would change the string's bytes), so it is
+ * refused before anything is sent. A `#` comment line is skipped by the quote
+ * scan.
+ */
+export function encodeSshScript(command: string): string {
+	const trimmed = command.replace(/[\r\n]+$/, "");
+	let out = "";
+	let inString = false;
+	let inComment = false;
+	let atLineStart = true;
+	for (let i = 0; i < trimmed.length; i++) {
+		const ch = trimmed[i] as string;
+		if (ch === "\r" || ch === "\n") {
+			if (inString) {
+				throw new CentrsError({
+					code: "transport/capability-unsupported",
+					summary:
+						"A quoted string in this script contains a raw line break, which cannot be sent over SSH.",
+					remediation:
+						"Write the line break as an escape inside the string (`\\n`), or run the script with `--via rest-api` or `--via native-api`.",
+					context: { via: "ssh", operation: "multi-line string" },
+				});
+			}
+			if (ch === "\r" && trimmed[i + 1] === "\n") i++;
+			out += "\r";
+			inComment = false;
+			atLineStart = true;
+			continue;
+		}
+		if (inComment) {
+			out += ch;
+			continue;
+		}
+		if (atLineStart && !inString && ch === "#") {
+			inComment = true;
+		} else if (inString && ch === "\\") {
+			out += ch;
+			i++;
+			if (i < trimmed.length) {
+				const next = trimmed[i] as string;
+				if (next === "\r" || next === "\n") {
+					// A backslash-newline inside a string is still a raw break.
+					i--;
+					continue;
+				}
+				out += next;
+			}
+			atLineStart = false;
+			continue;
+		} else if (ch === '"') {
+			inString = !inString;
+		}
+		if (atLineStart && ch !== " " && ch !== "\t") atLineStart = false;
+		out += ch;
+	}
+	return out;
+}
+
 /** `10s`, `1.5s`, or `250ms` for a budget in milliseconds. */
 function formatBudget(timeoutMs: number): string {
 	return timeoutMs >= 1000 ? `${timeoutMs / 1000}s` : `${timeoutMs}ms`;
@@ -365,8 +434,7 @@ export class SshExecClient {
 			exitCode: result.exitCode,
 			...(output ? { output } : {}),
 			...(stderr ? { stderr } : {}),
-			// Over SSH each line runs on its own, so lines before the failing one
-			// may already have run (#576).
+			// RouterOS stops at the failing line; the lines before it ran (#576).
 			...(multiline ? { partialRunPossible: true } : {}),
 		};
 		const recognized = output
@@ -376,7 +444,7 @@ export class SshExecClient {
 			return recognized;
 		}
 		const lineNote = multiline
-			? " Over SSH, RouterOS runs each line of a multi-line script on its own: menu context, `:local` values and `{ }` blocks do not carry from one line to the next. Join the lines with `;`, or run the script with `--via rest-api` or `--via native-api`."
+			? " RouterOS stops a multi-line script at the failing line, so the lines before it have already run; check their effect before running the script again."
 			: "";
 		return new CentrsError({
 			code: "routeros/command-failed",

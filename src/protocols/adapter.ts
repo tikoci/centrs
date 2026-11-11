@@ -35,7 +35,7 @@ import {
 	type NativeApiCommand,
 	type NativeApiSession,
 } from "./native-api.ts";
-import { SshExecClient } from "./ssh.ts";
+import { encodeSshScript, SshExecClient } from "./ssh.ts";
 
 /** Connection inputs an adapter needs, free of retrieve-specific resolver types. */
 export interface ProtocolAdapterConfig {
@@ -1225,8 +1225,11 @@ class SshExecAdapter implements ProtocolAdapter {
 					"Report this bug; runCommand must pass the raw command as `script` for ssh.",
 			});
 		}
+		// Encode before marking the request sent: a script SSH cannot carry is
+		// refused without dispatching anything (#576).
+		const wire = encodeSshScript(cli);
 		options?.onSent?.();
-		const output = await this.client.exec(cli);
+		const output = await this.client.exec(wire);
 		return { records: [], ret: output };
 	}
 

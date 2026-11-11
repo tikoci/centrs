@@ -162,26 +162,49 @@ describeFast("execute over ssh (per-command ssh host)", () => {
 				after.some((a) => (a["address"] ?? "").startsWith("198.51.100.51")),
 			).toBe(false);
 
-			// S6 — RouterOS refuses multi-line menu navigation over SSH exec: each
-			// line runs on its own, so `print` has no menu. The nonzero exit is the
-			// router's answer with its diagnostic, not a network failure (#576).
-			const multiline = await executeEnvelope({
+			// S6 — a multi-line script runs as one unit over SSH. RouterOS ends
+			// the exec prompt at every LF, so centrs sends line breaks as CR (#576):
+			// menu context and `:local` carry across lines, and a failing line
+			// stops the script with its diagnostic.
+			await chr.exec(
+				"/ip/firewall/address-list/add list=centrs-s6 address=192.0.2.66",
+			);
+			const menu = await executeEnvelope({
 				...base,
-				command: "/ip/firewall/address-list\nprint\n",
-				// A multi-line script is conservatively write-shaped.
+				command: "/ip/firewall/address-list\nprint where list=centrs-s6\n",
 				yes: true,
 			});
-			expect(multiline.ok).toBe(false);
-			if (multiline.ok) return;
-			expect(multiline.error.code).toBe("routeros/unknown-path");
-			expect(multiline.error.context).toMatchObject({
+			expect(menu.ok, menu.ok ? "" : JSON.stringify(menu.error)).toBe(true);
+			if (!menu.ok) return;
+			expect(retOf(menu.data)).toContain("192.0.2.66");
+
+			const local = await executeEnvelope({
+				...base,
+				command: ":local x 17\n:put $x",
+				yes: true,
+			});
+			expect(local.ok, local.ok ? "" : JSON.stringify(local.error)).toBe(true);
+			if (!local.ok) return;
+			expect(retOf(local.data)).toBe("17");
+
+			// `:error` passes `:parse` and fails at run time, on line 2.
+			const stopped = await executeEnvelope({
+				...base,
+				command: ":put before\n:error boom\n:put after",
+				yes: true,
+			});
+			expect(stopped.ok).toBe(false);
+			if (stopped.ok) return;
+			expect(stopped.error.code).toBe("routeros/command-failed");
+			expect(stopped.error.context).toMatchObject({
 				via: "ssh",
 				exitCode: 1,
 				partialRunPossible: true,
 			});
-			expect(String(multiline.error.context?.["output"])).toContain(
-				"bad command name print",
-			);
+			const stoppedOutput = String(stopped.error.context?.["output"]);
+			expect(stoppedOutput).toContain("before");
+			expect(stoppedOutput).toContain("boom (:error; line 2)");
+			expect(stoppedOutput).not.toContain("after");
 
 			// S7 — the budget runs out mid-script: an execution timeout that names
 			// the budget and keeps the output printed before the cutoff (#592).
