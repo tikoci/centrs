@@ -3,7 +3,7 @@ run-name: Pages • ${{ github.event_name }}
 
 # Publishes the typedoc API reference + the error-code catalog
 # (docs/errors/**/*.md) to GitHub Pages. This isn't just docs nicety: every
-# CentrsError carries `details_url: https://tikoci.github.io/centrs/errors/<code>`
+# CentrsError carries `details_url: https://tikoci.dev/centrs/errors/<code>/`
 # (see docs/errors/README.md) — until this workflow existed, that URL 404'd for
 # every error a caller received. scripts/build-pages-site.ts does the tree
 # assembly (typedoc output + one index.html per error code, wrapping pandoc's

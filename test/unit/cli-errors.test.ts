@@ -24,7 +24,7 @@ describe("CLI errors are structured, never raw stacks", () => {
 			// formatCentrsErrorText shape: "[code] summary" / "Fix:" / "Details:".
 			expect(err).toMatch(/^\[[a-z]+\/[a-z0-9-]+\]/m);
 			expect(err).toContain("Fix:");
-			expect(err).toContain("Details: https://tikoci.github.io/centrs/errors/");
+			expect(err).toContain("Details: https://tikoci.dev/centrs/errors/");
 			// No raw V8 stack frame leaked to the user.
 			expect(err).not.toMatch(/\n\s+at\s/);
 		});
@@ -53,7 +53,7 @@ describe("CLI --json parse errors emit an ok:false envelope", () => {
 			expect(envelope.ok).toBe(false);
 			expect(envelope.error?.code).toMatch(/^[a-z]+\/[a-z0-9-]+$/);
 			expect(envelope.error?.detailsUrl).toContain(
-				"https://tikoci.github.io/centrs/errors/",
+				"https://tikoci.dev/centrs/errors/",
 			);
 		});
 	}

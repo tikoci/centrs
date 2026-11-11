@@ -262,7 +262,7 @@ Two error sources must be visually distinguishable:
 RouterOS faults map to a normalized `routeros/*` code (preserving the original
 string) via a CHR-grounded table shared by REST `detail` and native `!trap`
 (`src/core/routeros-errors.ts`). Every error's `details_url` is the stable
-`https://tikoci.github.io/centrs/errors/<code>`. The mapping shape, the
+`https://tikoci.dev/centrs/errors/<code>/`. The mapping shape, the
 ground-on-CHR-evidence rule, and the URL-scheme rules live in
 `docs/errors/README.md`.
 

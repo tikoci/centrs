@@ -18,7 +18,7 @@ describe("buildErrorsResource", () => {
 		expect(codes).toContain("usage/confirmation-required");
 		for (const entry of resource.errors) {
 			expect(entry.detailsUrl).toBe(
-				`https://tikoci.github.io/centrs/errors/${entry.code}`,
+				`https://tikoci.dev/centrs/errors/${entry.code}/`,
 			);
 		}
 	});

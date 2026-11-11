@@ -3,7 +3,7 @@
  * `CentrsError` code the codebase can produce.
  *
  * The constitution (`docs/CONSTITUTION.md`, "Error URL scheme") requires one
- * human page per error code at `https://tikoci.github.io/centrs/errors/<code>`
+ * human page per error code at `https://tikoci.dev/centrs/errors/<code>/`
  * and states that a missing page is a centrs bug. This catalog is that list, in
  * code (not generated docs): the per-code pages under `docs/errors/` are
  * generated from it, and `test/unit/error-pages.test.ts` enforces three-way
@@ -18,7 +18,11 @@
  * interpolated, per-instance `summary` a given throw site builds.
  */
 
-import { type CentrsErrorCode, ERROR_DETAILS_BASE_URL } from "../errors.ts";
+import {
+	type CentrsErrorCode,
+	ERROR_DETAILS_BASE_URL,
+	errorDetailsUrl,
+} from "../errors.ts";
 
 export { ERROR_DETAILS_BASE_URL };
 
@@ -801,7 +805,7 @@ export const errorCatalogCodes: ReadonlySet<string> = new Set(
 	errorCatalog.map((entry) => entry.code),
 );
 
-/** The stable details URL for a code: base URL + the slash-namespaced code. */
+/** The stable details URL for a code: base URL + the slash-namespaced code + `/`. */
 export function detailsUrlForCode(code: string): string {
-	return `${ERROR_DETAILS_BASE_URL}${code}`;
+	return errorDetailsUrl(code);
 }

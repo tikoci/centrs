@@ -6,7 +6,7 @@
  *   - `docs/errors/**\/*.md` — the per-code error pages.
  *
  * `docs/errors/README.md` documents a load-bearing contract: every
- * `CentrsError` carries `details_url: https://tikoci.github.io/centrs/errors/<code>`,
+ * `CentrsError` carries `details_url: https://tikoci.dev/centrs/errors/<code>/`,
  * an **extensionless** URL. That's why each error page becomes
  * `errors/<code>/index.html` (a directory, so the extensionless path resolves
  * to its index file) rather than `errors/<code>.html`. Until this script and

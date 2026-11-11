@@ -68,7 +68,7 @@ describe("error text parity (GH#362)", () => {
 	test("the shared renderer carries position, device words and details", () => {
 		expect(expected).toContain("At: line 1, column 2");
 		expect(expected).toContain("Device said: bad command name zerotier");
-		expect(expected).toContain("Details: https://tikoci.github.io/centrs/");
+		expect(expected).toContain("Details: https://tikoci.dev/centrs/");
 	});
 
 	for (const [command, render] of Object.entries(renderers)) {

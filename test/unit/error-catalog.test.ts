@@ -75,7 +75,16 @@ describe("errorCatalog shape", () => {
 
 	test("detailsUrlForCode is the stable details URL", () => {
 		expect(detailsUrlForCode("routeros/unknown-path")).toBe(
-			`${ERROR_DETAILS_BASE_URL}routeros/unknown-path`,
+			`${ERROR_DETAILS_BASE_URL}routeros/unknown-path/`,
+		);
+	});
+
+	test("details URLs use the canonical HTTPS host and the page's own URL (#464)", () => {
+		// The GitHub Pages host redirects to the custom domain through plain
+		// HTTP, and a URL without the trailing slash redirects to add it. Some
+		// agent fetch tools stop at either redirect.
+		expect(detailsUrlForCode("transport/connection-refused")).toBe(
+			"https://tikoci.dev/centrs/errors/transport/connection-refused/",
 		);
 	});
 });

@@ -21,6 +21,12 @@ no section of its own.
   still fails as `routeros/protocol-not-implemented`. The fix text for a
   protocol that cannot retrieve no longer suggests `snmp`, and the retrieve
   docs no longer describe a planned SNMP form.
+- Error `detailsUrl`s now use the site's canonical host and the page's own
+  URL: `https://tikoci.dev/centrs/errors/<code>/`. The old
+  `https://tikoci.github.io/centrs/errors/<code>` links redirected through
+  plain HTTP, which some agent fetch tools refuse to follow. Old links still
+  redirect. Tip URLs move to the same host; the tip pages themselves are not
+  published yet (#464).
 
 ### Maintenance
 

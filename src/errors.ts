@@ -1,9 +1,22 @@
 /**
  * Base URL for the human-readable error pages. Every `CentrsError.detailsUrl`
- * is this prefix plus the slash-namespaced code. Exported so the error catalog
- * and MCP resources share one definition (see `src/core/error-catalog.ts`).
+ * is this prefix plus the slash-namespaced code plus `/` (see
+ * {@link errorDetailsUrl}). Exported so the error catalog and MCP resources
+ * share one definition (see `src/core/error-catalog.ts`).
+ *
+ * The host is the site's canonical custom domain over HTTPS. The GitHub Pages
+ * host redirects there through plain HTTP, and some agent fetch tools stop at
+ * that redirect (#464).
  */
-export const ERROR_DETAILS_BASE_URL = "https://tikoci.github.io/centrs/errors/";
+export const ERROR_DETAILS_BASE_URL = "https://tikoci.dev/centrs/errors/";
+
+/**
+ * The details URL for an error code. The trailing slash is the page's own
+ * URL, so a fetch gets 200 with no redirect (#464).
+ */
+export function errorDetailsUrl(code: string): string {
+	return `${ERROR_DETAILS_BASE_URL}${code}/`;
+}
 
 /**
  * Remediation for a device-stage `:parse` rejection. It does not claim the
@@ -83,7 +96,7 @@ export class CentrsError extends Error {
 		this.code = init.code;
 		this.summary = init.summary;
 		this.remediation = init.remediation;
-		this.detailsUrl = `${ERROR_DETAILS_BASE_URL}${init.code}`;
+		this.detailsUrl = errorDetailsUrl(init.code);
 		this.context = init.context;
 		this.position = init.position;
 		this.causeData = init.causeData;

@@ -15,7 +15,7 @@ describe("CentrsError", () => {
 			summary: "nope",
 		});
 		expect(error.detailsUrl).toBe(
-			"https://tikoci.github.io/centrs/errors/routeros/unknown-path",
+			"https://tikoci.dev/centrs/errors/routeros/unknown-path/",
 		);
 		expect(error.name).toBe("CentrsError");
 		expect(error.message).toBe("nope");
@@ -36,7 +36,7 @@ describe("CentrsError", () => {
 		expect(json.context).toEqual({ offset: 4 });
 		expect(json.detailsUrl).toBe(json.details_url);
 		expect(json.details_url).toBe(
-			"https://tikoci.github.io/centrs/errors/cdb/parse-failed",
+			"https://tikoci.dev/centrs/errors/cdb/parse-failed/",
 		);
 	});
 
@@ -107,7 +107,7 @@ describe("formatCentrsErrorText", () => {
 		expect(text).toContain("[usage/missing-group] need a group");
 		expect(text).toContain("Fix: pass --group");
 		expect(text).toContain(
-			"Details: https://tikoci.github.io/centrs/errors/usage/missing-group",
+			"Details: https://tikoci.dev/centrs/errors/usage/missing-group/",
 		);
 	});
 
@@ -137,7 +137,7 @@ describe("formatCentrsErrorText", () => {
 			"At: line 1, column 2 (RouterOS byte offset)",
 			"Device said: bad command name zerotier (line 1 column 2)",
 			"Fix: Fix the syntax.",
-			"Details: https://tikoci.github.io/centrs/errors/validation/syntax",
+			"Details: https://tikoci.dev/centrs/errors/validation/syntax/",
 		]);
 	});
 
@@ -186,7 +186,7 @@ describe("formatCentrsErrorText", () => {
 			}),
 		);
 		expect(line).toBe(
-			"[routeros/api-trap] RouterOS reported an error: failure: no such 2J item — Fix: Check the item. — Details: https://tikoci.github.io/centrs/errors/routeros/api-trap",
+			"[routeros/api-trap] RouterOS reported an error: failure: no such 2J item — Fix: Check the item. — Details: https://tikoci.dev/centrs/errors/routeros/api-trap/",
 		);
 	});
 
