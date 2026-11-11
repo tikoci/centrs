@@ -276,7 +276,10 @@ that keeps growing is being used as an issue.
   environment. A password command or file read once per CDB load (#603),
   keychain and OAuth helpers, per-device auth overrides. A workspace file can
   never name a password command. Exports that carry secrets get a notice
-  (#542).
+  (#542). A host's secret prompt can alter what it passes on (T3 Code's
+  `request_secret` trims whitespace,
+  [upstream #31690](https://github.com/pingdotgg/t3code/issues/31690)), so docs never
+  promise byte fidelity through one.
 - **Ready when:** workspace and local state is done, because the workspace
   trust rule bounds the unlock channel.
 - **Absorbed:** #420, #542, #603.
@@ -317,7 +320,9 @@ that keeps growing is being used as an issue.
   words decide a command's risk class, so harness allowlists can match on
   prefixes. `execute` results become predictable (#360); catch-all error codes
   are split (#528). `--help` may carry one cheap line pointing to the skill or
-  docs.
+  docs. MCP Apps (an interactive tool result rendered in the chat, a generic
+  MCP extension) is a candidate rendering for tables and topology; T3 Code
+  shows them for Codex only (tikoci/app-t3code#29).
 - **Ready when:** now. MCP work starts from #605's `isError` fix.
 - **Absorbed:** #95, #129, #148, #360, #528, #593, #606.
 
@@ -396,7 +401,13 @@ the next PR in its area, not required scope. Delete the line when the nit is
 done or declined. A nit that needs more explanation is an issue.
 
 - `execute`: a lone `print` sent through `execute` could get a tip that
-  `retrieve` is the read-only verb a harness can allowlist.
+  `retrieve` is the read-only verb a harness can allowlist. Agent sessions do
+  this routinely (254 calls on one host), then read `.data.ret`, which is
+  `null` for a print, whose rows are in `.data`.
+- `execute`: `print proplist=` names are values, so both validation stages
+  pass an unknown property (`/container/print proplist=status` then fails as
+  `routeros/invalid-value`, tikoci/app-t3code#29). A
+  `/console/inspect request=completion` check of the names would catch it.
 - `centrs --help` lists the `tui` and `proxy` surfaces, which are stubs.
 - `.github/instructions/`: trim Copilot-era verbosity when the TIKOCI-wide
   files are collected in `tikoci.github.io`.
