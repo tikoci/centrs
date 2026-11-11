@@ -24,8 +24,9 @@ no section of its own.
 - The Docker image runs as the base image's non-root `bun` user (user ID 1000)
   instead of root. **Container users:** the default config directory moves
   from `/root/.config/tikoci/` to `/home/bun/.config/tikoci/`. Mount your CDB
-  and `centrs.env` there, readable by user ID 1000, or set `XDG_CONFIG_HOME`,
-  `CENTRS_CDB_FILE` or `--cdb-file` (#614).
+  and `centrs.env` there, readable by user ID 1000. To keep the CDB elsewhere,
+  set `CENTRS_CDB_FILE` or pass `--cdb-file`; `XDG_CONFIG_HOME` moves only
+  `centrs.env` (#614).
 
 ### Maintenance
 
