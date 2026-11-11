@@ -22,6 +22,13 @@ no section of its own.
   protocol that cannot retrieve no longer suggests `snmp`, and the retrieve
   docs no longer describe a planned SNMP form.
 
+### Fixed
+
+- MCP: a tool result whose envelope has `ok: false` now sets `isError`, so a
+  host that follows the MCP spec shows the failure as a failure (#605).
+  `structuredContent`, an `outputSchema` and a default result-size budget are
+  still open on #605.
+
 ### Maintenance
 
 - A new `components/` tree holds specs for parts of centrs that span
