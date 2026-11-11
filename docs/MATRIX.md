@@ -401,16 +401,13 @@ the next PR in its area, not required scope. Delete the line when the nit is
 done or declined. A nit that needs more explanation is an issue.
 
 - `execute`: a lone `print` sent through `execute` could get a tip that
-  `retrieve` is the read-only verb a harness can allowlist. app-t3code agent
-  sessions do this routinely (`execute '/disk/print'`).
+  `retrieve` is the read-only verb a harness can allowlist. Agent sessions do
+  this routinely (254 calls on one host), then read `.data.ret`, which is
+  `null` for a print, whose rows are in `.data`.
 - `execute`: `print proplist=` names are values, so both validation stages
   pass an unknown property (`/container/print proplist=status` then fails as
   `routeros/invalid-value`, tikoci/app-t3code#29). A
   `/console/inspect request=completion` check of the names would catch it.
-- `execute --json`: tikoci/app-t3code#29 reports jq rejecting the envelope of
-  a multi-line `/container/shell` result (raw control characters), but the
-  envelope is written with `JSON.stringify`. Capture the raw stdout before
-  filing it as a bug.
 - `centrs --help` lists the `tui` and `proxy` surfaces, which are stubs.
 - `.github/instructions/`: trim Copilot-era verbosity when the TIKOCI-wide
   files are collected in `tikoci.github.io`.
