@@ -122,7 +122,10 @@ export function sentWriteWarnings(
 ): Warning[] {
 	if (!write || !trace?.dispatched) return [];
 	if (!(error instanceof CentrsError)) return [];
-	if (error.code === "routeros/permission-denied") {
+	if (error.context?.["partialRunPossible"] === true) {
+		// The transport says statements before the failure may have run (SSH
+		// runs a multi-line script line by line, #576).
+	} else if (error.code === "routeros/permission-denied") {
 		if (!multiStatement) return [];
 	} else if (
 		!error.code.startsWith("transport/") ||

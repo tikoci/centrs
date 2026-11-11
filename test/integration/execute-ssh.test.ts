@@ -11,7 +11,7 @@
  * mints an ed25519 keypair, imports the public half to the CHR user, and uses key
  * auth (`--insecure` accepts the ephemeral host key). Grounded on CHR 7.23.1; REST
  * is the source of truth for the cross-checks. Maps `commands/execute/examples.md`
- * (S1–S4).
+ * (S1–S4, S6–S7).
  */
 
 import { describe, expect, test } from "bun:test";
@@ -162,6 +162,45 @@ describeFast("execute over ssh (per-command ssh host)", () => {
 				after.some((a) => (a["address"] ?? "").startsWith("198.51.100.51")),
 			).toBe(false);
 
+			// S6 — RouterOS refuses multi-line menu navigation over SSH exec: each
+			// line runs on its own, so `print` has no menu. The nonzero exit is the
+			// router's answer with its diagnostic, not a network failure (#576).
+			const multiline = await executeEnvelope({
+				...base,
+				command: "/ip/firewall/address-list\nprint\n",
+				// A multi-line script is conservatively write-shaped.
+				yes: true,
+			});
+			expect(multiline.ok).toBe(false);
+			if (multiline.ok) return;
+			expect(multiline.error.code).toBe("routeros/unknown-path");
+			expect(multiline.error.context).toMatchObject({
+				via: "ssh",
+				exitCode: 1,
+				partialRunPossible: true,
+			});
+			expect(String(multiline.error.context?.["output"])).toContain(
+				"bad command name print",
+			);
+
+			// S7 — the budget runs out mid-script: an execution timeout that names
+			// the budget and keeps the output printed before the cutoff (#592).
+			const cut = await executeEnvelope({
+				...base,
+				command: ":put begin; :delay 6s; :put end",
+				timeout: "3s",
+				yes: true,
+			});
+			expect(cut.ok).toBe(false);
+			if (cut.ok) return;
+			expect(cut.error.code).toBe("transport/timeout");
+			expect(cut.error.summary).toContain("did not finish within 3s");
+			expect(cut.error.context).toMatchObject({
+				timeoutMs: 3000,
+				partialOutput: "begin",
+				outputComplete: false,
+			});
+
 			const res = asRecord(await chr.rest("/system/resource"));
 			await recordIntegrationEvidence({
 				suite: "execute over ssh (per-command ssh host)",
@@ -172,7 +211,7 @@ describeFast("execute over ssh (per-command ssh host)", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: [1, 2, 3, 4],
+				exampleIds: [1, 2, 3, 4, "S6", "S7"],
 			});
 		} finally {
 			await chr.destroy();

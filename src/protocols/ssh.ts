@@ -14,6 +14,7 @@
  * See `commands/execute/README.md` (ssh) and `commands/terminal/README.md`.
  */
 
+import { mapRouterOsResultError } from "../core/routeros-errors.ts";
 import { CentrsError } from "../errors.ts";
 import { formatEndpoint } from "./endpoint.ts";
 
@@ -132,9 +133,10 @@ export function sshUserHost(config: SshConnectionConfig): string {
 /**
  * Map a host-`ssh` connect/auth failure (non-zero exit) to a CentrsError. Mirrors
  * the connect-level cases in {@link ./sftp.ts}'s `mapError` — both clients face
- * the same OpenSSH stderr. RouterOS *command* failures do not land here: a valid
- * SSH channel exits 0 and surfaces RouterOS errors in stdout (the execute
- * orchestrator's `routerOsFailureFromResult` classifies those).
+ * the same OpenSSH stderr. RouterOS *command* failures do not land here: an
+ * error the channel reports with exit 0 is classified from stdout by the execute
+ * orchestrator's `routerOsFailureFromResult`, and a nonzero remote exit (not
+ * 255) is `SshExecClient`'s `remoteExitError` (#576).
  */
 export function mapSshConnectError(
 	stderr: string,
@@ -219,6 +221,11 @@ export function mapSshConnectError(
  * each line's trailing column padding, and drop leading/trailing blank lines.
  * Leading indentation (RouterOS's `print` alignment) is preserved — it is content.
  */
+/** `10s`, `1.5s`, or `250ms` for a budget in milliseconds. */
+function formatBudget(timeoutMs: number): string {
+	return timeoutMs >= 1000 ? `${timeoutMs / 1000}s` : `${timeoutMs}ms`;
+}
+
 export function cleanConsoleOutput(stdout: string): string {
 	const lines = stdout
 		.split(/\r\n|\r|\n/)
@@ -236,7 +243,15 @@ export interface SshExecResult {
 	exitCode: number;
 	stdout: string;
 	stderr: string;
+	/** The runner killed `ssh` because the budget ran out (#592). */
+	timedOut?: boolean;
 }
+
+/**
+ * OpenSSH exits 255 for its own failures (connect, auth, host key) and
+ * otherwise passes the remote command's exit status through.
+ */
+const SSH_CLIENT_ERROR_EXIT = 255;
 
 /** Injectable runner (the default spawns the host `ssh`); tests pin behavior. */
 export type SshExecRunner = (
@@ -277,18 +292,101 @@ export class SshExecClient {
 		];
 	}
 
-	/** Run one command; returns cleaned stdout. Throws on connect/auth failure. */
+	/**
+	 * Run one command; returns cleaned stdout. Throws on a connect/auth failure,
+	 * on a timeout (keeping any output captured before it, #592), and when
+	 * RouterOS ends the command with a nonzero exit (#576).
+	 */
 	async exec(command: string): Promise<string> {
 		const result = await this.run(this.argv(command), this.config.timeoutMs);
+		if (result.timedOut) {
+			throw this.timeoutError(result);
+		}
 		if (result.exitCode !== 0) {
-			throw mapSshConnectError(result.stderr, result.exitCode, {
+			const connect = mapSshConnectError(result.stderr, result.exitCode, {
 				host: this.config.host,
 				port: this.config.port,
 				op: "execute",
 				sshKeySelected: Boolean(this.config.sshKey),
 			});
+			// stderr evidence of a connect/auth problem wins; otherwise a non-255
+			// exit is the remote command's own status.
+			if (
+				connect.code !== "transport/network" ||
+				result.exitCode === SSH_CLIENT_ERROR_EXIT
+			) {
+				throw connect;
+			}
+			throw this.remoteExitError(command, result);
 		}
 		return cleanConsoleOutput(result.stdout);
+	}
+
+	/**
+	 * The budget ran out while the command ran. Validation had already reached
+	 * the router, so this is an execution timeout, and the command may still be
+	 * running: on CHR 7.25.1 and 7.24.6 a script kept going after `ssh` was
+	 * killed and finished its write about 10 s later (#592).
+	 */
+	private timeoutError(result: SshExecResult): CentrsError {
+		const { host, port, timeoutMs } = this.config;
+		const partial = cleanConsoleOutput(result.stdout);
+		return new CentrsError({
+			code: "transport/timeout",
+			summary: `SSH execute on ${formatEndpoint(host, port)} did not finish within ${formatBudget(timeoutMs)}; the command may still be running on the router.`,
+			remediation: `Raise \`--timeout\` (or \`CENTRS_TIMEOUT\`) above the command's run time; it was ${formatBudget(timeoutMs)}. Disconnecting does not stop a running RouterOS script, so check its effect (for example \`/system/script/job\`) before running it again.${partial ? " The output printed before the cutoff is in `context.partialOutput`; it is incomplete." : ""}`,
+			context: {
+				via: "ssh",
+				host,
+				port,
+				op: "execute",
+				timeoutMs,
+				...(partial ? { partialOutput: partial, outputComplete: false } : {}),
+			},
+			causeData: result.stderr.trim() || "timed out",
+		});
+	}
+
+	/**
+	 * RouterOS ran the command and ended it with a nonzero exit. Its diagnostic
+	 * is on stdout (CHR 7.25.1 / 7.24.6: `bad command name print (line 1
+	 * column 1)`); a recognized one keeps its specific `routeros/*` code.
+	 */
+	private remoteExitError(command: string, result: SshExecResult): CentrsError {
+		const { host, port } = this.config;
+		const output = cleanConsoleOutput(result.stdout);
+		const stderr = result.stderr.trim();
+		const multiline = /[\r\n]/.test(command.trim());
+		const context = {
+			via: "ssh",
+			host,
+			port,
+			op: "execute",
+			exitCode: result.exitCode,
+			...(output ? { output } : {}),
+			...(stderr ? { stderr } : {}),
+			// Over SSH each line runs on its own, so lines before the failing one
+			// may already have run (#576).
+			...(multiline ? { partialRunPossible: true } : {}),
+		};
+		const recognized = output
+			? mapRouterOsResultError(output, { transport: "ssh", context })
+			: undefined;
+		if (recognized) {
+			return recognized;
+		}
+		const lineNote = multiline
+			? " Over SSH, RouterOS runs each line of a multi-line script on its own: menu context, `:local` values and `{ }` blocks do not carry from one line to the next. Join the lines with `;`, or run the script with `--via rest-api` or `--via native-api`."
+			: "";
+		return new CentrsError({
+			code: "routeros/command-failed",
+			summary: output
+				? `RouterOS ended the SSH command with exit ${result.exitCode}: ${output.split("\n")[0]}`
+				: `RouterOS ended the SSH command with exit ${result.exitCode} and printed no diagnostic.`,
+			remediation: `The command reached the router and RouterOS refused it; its output is in \`context.output\`.${lineNote}`,
+			context,
+			causeData: output || stderr || `exit ${result.exitCode}`,
+		});
 	}
 }
 
@@ -332,6 +430,7 @@ async function spawnSshExec(
 			exitCode,
 			stdout,
 			stderr: timedOut ? `${stderr}\nConnection timed out`.trim() : stderr,
+			timedOut,
 		};
 	} finally {
 		clearTimeout(timer);

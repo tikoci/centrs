@@ -329,8 +329,9 @@ the **same single console `:put [:parse …]`** as mac-telnet (over SSH it retur
 the identical `(evl …)` / `bad parameter <name>` strings), so syntax and the
 unknown-attribute gate are covered at once. Key auth is the path (`--ssh-key` /
 agent); `--insecure` accepts the device's host key. `$SSH_PORT` is the SSH port,
-`$KEY` the private key. Examples S1–S4 are green via `bun run test:integration`
-(`test/integration/execute-ssh.test.ts`, CHR 7.23.1).
+`$KEY` the private key. Examples S1–S4, S6 and S7 are green via
+`bun run test:integration` (`test/integration/execute-ssh.test.ts`, CHR
+7.23.1; S6–S7 on 7.25.1 and 7.24.6).
 
 ### S1. Read a command over ssh
 
@@ -389,6 +390,39 @@ Execute and transfer fail with `auth/failed`; the terminal relay preserves
 OpenSSH's nonzero exit and `Permission denied` diagnostic. The test disables
 interactive prompts on its terminal relay. Controls using `$KEY`, or omitting
 `--ssh-key` to use the private agent, succeed for all three commands.
+
+### S6. Multi-line menu navigation is refused by RouterOS, reported as the router's answer
+
+Over SSH exec, RouterOS runs each line of a script on its own: menu context,
+`:local` values and `{ }` blocks do not carry from one line to the next, and a
+later line that succeeds can still exit 0 after an earlier one failed (CHR
+7.25.1 and 7.24.6, #576). The `:parse` gate checks the script as one unit, so
+it passes this:
+
+```bash
+centrs execute 127.0.0.1 $'/ip/firewall/address-list\nprint\n' --via ssh --port $SSH_PORT --username $U --ssh-key $KEY --insecure --yes --json
+```
+
+Envelope: `ok: false`, `error.code=routeros/unknown-path` (from RouterOS's
+`bad command name print (line 1 column 1)` on stdout), `error.context` carries
+`exitCode: 1`, the `output`, and `partialRunPossible: true`; a write that fails
+like this also gets `transport/write-outcome-unknown`. It used to be
+`transport/network` with the diagnostic dropped. For a multi-line script, join
+the lines with `;` or use `--via rest-api` / `--via native-api`.
+
+### S7. A cut-off script is an execution timeout that keeps its partial output
+
+```bash
+centrs execute 127.0.0.1 ':put begin; :delay 6s; :put end' --via ssh --port $SSH_PORT --username $U --ssh-key $KEY --insecure --yes --timeout 3s --json
+```
+
+Envelope: `ok: false`, `error.code=transport/timeout`, summary "did not finish
+within 3s; the command may still be running on the router", and
+`error.context` carries `timeoutMs: 3000`, `partialOutput: "begin"`,
+`outputComplete: false`. The remediation names `--timeout` and
+`CENTRS_TIMEOUT`. Killing the local `ssh` does not stop the script on the
+router: on CHR 7.25.1 and 7.24.6 a script's write landed about 10 s after the
+cutoff (#592).
 
 ## Offline gate (stage 1)
 

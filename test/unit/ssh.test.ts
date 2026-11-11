@@ -176,3 +176,106 @@ describe("SshExecClient", () => {
 		expect(capture.argv).toContain("admin@2001:db8::10");
 	});
 });
+
+// Captures from CHR 7.25.1 and 7.24.6 (2026-11-11): the system `ssh` exit
+// status and stdout for each shape (#576), and a script cut off by the budget
+// (#592). The known-hosts warning is OpenSSH's, on stderr.
+const KNOWN_HOSTS =
+	"Warning: Permanently added '[127.0.0.1]:9272' (ED25519) to the list of known hosts.";
+
+describe("SshExecClient: remote exit status (#576)", () => {
+	function client(result: SshExecResult) {
+		return new SshExecClient({
+			host: "127.0.0.1",
+			port: 9272,
+			username: "admin",
+			timeoutMs: 10_000,
+			runner: async () => result,
+		});
+	}
+
+	test("a RouterOS diagnostic on stdout keeps its specific code, not transport/network", async () => {
+		const error = (await client({
+			exitCode: 1,
+			stdout: "bad command name print (line 1 column 1)\n",
+			stderr: KNOWN_HOSTS,
+		})
+			.exec("/ip/firewall/address-list\nprint\n")
+			.catch((e) => e)) as CentrsError;
+		expect(error.code).toBe("routeros/unknown-path");
+		expect(error.position).toEqual({ line: 1, column: 1 });
+		expect(error.context).toMatchObject({
+			via: "ssh",
+			exitCode: 1,
+			output: "bad command name print (line 1 column 1)",
+			partialRunPossible: true,
+		});
+	});
+
+	test("an unrecognized diagnostic is routeros/command-failed and names the line-by-line rule", async () => {
+		const error = (await client({
+			exitCode: 1,
+			stdout: "something RouterOS said\r\n",
+			stderr: KNOWN_HOSTS,
+		})
+			.exec("/ip/firewall/address-list\nprint")
+			.catch((e) => e)) as CentrsError;
+		expect(error.code).toBe("routeros/command-failed");
+		expect(error.summary).toContain("exit 1: something RouterOS said");
+		expect(error.remediation).toContain(
+			"runs each line of a multi-line script",
+		);
+		expect(error.context?.["stderr"]).toBe(KNOWN_HOSTS);
+	});
+
+	test("a nonzero exit with no output says there was no diagnostic", async () => {
+		const error = (await client({ exitCode: 1, stdout: "", stderr: "" })
+			.exec("/x")
+			.catch((e) => e)) as CentrsError;
+		expect(error.code).toBe("routeros/command-failed");
+		expect(error.summary).toContain("printed no diagnostic");
+		expect(error.context?.["partialRunPossible"]).toBeUndefined();
+		expect(error.remediation).not.toContain("multi-line");
+	});
+
+	test("exit 255 with unknown stderr stays a transport failure", async () => {
+		await expect(
+			client({
+				exitCode: 255,
+				stdout: "",
+				stderr: "kex_exchange_identification",
+			}).exec("/x"),
+		).rejects.toMatchObject({ code: "transport/network" });
+	});
+});
+
+describe("SshExecClient: timeout keeps what it saw (#592)", () => {
+	test("an execution timeout names the budget, keeps partial output, and says it may still run", async () => {
+		const c = new SshExecClient({
+			host: "127.0.0.1",
+			port: 9272,
+			username: "admin",
+			timeoutMs: 10_000,
+			runner: async () => ({
+				exitCode: 143,
+				stdout: "begin\r\n",
+				stderr: `${KNOWN_HOSTS}\nConnection timed out`,
+				timedOut: true,
+			}),
+		});
+		const error = (await c
+			.exec(":put begin; :delay 15s; :put end")
+			.catch((e) => e)) as CentrsError;
+		expect(error.code).toBe("transport/timeout");
+		expect(error.summary).toBe(
+			"SSH execute on 127.0.0.1:9272 did not finish within 10s; the command may still be running on the router.",
+		);
+		expect(error.remediation).toContain("`CENTRS_TIMEOUT`");
+		expect(error.remediation).toContain("`--timeout`");
+		expect(error.context).toMatchObject({
+			timeoutMs: 10_000,
+			partialOutput: "begin",
+			outputComplete: false,
+		});
+	});
+});

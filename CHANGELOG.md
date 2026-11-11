@@ -70,6 +70,20 @@ no section of its own.
   redirect. Tip URLs move to the same host; the tip pages themselves are not
   published yet (#464).
 
+### Fixed
+
+- `execute --via ssh`: a command RouterOS ends with a nonzero exit is reported
+  as the router's answer (its diagnostic on stdout keeps a specific code such
+  as `routeros/unknown-path`, else `routeros/command-failed`, with exit code
+  and output in `context`), not `transport/network` with the diagnostic
+  dropped. Over SSH, RouterOS runs each line of a multi-line script on its
+  own; the remediation says so, and a write that fails partway gets
+  `transport/write-outcome-unknown` (#576).
+- `execute --via ssh`: a timeout is now an execution timeout that names the
+  budget, keeps the output printed before the cutoff
+  (`context.partialOutput`), says the command may still be running on the
+  router, and points to `--timeout` and `CENTRS_TIMEOUT` (#592).
+
 ### Maintenance
 
 - A new `components/` tree holds specs for parts of centrs that span
