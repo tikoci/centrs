@@ -90,6 +90,16 @@ describe("runCli dispatch", () => {
 			expect(ids).not.toContain(planned);
 		}
 	});
+
+	test("--help lists only implemented surfaces, not the tui/proxy stubs", async () => {
+		const { out } = await run(["--help"]);
+		const line = out.split("\n").find((l) => l.startsWith("Surfaces: "));
+		expect((line ?? "").slice("Surfaces: ".length).split(", ")).toEqual([
+			"api",
+			"cli",
+			"mcp",
+		]);
+	});
 });
 
 // #111: the shared `unknownFlagError` "Did you mean?" contract, once wired into

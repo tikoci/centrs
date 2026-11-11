@@ -408,7 +408,6 @@ done or declined. A nit that needs more explanation is an issue.
   pass an unknown property (`/container/print proplist=status` then fails as
   `routeros/invalid-value`, tikoci/app-t3code#29). A
   `/console/inspect request=completion` check of the names would catch it.
-- `centrs --help` lists the `tui` and `proxy` surfaces, which are stubs.
 - `.github/instructions/`: trim Copilot-era verbosity when the TIKOCI-wide
   files are collected in `tikoci.github.io`.
 - `test/integration/api-stream-command.test.ts` fails intermittently in the

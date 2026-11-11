@@ -21,6 +21,8 @@ no section of its own.
   still fails as `routeros/protocol-not-implemented`. The fix text for a
   protocol that cannot retrieve no longer suggests `snmp`, and the retrieve
   docs no longer describe a planned SNMP form.
+- `centrs --help` lists only the surfaces that work today (`api`, `cli`,
+  `mcp`). The `tui` and `proxy` stubs are no longer advertised.
 
 ### Maintenance
 

@@ -14,7 +14,7 @@ import { runTerminalCli, terminalCommand } from "./cli/terminal.ts";
 import { runTransferCli, transferCommand } from "./cli/transfer.ts";
 import { runVersionCli } from "./cli/version.ts";
 import { asCentrsError, formatCentrsErrorText } from "./errors.ts";
-import { describeCentrs, plannedSurfaces } from "./index.ts";
+import { describeCentrs, implementedSurfaces } from "./index.ts";
 import { protocolPlans } from "./protocols/index.ts";
 
 /** Every CLI command's metadata, in help/docs order. `scripts/gen-cli-docs.ts` renders `docs/CLI.md` from this. */
@@ -48,7 +48,7 @@ export function renderCliHelp(): string {
 	return [
 		describeCentrs(),
 		"",
-		`Surfaces: ${plannedSurfaces.join(", ")}`,
+		`Surfaces: ${implementedSurfaces.join(", ")}`,
 		`Protocols: ${implementedProtocols.join(", ")}`,
 		"",
 		"Commands:",
