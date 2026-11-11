@@ -21,10 +21,10 @@ no section of its own.
   still fails as `routeros/protocol-not-implemented`. The fix text for a
   protocol that cannot retrieve no longer suggests `snmp`, and the retrieve
   docs no longer describe a planned SNMP form.
-- The Docker image runs as the base image's non-root `bun` user (uid 1000)
+- The Docker image runs as the base image's non-root `bun` user (user ID 1000)
   instead of root. **Container users:** the default config directory moves
   from `/root/.config/tikoci/` to `/home/bun/.config/tikoci/`. Mount your CDB
-  and `centrs.env` there, readable by uid 1000, or set `XDG_CONFIG_HOME`,
+  and `centrs.env` there, readable by user ID 1000, or set `XDG_CONFIG_HOME`,
   `CENTRS_CDB_FILE` or `--cdb-file` (#614).
 
 ### Maintenance
