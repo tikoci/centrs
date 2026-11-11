@@ -264,9 +264,19 @@ that keeps growing is being used as an issue.
   RouterOS has no transaction across commands and a sent write is never
   retried, so recovery is re-running the operation. `--yes` and MCP's `confirm`
   cover the whole operation, not each step.
+- **Lean, commands that never return:** some commands drop or hold the
+  connection by design: `/system/device-mode/update` blocks until a hard power
+  cycle, `/system/reboot`, `/system/shutdown`, `package/update/install`,
+  `/system/reset-configuration`. Today every transport reports them as
+  `transport/timeout`, and an agent concludes the router is broken. A
+  provisioning step that runs one expects the drop, confirms the router went
+  down, then confirms it came back (`retrieve --wait`), instead of calling the
+  drop a failure. A lost response is still never treated as success on its
+  own. `/routerboard/upgrade` does not reboot; unbounded `/ping` and `/tool/*`
+  are a different case (no `count=` or `duration=`).
 - **Ready when:** now. The step-validation rule is the first slice and amends
   the constitution.
-- **Absorbed:** none.
+- **Absorbed:** #363.
 
 ### Auth and secrets
 
