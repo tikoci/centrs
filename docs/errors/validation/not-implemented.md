@@ -8,7 +8,8 @@ or `--query`, before those flags were built. Nothing ran on the device.
 
 ## Fix
 
-Upgrade centrs (`centrs --version` shows what runs; `which -a centrs` finds a
-stale global install). From 0.1.8, `retrieve --query` (and `--filter`) run RouterOS's own
+Upgrade centrs. The first line of `centrs --help` shows the version that runs
+(`--version` exists only from 0.1.9); `which -a centrs` finds a stale global
+install. From 0.1.8, `retrieve --query` (and `--filter`) run RouterOS's own
 `print where` query on the device; see
 [`commands/retrieve/README.md`](../../../commands/retrieve/README.md).

@@ -99,7 +99,7 @@ describe("Pages link rewriting (#464)", () => {
 			"",
 			'[r]: gone-ref.md "title"',
 			"",
-			'<a href="gone-html.md">html</a>',
+			"<a href=\"gone-html.md\">html</a> <a href='gone-html-single.md'>html</a>",
 			"",
 			"`[span](gone-span.md)`",
 			"",
@@ -112,6 +112,7 @@ describe("Pages link rewriting (#464)", () => {
 			"gone-angle.md",
 			"gone-ref.md",
 			"gone-html.md",
+			"gone-html-single.md",
 		]);
 	});
 });

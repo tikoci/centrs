@@ -33,11 +33,22 @@ describe("tip catalog (#659)", () => {
 		expect([...catalogued].filter((c) => !emitted.has(c)).sort()).toEqual([]);
 	});
 
-	test("a tip with page: true has docs/tips/<slug>.md, and every page is flagged", () => {
+	test("a tip with page: true has docs/tips/<slug>.md, and every page is flagged", async () => {
 		for (const { code, page } of tipCatalog) {
 			const file = join(TIPS_DIR, `${code.slice("tip/".length)}.md`);
 			expect({ code, page: existsSync(file) }).toEqual({ code, page });
 		}
+		const flagged = new Set<string>(
+			tipCatalog.filter((t) => t.page).map((t) => t.code),
+		);
+		const unflagged: string[] = [];
+		if (existsSync(TIPS_DIR)) {
+			for await (const rel of new Glob("**/*.md").scan(TIPS_DIR)) {
+				if (!flagged.has(`tip/${rel.slice(0, -".md".length)}`))
+					unflagged.push(rel);
+			}
+		}
+		expect(unflagged.sort()).toEqual([]);
 	});
 
 	test("buildTip carries a detailsUrl only for a tip with a page", () => {

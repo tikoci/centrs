@@ -156,8 +156,7 @@ comment-kv allowlist is a follow-up against `commands/devices/README.md`).
 
 Built-in checks never dump raw `as-value` output into `metadata` — each maps a
 **typed, allowlisted** subset, and credential-class fields are omitted or
-redacted before entering the envelope (and, if an error ever mentions them,
-listed in `redactable_fields`; constitution: error model). Concretely, from the
+redacted before entering the envelope (secrets under `SECURITY.md`). Concretely, from the
 grounding sample: `/ip/cloud` keeps `dns-name` / `status` / `back-to-home-vpn`
 but **drops** `vpn-wireguard-client-config`(-`qrcode`) and the VPN keys;
 `/snmp/community` reports version / scope / count and **redacts the community
