@@ -264,9 +264,24 @@ that keeps growing is being used as an issue.
   RouterOS has no transaction across commands and a sent write is never
   retried, so recovery is re-running the operation. `--yes` and MCP's `confirm`
   cover the whole operation, not each step.
+- **Lean, commands that never return:** some commands drop or hold the
+  connection by design. `/system/device-mode/update` holds it until the change
+  is confirmed by a reset or mode button press or a power cycle; RouterOS
+  cancels the change if no confirmation arrives within its `activation-timeout`
+  (5 minutes by default), and a regular reboot also cancels it.
+  `/system/reboot`, `/system/package/update/install` and
+  `/system/reset-configuration` drop it and restart. Today every transport
+  reports them as `transport/timeout`, and an agent concludes the router is
+  broken. A provisioning step that runs one expects the drop, confirms the
+  router went down, then confirms it came back (`retrieve --wait`), instead of
+  calling the drop a failure. `/system/shutdown` is terminal: its step ends
+  once the router is confirmed down, and it never waits for a return. A lost
+  response is still never treated as success on its own.
+  `/system/routerboard/upgrade` does not reboot; unbounded `/ping` and
+  `/tool/*` are a different case (no `count=` or `duration=`).
 - **Ready when:** now. The step-validation rule is the first slice and amends
   the constitution.
-- **Absorbed:** none.
+- **Absorbed:** #363.
 
 ### Auth and secrets
 
@@ -409,6 +424,11 @@ done or declined. A nit that needs more explanation is an issue.
   `routeros/invalid-value`, tikoci/app-t3code#29). A
   `/console/inspect request=completion` check of the names would catch it.
 - `centrs --help` lists the `tui` and `proxy` surfaces, which are stubs.
+- `btest` UDP: RouterOS's `tx-size` includes the 28-byte IP+UDP header (a
+  1000 sends a 972-byte payload), while centrs sends the full size as payload;
+  RouterOS's UDP client also fans out over 20 source ports
+  (`connection-count=20`). Measured on CHR 7.25.1 and 7.24.6 in the #172
+  retest.
 - `.github/instructions/`: trim Copilot-era verbosity when the TIKOCI-wide
   files are collected in `tikoci.github.io`.
 - `test/integration/api-stream-command.test.ts` fails intermittently in the

@@ -400,7 +400,7 @@ function serverPacket(
 }
 
 describe("mac-telnet session handshake", () => {
-	function setup() {
+	function setup({ offerMtwei = false }: { offerMtwei?: boolean } = {}) {
 		const transport = new FakeMacTelnetTransport();
 		const events: string[] = [];
 		const output: Uint8Array[] = [];
@@ -411,7 +411,8 @@ describe("mac-telnet session handshake", () => {
 			username: "admin",
 			password: "secret",
 			sessionKey: 0x1234,
-			offerMtwei: false, // classic flow: BEGINAUTH only → 16-byte MD5 salt
+			// Default: classic flow, BEGINAUTH only → 16-byte MD5 salt.
+			offerMtwei,
 			onReady: () => events.push("ready"),
 			onData: (bytes) => output.push(bytes),
 			onClose: (error) => events.push(error ? `close:${error.code}` : "close"),
@@ -550,6 +551,48 @@ describe("mac-telnet session handshake", () => {
 			),
 		);
 		expect(events).toContain("close:routeros/mac-telnet-unsupported-auth");
+	});
+
+	test("a 33-byte salt after an MTWEI offer is an auth failure, not unsupported auth (#559)", () => {
+		// RouterOS sends the server public key with no salt when it has no local
+		// login for the username (empty, or a user that does not exist).
+		const { session, events } = setup({ offerMtwei: true });
+		session.start();
+		session.handlePacket(serverPacket(MacTelnetPacketType.ack, 0x1234, 0));
+		const { publicKey: serverKey } = mtweiKeygen(new Uint8Array(32).fill(5));
+		session.handlePacket(
+			serverPacket(
+				MacTelnetPacketType.data,
+				0x1234,
+				0,
+				encodeControlBlock(MacTelnetControlType.passwordSalt, serverKey),
+			),
+		);
+		expect(events).toContain("close:transport/auth-failed");
+		expect(events).not.toContain("close:routeros/mac-telnet-unsupported-auth");
+	});
+
+	test("other unexpected salt lengths keep unsupported-auth (#559)", () => {
+		for (const [offerMtwei, length] of [
+			[true, 20],
+			[false, 33],
+		] as const) {
+			const { session, events } = setup({ offerMtwei });
+			session.start();
+			session.handlePacket(serverPacket(MacTelnetPacketType.ack, 0x1234, 0));
+			session.handlePacket(
+				serverPacket(
+					MacTelnetPacketType.data,
+					0x1234,
+					0,
+					encodeControlBlock(
+						MacTelnetControlType.passwordSalt,
+						new Uint8Array(length).fill(3),
+					),
+				),
+			);
+			expect(events).toContain("close:routeros/mac-telnet-unsupported-auth");
+		}
 	});
 
 	test("uses exact outbound counters through the handshake", () => {

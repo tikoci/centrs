@@ -898,6 +898,20 @@ All three exit 0, and the CDB retains the fixture records and all additions.
 `$CDB.lock` is removed; the empty `$CDB.lock.guard` remains for future recovery.
 Mapped to `test/integration/devices.test.ts` → `example 73`.
 
+### 74. `--strict` deletes an unknown key but refuses adding one
+
+```bash
+centrs devices set 192.0.2.5 future=maybe note=keep --cdb-file $CDB
+centrs devices set 192.0.2.5 future= --strict --cdb-file $CDB --json
+centrs devices set 192.0.2.5 future= --strict --cdb-file $CDB --json
+centrs devices set 192.0.2.5 future=again --strict --cdb-file $CDB --json
+```
+
+Both deletions are `ok: true` with no `cdb/unknown-option` warning, whether
+`future` is present or already gone, and `note=keep` stays in the comment.
+The last call errors with `cdb/unknown-option` and writes nothing (#623).
+Mapped to `test/integration/devices.test.ts` → `example 74`.
+
 ## Per-service port keys (#618)
 
 ### SP1. Save service ports, then remove one to use legacy `port=`

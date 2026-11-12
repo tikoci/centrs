@@ -98,7 +98,9 @@ benchmarked RouterOS agent support. Load-bearing findings that shape this design
   adapter over the existing core function and returns the standard envelope
   (`{ ok, data?, warnings?, error?, meta }`) as JSON text content — the same
   shape the CLI renders (constitution: result envelope; invariant: one settings
-  vocabulary across API/CLI/MCP/TUI/proxy).
+  vocabulary across API/CLI/MCP/TUI/proxy). An `ok: false` envelope also sets
+  the MCP result's `isError`, so a host shows the call as failed without
+  parsing the JSON. A group read's outer `ok` keeps its fan-out meaning.
 - Validation is the product here too: `validate=true` by default, lead with
   `:parse`, never disable to make a call pass (constitution: validation).
 - The MCP server is an adapter over the root TypeScript API; it adds no new

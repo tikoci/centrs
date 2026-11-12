@@ -1056,12 +1056,36 @@ function assertNotStructuredDashboard(
 }
 
 /**
- * True when a `:parse` preflight error is actually a transport/auth/connection
- * failure rather than a RouterOS syntax rejection. These must not be relabeled
- * as `validation/syntax`.
+ * RouterOS errors that mean the device did not answer the `:parse` request at
+ * all, rather than rejecting the command: REST's `Session closed` (60-second
+ * session cap, or a router still busy with earlier requests, #638) and the
+ * native-API `action timed out` trap (#639). The gate gave no verdict, so the
+ * error keeps its own code and the device stage reads `not reached`.
+ */
+const PREFLIGHT_NO_ANSWER_CODES: ReadonlySet<string> = new Set([
+	"routeros/session-closed",
+]);
+const PREFLIGHT_NO_ANSWER_DETAIL = /\baction timed out\b/i;
+
+/**
+ * True when a `:parse` preflight error is not a parse answer: a transport,
+ * auth or connection failure, or a device that did not answer (see
+ * {@link PREFLIGHT_NO_ANSWER_CODES}). These must not be relabeled as
+ * `validation/syntax`.
  */
 function isPreflightTransportError(error: CentrsError): boolean {
-	return error.code.startsWith("transport/") || error.code.startsWith("auth/");
+	if (error.code.startsWith("transport/") || error.code.startsWith("auth/")) {
+		return true;
+	}
+	if (PREFLIGHT_NO_ANSWER_CODES.has(error.code)) {
+		return true;
+	}
+	const detail = error.context?.["detail"];
+	return (
+		error.code.startsWith("routeros/") &&
+		typeof detail === "string" &&
+		PREFLIGHT_NO_ANSWER_DETAIL.test(detail)
+	);
 }
 
 async function runCommand(
