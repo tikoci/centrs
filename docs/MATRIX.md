@@ -419,6 +419,11 @@ done or declined. A nit that needs more explanation is an issue.
   `routeros/invalid-value`, tikoci/app-t3code#29). A
   `/console/inspect request=completion` check of the names would catch it.
 - `centrs --help` lists the `tui` and `proxy` surfaces, which are stubs.
+- `btest` UDP: RouterOS's `tx-size` includes the 28-byte IP+UDP header (a
+  1000 sends a 972-byte payload), while centrs sends the full size as payload;
+  RouterOS's UDP client also fans out over 20 source ports
+  (`connection-count=20`). Measured on CHR 7.25.1 and 7.24.6 in the #172
+  retest.
 - `.github/instructions/`: trim Copilot-era verbosity when the TIKOCI-wide
   files are collected in `tikoci.github.io`.
 - `test/integration/api-stream-command.test.ts` fails intermittently in the
