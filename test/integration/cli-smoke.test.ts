@@ -95,7 +95,7 @@ describe("CLI smoke (real subprocess, no network)", () => {
 		expect(res.stderrText).toContain("input/invalid-command");
 		expect(res.stderrText).toContain("Unknown centrs command");
 		expect(res.stderrText).toContain(
-			"https://tikoci.github.io/centrs/errors/input/invalid-command",
+			"https://tikoci.dev/centrs/errors/input/invalid-command/",
 		);
 	});
 

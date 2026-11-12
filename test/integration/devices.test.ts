@@ -384,7 +384,7 @@ describe("centrs devices (read-only)", () => {
 		expect(envelope.ok).toBe(false);
 		expect(envelope.error.code).toBe("cdb/not-found");
 		expect(envelope.error.detailsUrl).toBe(
-			"https://tikoci.github.io/centrs/errors/cdb/not-found",
+			"https://tikoci.dev/centrs/errors/cdb/not-found/",
 		);
 	});
 

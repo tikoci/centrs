@@ -213,7 +213,7 @@ and the comment grammar — lives in `commands/devices/README.md` and
   with provenance and source-of-truth reporting in `meta`.
 - **Errors are typed values**, not thrown strings, with slash-namespaced codes
   (`routeros/…`, `transport/…`, `validation/…`, `cdb/…`) and a `details_url`
-  of the form `https://tikoci.github.io/centrs/errors/<code>` for the
+  of the form `https://tikoci.dev/centrs/errors/<code>/` for the
   human-readable explanation.
 
 The load-bearing contract — envelope shape, error model, protocol selection,

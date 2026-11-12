@@ -214,7 +214,7 @@ The server publishes two read-only MCP **resources** and points its
   itself): target, group, user, record type, and the resolved `mcp` write policy
   per record. No passwords. This is how an agent learns what it may act on.
 - `centrs://errors` — the centrs error-code catalog: each known `family/code`
-  with its stable details URL (`https://tikoci.github.io/centrs/errors/<code>`),
+  with its stable details URL (`https://tikoci.dev/centrs/errors/<code>/`),
   including the MCP-specific `cdb/target-not-registered` and
   `cdb/write-not-permitted`. Lets an agent resolve an envelope error without a
   round-trip.

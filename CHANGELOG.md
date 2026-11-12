@@ -63,6 +63,12 @@ no section of its own.
   host that follows the MCP spec shows the failure as a failure (#605).
   `structuredContent`, an `outputSchema` and a default result-size budget are
   still open on #605.
+- Error `detailsUrl`s now use the site's canonical host and the page's own
+  URL: `https://tikoci.dev/centrs/errors/<code>/`. The old
+  `https://tikoci.github.io/centrs/errors/<code>` links redirected through
+  plain HTTP, which some agent fetch tools refuse to follow. Old links still
+  redirect. Tip URLs move to the same host; the tip pages themselves are not
+  published yet (#464).
 
 ### Maintenance
 

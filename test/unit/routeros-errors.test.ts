@@ -159,7 +159,7 @@ describe("mapRouterOsError grounded vocabulary", () => {
 	test("sets details_url from the normalized code", () => {
 		const error = mapRouterOsError("no such item");
 		expect(error.detailsUrl).toBe(
-			"https://tikoci.github.io/centrs/errors/routeros/unknown-path",
+			"https://tikoci.dev/centrs/errors/routeros/unknown-path/",
 		);
 	});
 

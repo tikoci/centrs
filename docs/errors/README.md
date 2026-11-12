@@ -1,16 +1,22 @@
 # centrs error pages
 
 Each `CentrsError` carries a `details_url` of the form
-`https://tikoci.github.io/centrs/errors/<code>`. This directory holds the
+`https://tikoci.dev/centrs/errors/<code>/`. This directory holds the
 human-readable page for each code, and is the home for the **error URL scheme**
 and the **RouterOS-fault mapping** (below); the constitution keeps only the
 one-line contract.
 
 ## URL scheme
 
-`details_url` is `https://tikoci.github.io/centrs/errors/<code>`, with `<code>`
-the slash-namespaced code as-is (e.g.
-`https://tikoci.github.io/centrs/errors/routeros/unsupported-path`).
+`details_url` is `https://tikoci.dev/centrs/errors/<code>/`, with `<code>`
+the slash-namespaced code as-is and a trailing slash (e.g.
+`https://tikoci.dev/centrs/errors/routeros/unknown-path/`).
+
+- The host is the site's canonical custom domain over HTTPS, and the trailing
+  slash is the page's own URL, so a fetch gets 200 with no redirect. Links
+  emitted before 0.2.0 used `https://tikoci.github.io/centrs/errors/<code>`;
+  GitHub Pages still redirects those to the custom domain, but through plain
+  HTTP, which some agent fetch tools refuse to follow (#464).
 
 - The URL is normalized; the GitHub Pages site routes it to a human page — **not**
   the typedoc URL (typedoc lives elsewhere).
