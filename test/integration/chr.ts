@@ -234,8 +234,8 @@ export const REST_API_WITHOUT_API_POLICY_SINCE = "7.26beta3";
 /**
  * CMR (`/cmr`, `/cmr/client`, the optional `cmr` package) first shipped in
  * 7.26beta1 (MikroTik manual). No earlier build has the menus, so
- * `execute --cmr` suites boot this version explicitly instead of following
- * `CENTRS_CHR_CHANNEL`; see `cmr-lab.ts`.
+ * this is the capability floor, not the lab default. The CMR lab pins a
+ * current beta independently of `CENTRS_CHR_CHANNEL`; see `cmr-lab.ts`.
  */
 export const CMR_SINCE = "7.26beta1";
 

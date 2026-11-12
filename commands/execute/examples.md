@@ -864,15 +864,16 @@ the unknown machine's inner error is `quickchr/machine-not-found`. Exit code 2
 ## CMR clients through a controller (#450)
 
 `test/integration/execute-cmr.test.ts` runs these on a two-CHR CMR lab
-(`test/integration/cmr-lab.ts`): `$CTL` is a 7.26beta1 controller with the
+(`test/integration/cmr-lab.ts`): `$CTL` is a 7.26beta5 controller with the
 `cmr` package, paired with one client over a socket link. Examples CMR1–CMR7
 and CMR10–CMR18 run over **both** `--via native-api` and `--via rest-api` to
 the controller, with validation on. The same test first asserts the device
 behaviour the design depends on (CMR-D1–D9 in the test file).
 
-`CENTRS_CMR_VERSION` boots a later beta. Where RouterOS changed, the
+`CENTRS_CMR_VERSION` selects another build for triage. Where RouterOS changed, the
 expectation below names its side of the split; each split is a `CMR_*_SINCE`
-constant in `test/integration/chr.ts` (#527).
+constant in `test/integration/chr.ts` (#527). The earlier outcomes record
+beta1; the beta3/beta4 changes apply to the default beta5 lab.
 
 ### CMR0. A router without CMR
 

@@ -1,9 +1,9 @@
 # cmr
 
-Status: `CHR-passed` on 7.26beta1, through the `execute` rest-api and
+Status: `CHR-passed` on 7.26beta5, through the `execute` rest-api and
 native-api cells; its examples are CMR0–CMR18 in
 [`commands/execute/examples.md`](../../commands/execute/examples.md#cmr-clients-through-a-controller-450).
-Later betas pass the same suite with their version splits (see
+Historical builds pass the same suite with their version splits (see
 [Builds](#builds)). Matches
 `docs/MATRIX.md` → Components.
 
@@ -55,10 +55,47 @@ Each split is a constant in `test/integration/chr.ts` (`CMR_*_SINCE`), and
 `execute-cmr.test.ts` asserts the side the running build is on. The suite
 passes on 7.26beta1, 7.26beta3, 7.26beta4 and 7.26beta5 (2026-11-11).
 
-The lab boots `CMR_SINCE` (7.26beta1). `CENTRS_CMR_VERSION` boots another
-build. The lab should follow the development channel, so a beta that changes
-CMR turns the suite red; that switch is the maintainer's call (#527).
+The lab defaults to 7.26beta5. `CMR_SINCE` remains the capability floor
+(7.26beta1), and `CENTRS_CMR_VERSION` selects a historical build for triage.
+Update the explicit lab pin as development builds progress (#527).
 
 For each build checked, add a row above. rosetta's changelog search
 (`category: cmr`) and a `/cmr` command diff between builds show what a beta
 changed.
+
+<!-- cspell:ignore Sergejs -->
+
+## MikroTik forum context
+
+These are attributed vendor statements, refreshed 2026-11-11, not additional
+CHR acceptance evidence:
+
+- [Sergejs on IPv6](https://forum.mikrotik.com/t/7-26beta-development-is-released/273582/75)
+  clarifies that IPv6-only networks are supported; when both addresses are
+  reachable, IPv4 is preferred. This lab uses IPv4 and does not verify IPv6.
+- [Sergejs on caller policy](https://forum.mikrotik.com/t/7-26beta-development-is-released/273582/139)
+  places the read-group refusal in beta2. Our first booted refusing build is
+  beta3; beta2 is unavailable, so retain the measured bracket above.
+- [Sergejs on port selectors](https://forum.mikrotik.com/t/7-26beta-development-is-released/273582/188)
+  warns that empty or unset VLAN `port-labels` can include the uplink and
+  disconnect clients. CMR17 tests a disabled add, not enabled provisioning
+  or clearing selectors on an existing rule; its beta4+ add refusal does
+  not establish that those other paths are safe. Port mappings use commas
+  between ports and `/` between labels on one port.
+- [Sergejs on managed bridges](https://forum.mikrotik.com/t/7-26beta-development-is-released/273582/232)
+  explains that server or VLAN-rule disable/enable rebuilds `cmr-bridge`
+  with a new internal ID; manual VLAN/DHCP management configuration on it
+  can become invalid. A plain reconnect alone does not rebuild it. Keep
+  management on an interface CMR does not manage for that design.
+- [His later announcement](https://forum.mikrotik.com/t/7-26beta-development-is-released/273582/248)
+  says the next beta will reuse the client's existing enabled bridge,
+  preserve manual configuration and require one enabled bridge. This is
+  future behavior, not beta5 acceptance; re-test before changing the lab.
+- [The earlier lab reply](https://forum.mikrotik.com/t/claude-and-codex-try-out-cmr-in-7-26beta-mostly-successful/273613/4)
+  says disable/enable clearing pairing is intended, client `confirm` was
+  frozen before release, and the stable upgrade rule deliberately follows
+  stable even when older. These are not new support reports.
+
+The half-paired state in the builds table is separate from those acknowledged
+behaviors. Neither refreshed thread identifies it as intended or fixed. #527
+retains the lab reproducer and recovery for a potential MikroTik report.

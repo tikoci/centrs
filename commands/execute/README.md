@@ -367,7 +367,9 @@ when the target is itself a CMR client.
   command and its error says so (`context.dispatched: false`). The per-member
   read is host-side, not atomic with the call: on 7.26beta1 a client script
   cannot check its own key (`/cmr/client get local-id` reads `*****` inside
-  `run-script`) and `numbers=` does not take `ids`. After dispatch, a sent result is reported
+  `run-script`) and `numbers=` does not take `ids`. From beta4, `local-id` is visible
+  inside the script (CMR-D7), but centrs still uses host-side binding; this
+  is not an atomic client-side key check. After dispatch, a sent result is reported
   as `cmr/outcome-unknown` if the key changed during the call, or if the
   inventory cannot be re-read (cancelled or unreadable) to confirm which client
   answered. A CMR `skipped` stays `cmr/client-disconnected`, because nothing was
@@ -384,8 +386,8 @@ when the target is itself a CMR client.
   both. So a "reader" login on a 7.26beta1 controller is not read-only, and
   centrs' write gate (and `mcp=ro` on MCP) is the only gate. MikroTik
   [says](https://forum.mikrotik.com/t/7-26beta-development-is-released/273582/139) 7.26beta2 refuses this for a `read` group; #527 now carries
-  direct 7.26beta3 evidence that a restricted caller is refused, with the
-  first refusing release still unbracketed. For a write,
+  direct beta3–beta5 evidence that `run-script` needs both `write` and
+  `reboot`. The measured boundary is (beta1, beta3]; beta2 was not booted. For a write,
   centrs reads the login's own `/user` row and `/user/group` once (both are
   readable with just `read` + `api`). When the login lacks `write`, `test` or
   `reboot`, the result and the confirmation error carry
@@ -406,7 +408,7 @@ when the target is itself a CMR client.
   that error says the command already ran (`context.dispatched: true`). A `failed` runtime
   error maps through the usual `routeros/*` table. `skipped` →
   `cmr/client-disconnected`.
-- **What a client script may do:** CMR runs it with only the `read`, `write`,
+- **What a client script may do:** On 7.26beta1, CMR runs it with only the `read`, `write`,
   `test` and `reboot` policies and no user session. A command that needs
   another policy (`/user add`, `/tool sniffer`) passes `:parse` on the client
   and is refused when it runs: `cmr/policy-denied`. The script stops at that
@@ -414,7 +416,10 @@ when the target is itself a CMR client.
   their output is in `context.output`. Sensitive
   values read back as `*` or empty. Multi-line commands run every line (the
   manual says single-line; 7.26beta1 ran both LF and CRLF scripts in full), and
-  `/export` works.
+  `/export` works. From beta4, `/user/add` succeeds and `local-id` is
+  visible inside the script (CMR11, CMR11b, CMR-D7). The remaining policy
+  limits have not been measured; `cmr/policy-denied` still describes an
+  actual runtime permission refusal, not a promise that user creation fails.
 - **Unknown outcomes:** a CMR timeout (`timed out (6)`, `std failure: timeout
   (13)`), a local deadline, a cancellation, or a lost call after sending all
   give `cmr/outcome-unknown`. A cancellation before anything is sent, including
