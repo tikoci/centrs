@@ -134,9 +134,9 @@ async function wrap(
 }
 
 /**
- * Boot, link and pair the lab. The controller pairs the client with the client's
- * own RouterOS login (`/cmr/device/pair … username= password=`), the normal
- * flow; neither side's pairing requirement is relaxed to `none`.
+ * Boot, link and pair the lab. Neither side's pairing requirement is relaxed
+ * to `none`: the controller approves its side, then pairs the client with the
+ * client's own RouterOS login (`/cmr/device/pair … username= password=`).
  */
 export async function startCmrLab(prefix: string): Promise<CmrLab> {
 	const { QuickCHR } = await quickChr();
@@ -201,15 +201,21 @@ export async function startCmrLab(prefix: string): Promise<CmrLab> {
 		const clientRow = async () =>
 			(await devices()).find((row) => row["identity"] === client.identity);
 		const findClient = `[find identity=${quote(client.identity)}]`;
+		// Pairing follows tikoci/quickchr examples/cmr (FINDINGS.md → Pairing,
+		// `pairClient()` in tool/pairing.ts), the grounding lab for CMR:
+		// commit the controller's own `confirm` approval with a bare `pair`
+		// first, then satisfy the client's `password` requirement. The manual's
+		// single credentialed `pair` can end half-paired from 7.26beta3 on: the
+		// command's last table reads `device:ok, cmr:ok` instead of `paired`,
+		// the client says `paired,connected`, but the row keeps
+		// `state="pair: device:ok, cmr:ok"`, `run-script` never selects it, and
+		// a CMR restart shows the controller never saved its approval (#527).
+		await controller.run(`/cmr/device/pair ${findClient}`);
 		await controller.run(
 			`/cmr/device/pair ${findClient} username=${quote(client.username)} password=${quote(client.password)}`,
 		);
-		// #527: since 7.26beta3 the credentialed pair can stop half-way. The
-		// client says `paired,connected` and the row `connected=true`, but the
-		// row keeps `state="pair: device:ok, cmr:ok"` (no `upgrade-rule`) and
-		// `run-script` never selects it. A bare `pair` finishes it (15/15 on
-		// beta3–beta5); on a fully paired client it answers `already paired`.
-		// 7.26beta1 clears `state` on the first pair, so it never gets here.
+		// Keep the repair so a regression still finishes the lab, but say so:
+		// a lab that needed it is evidence for quickchr's FINDINGS.md.
 		const halfPaired = "pair: device:ok, cmr:ok";
 		const settle = Date.now() + 10_000;
 		let state = (await clientRow())?.["state"] ?? "";
@@ -218,6 +224,9 @@ export async function startCmrLab(prefix: string): Promise<CmrLab> {
 			state = (await clientRow())?.["state"] ?? "";
 		}
 		if (state === halfPaired) {
+			console.warn(
+				`CMR lab: ${client.identity} half-paired after confirm-first pairing on ${controller.version}; finishing with a bare pair (#527)`,
+			);
 			await controller.run(`/cmr/device/pair ${findClient}`);
 		}
 		// Paired means more than connected: the controller's row has no pending

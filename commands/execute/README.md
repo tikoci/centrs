@@ -387,7 +387,7 @@ when the target is itself a CMR client.
   centrs' write gate (and `mcp=ro` on MCP) is the only gate. MikroTik
   [says](https://forum.mikrotik.com/t/7-26beta-development-is-released/273582/139) 7.26beta2 refuses this for a `read` group; #527 now carries
   direct beta3–beta5 evidence that `run-script` needs both `write` and
-  `reboot`. The measured boundary is (beta1, beta3]; beta2 was not booted. For a write,
+  `reboot`. beta2 was never published, so beta3 is the exact boundary. For a write,
   centrs reads the login's own `/user` row and `/user/group` once (both are
   readable with just `read` + `api`). When the login lacks `write`, `test` or
   `reboot`, the result and the confirmation error carry

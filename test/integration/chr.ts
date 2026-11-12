@@ -249,10 +249,10 @@ export const CMR_SINCE = "7.26beta1";
  *     `cmr/selection-incomplete` with `routeros/permission-denied` causes.
  *
  * Measured: old on 7.26beta1; new on 7.26beta3, 7.26beta4 and 7.26beta5.
- * **7.26beta2 was never booted** (not on the download server), so the change
- * is only bracketed to (7.26beta1, 7.26beta3]; this threshold names the first
- * observed build with the new behavior. MikroTik's note on #456 places it in
- * beta2.
+ * The boundary is exact for every published build: 7.26beta2 was never
+ * published (its CHANGELOG is 404), so beta3 is the first build after beta1.
+ * MikroTik's note on #456 placed the fix in beta2, which shipped as beta3.
+ * Per-build CMR behaviour: tikoci/quickchr examples/cmr/FINDINGS.md.
  */
 export const CMR_RUN_SCRIPT_NEEDS_WRITE_REBOOT_SINCE = "7.26beta3";
 
