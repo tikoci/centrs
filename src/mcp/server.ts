@@ -4,7 +4,7 @@
  * Wires the scoped-verb tool handlers (`./tools.ts`) and the read-only
  * resources (`./resources.ts`) onto an `McpServer`, with `instructions` that
  * point an agent at the allowlist and error catalog. Transport is stdio only —
- * HTTP/remote access is the proxy surface's job, not the MCP server's.
+ * HTTP/remote access is a separate surface's job, not the MCP server's.
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";

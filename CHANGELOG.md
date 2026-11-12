@@ -26,6 +26,12 @@ publish `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
   names TUI or proxy frontends. `--via` with an unimplemented protocol still
   fails as `routeros/protocol-not-implemented`, and no fix text suggests
   `snmp` any more.
+- **Library:** the `@tikoci/centrs/tui` and `@tikoci/centrs/webproxy`
+  exports, and the stub modules behind them, are removed. They held only plan
+  objects (`tuiSurfacePlan`, `webProxyPlan`). `plannedSurfaces` is gone too:
+  `implementedSurfaces` (`api`, `cli`, `mcp`) is the list, and
+  `projectSummary.surfaces` reports it. A remote (web/proxy) surface gets an
+  export when it has a shape.
 - `devices set --strict` may delete an unknown comment key (`key=`), present
   or already absent, without a warning. Adding or changing an unknown key under
   `--strict` is still refused (#623).
@@ -134,8 +140,8 @@ regression from 0.1.10.
 - [#657](https://github.com/tikoci/centrs/issues/657): `execute --cmr` drops a
   connected client that RouterOS will not select (half-paired or pending) as
   if no label matched.
-- [#464](https://github.com/tikoci/centrs/issues/464): tip `detailsUrl`s
-  point at pages that do not exist yet.
+- [#659](https://github.com/tikoci/centrs/issues/659): tip `detailsUrl`s
+  point at pages that do not exist yet, and some error pages are still stubs.
 
 ## 0.1.10 — 2026-11-05
 

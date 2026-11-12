@@ -779,16 +779,11 @@ export {
 import { centrsVersion } from "./core/version.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 
-export const plannedSurfaces = ["api", "cli", "tui", "mcp", "proxy"] as const;
 /**
- * The surfaces a caller can use today. `tui` and `proxy` are stubs, so help
- * does not advertise them.
+ * The surfaces a caller can use today. A remote (web/proxy) surface is not
+ * designed yet; it gets an entry here when it has code.
  */
-export const implementedSurfaces: readonly CentrsSurface[] = [
-	"api",
-	"cli",
-	"mcp",
-];
+export const implementedSurfaces = ["api", "cli", "mcp"] as const;
 export const plannedDeviceSources = [
 	"explicit-input",
 	"environment",
@@ -797,7 +792,7 @@ export const plannedDeviceSources = [
 	"mndp",
 ] as const;
 
-export type CentrsSurface = (typeof plannedSurfaces)[number];
+export type CentrsSurface = (typeof implementedSurfaces)[number];
 export type DeviceSource = (typeof plannedDeviceSources)[number];
 
 export interface ProjectSummary {
@@ -814,7 +809,7 @@ export const projectSummary: ProjectSummary = {
 	version: centrsVersion,
 	description:
 		"RouterOS interaction hub for validated device access and offline analysis, from TypeScript, the CLI, or MCP.",
-	surfaces: plannedSurfaces,
+	surfaces: implementedSurfaces,
 	protocols: plannedProtocols,
 	deviceSources: plannedDeviceSources,
 };

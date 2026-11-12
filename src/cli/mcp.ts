@@ -4,7 +4,7 @@
  * and the global toggles (`--cdb-file`/`--cdb-password`/
  * `--allow-adhoc-targets`), resolved in `../mcp/config.ts`.
  *
- * Transport is stdio only; HTTP/remote access is the proxy surface's job.
+ * Transport is stdio only; HTTP/remote access is a separate surface's job.
  */
 
 import { asCentrsError, formatCentrsErrorText } from "../errors.ts";

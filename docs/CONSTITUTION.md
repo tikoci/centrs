@@ -15,8 +15,8 @@ amend the rule first: before the theme's code, or in the same change.
 ## What centrs is
 
 The RouterOS hub for agents and the tools they drive: a typed library for
-RouterOS analysis and **validated** device access, with CLI, MCP and future
-web/proxy frontends and structured, actionable diagnostics. The TypeScript API
+RouterOS analysis and **validated** device access, with CLI and MCP frontends
+and structured, actionable diagnostics. The TypeScript API
 is the root surface; everything else is an adapter over it. The CLI is the
 primary and most-audited surface: it needs no configuration, and its `--help`
 and envelopes show what centrs offers. The other surfaces keep the same shapes
@@ -455,9 +455,10 @@ RouterOS semantics. Two boundaries are load-bearing:
   Identity and CDB). The off-by-default `--allow-adhoc-targets` flag is reserved
   for future inline-target flows — today no RouterOS-facing tool exposes an inline
   host+credential schema, so the CDB allowlist is the only active target source.
-- **Transport is stdio only.** HTTP/remote access is the proxy surface's job
-  (`src/webproxy.ts`), which fronts the same CDB; the MCP server grows no listener
-  of its own. One surface owns network exposure.
+- **Transport is stdio only.** HTTP/remote access belongs to a separate remote
+  surface that fronts the same CDB; none is built yet, and its shape is open
+  ([MATRIX → Components](MATRIX.md#components)). The MCP server grows no
+  listener of its own, so one surface owns network exposure.
 
 The scoped tool surface (verbs mirroring the CLI/API, never one tool per RouterOS
 command), the per-device `mcp=ro|rw` + `confirm: true` write gate, the
@@ -599,10 +600,10 @@ centrs does not:
 
 ### Network listeners
 
-centrs opens a network listener in exactly two sanctioned places: the **proxy**
-surface (HTTP / remote access; `src/webproxy.ts`) and the **btest server**
+centrs opens a network listener in exactly two sanctioned places: a future
+**remote** surface (HTTP / remote access; not built yet) and the **btest server**
 (`centrs btest server`, TCP/UDP port 2000). The btest server is an **explicit,
-foreground, user-invoked** command — not an always-on daemon, and not the proxy.
+foreground, user-invoked** command — not an always-on daemon, and not the remote surface.
 It **binds loopback by default** (`--bind` to expose), **requires auth by
 default** (`authenticate=yes`, mirroring RouterOS), and is security-sensitive
 surface: treat credentials as redactable (`SECURITY.md`). The MCP server stays
@@ -610,7 +611,7 @@ stdio-only and grows no listener of its own.
 
 ## Invariants
 
-- One settings vocabulary across API/CLI/MCP/TUI/proxy.
+- One settings vocabulary across API/CLI/MCP and any later surface.
 - Friendly, structured errors are part of the API contract — not optional polish.
 - Help text, source reporting, redaction, and bug-report envelopes are
   shared-core, not per-frontend.

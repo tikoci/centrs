@@ -16,7 +16,8 @@ where the wait stopped; the summary says which.
   login was seen.
 - Commands that drop the connection on purpose (`/system/reboot`,
   `/system/package/update/install`, `/system/device-mode/update`) report this
-  today (#363).
+  today; see the
+  [Provisioning theme](../../MATRIX.md#provisioning), which absorbed #363.
 
 ## Fix
 

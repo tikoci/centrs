@@ -140,8 +140,7 @@ READMEs. Cell states are the same as the grid's.
 | ts-api | frontend | `CHR-passed` | `src/index.ts`: the root TypeScript library surface; everything else adapts it. |
 | cli | frontend | `coded` | `src/cli/`: every command in `cliCommands` (`src/cli.ts`) is wired: `retrieve`/`execute`/`api`/`transfer`/`terminal`/`explain`/`devices`/`discover`/`btest`/`mcp`/`settings`, plus the `upload`/`download` shortcuts. |
 | mcp | frontend | `CHR-passed` | `commands/mcp/README.md` and `test/integration/mcp.test.ts`: the scoped-verb stdio server, its CDB-as-allowlist safety model and the `mcp=rw` + `confirm:true` write gate (examples 1–10). |
-| tui | frontend | `not-started` | `src/tui.ts` stub. |
-| proxy | frontend | `not-started` | `src/webproxy.ts` stub. |
+| remote (web / proxy) | frontend | `not-started` | No code. Its shape follows consumer work ([routeros-muse, app-t3code](CONSTITUTION.md#consumers)); a TUI is further out. |
 | btest / server | peer measurement | `CHR-passed` | `test/integration/btest.test.ts`; `commands/btest/README.md`. |
 | btest / client | peer measurement | `CHR-passed` | `test/integration/btest-client.test.ts`; `commands/btest/README.md`. |
 
@@ -375,7 +374,7 @@ that keeps growing is being used as an issue.
   are safe to allowlist. Pages publishes `llms.txt` and the generated CLI
   reference, the README shows real envelopes, and one worked example spans
   retrieve → export → transfer → `api --stream`. Many error pages are still
-  scaffold stubs, and tip `detailsUrl`s have no pages behind them yet (#464).
+  scaffold stubs, and tip `detailsUrl`s have no pages behind them yet (#659).
   TIKOCI-wide instruction files are collected in `tikoci.github.io` and
   vendored here, each recording its source and revision.
 - **Ready when:** now.

@@ -98,7 +98,7 @@ benchmarked RouterOS agent support. Load-bearing findings that shape this design
   adapter over the existing core function and returns the standard envelope
   (`{ ok, data?, warnings?, error?, meta }`) as JSON text content — the same
   shape the CLI renders (constitution: result envelope; invariant: one settings
-  vocabulary across API/CLI/MCP/TUI/proxy). An `ok: false` envelope also sets
+  vocabulary across API/CLI/MCP). An `ok: false` envelope also sets
   the MCP result's `isError`, so a host shows the call as failed without
   parsing the JSON. A group read's outer `ok` keeps its fan-out meaning.
 - Validation is the product here too: `validate=true` by default, lead with
@@ -223,9 +223,9 @@ The server publishes two read-only MCP **resources** and points its
 
 - **stdio is the only MCP transport.** It matches the common local MCP client
   model and keeps the agent boundary on the operator's machine.
-- **HTTP is the proxy surface's job, not the MCP server's.** Remote/HTTP access
-  to CDB-gated RouterOS lives in `src/webproxy.ts` (the `centrs-proxy` surface),
-  which fronts the same CDB. The MCP server deliberately grows no HTTP/TLS
+- **HTTP is a remote surface's job, not the MCP server's.** Remote/HTTP access
+  to CDB-gated RouterOS belongs to a separate surface that fronts the same CDB;
+  none is built yet (`docs/MATRIX.md` → Components). The MCP server deliberately grows no HTTP/TLS
   listener of its own, so there is one place that owns network exposure.
 
 ## Future work
@@ -257,7 +257,7 @@ The server publishes two read-only MCP **resources** and points its
 
 These are resolved for the current design and recorded here for provenance:
 
-- **HTTP transport** → owned by the proxy surface, not MCP (resolved).
+- **HTTP transport** → owned by a separate remote surface, not MCP (resolved).
 - **Doc context** → centrs logic only; `manual.mikrotik.com` is a future,
   optional enrichment source (resolved).
 - **Resources vs tools** → ship both `centrs://devices` and `centrs://errors` as
