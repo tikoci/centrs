@@ -39,6 +39,14 @@ onboarding, and Provisioning.
 
 ## Builds
 
+RouterOS's own CMR behaviour per build (pairing states and sequences,
+`run-script` policy, export, alerts, upgrade rules) is grounded in quickchr's
+CMR lab:
+[`examples/cmr/FINDINGS.md`](https://github.com/tikoci/quickchr/blob/main/examples/cmr/FINDINGS.md).
+Cite that file for a RouterOS claim, and add new CMR research there as a quickchr
+study. This README keeps only what centrs asserts: the contracts below and their
+version splits.
+
 CMR first shipped in 7.26beta1 and so far exists only in development builds.
 The controller also needs the optional `cmr` package. A router without
 `/cmr/device` is `routeros/version-unsupported` (`capability: cmr-controller`)
@@ -47,13 +55,16 @@ before 7.26beta1 and `cmr/not-a-controller` after.
 | Build | What is known |
 | ----- | ------------- |
 | 7.26beta1 | Lab baseline: CMR1–CMR7 and CMR10–CMR18 pass over rest-api and native-api, CMR8–CMR9 over native-api. A login without `write` or `reboot` still writes through `run-script` (#456, CMR15). |
-| 7.26beta3 | The credentialed `pair` can stop half-way: the client is `paired,connected`, but the controller's row keeps `state="pair: device:ok, cmr:ok"` and `run-script` never selects it. A bare `/cmr/device/pair` finishes it; the lab does that (#527). A login without both `write` and `reboot` is refused by `run-script` (`not enough permissions (9)`), so CMR15 and CMR18 are refusals. Not booted: 7.26beta2. |
+| 7.26beta3 | The manual's single credentialed `pair` can stop half-way: the client is `paired,connected`, but the controller's row keeps `state="pair: device:ok, cmr:ok"` and `run-script` never selects it (#527; quickchr FINDINGS.md → Pairing). The lab now runs a bare `/cmr/device/pair` before the credentialed one, and still finishes and warns if a row is left half-paired. A login without both `write` and `reboot` is refused by `run-script` (`not enough permissions (9)`), so CMR15 and CMR18 are refusals. First build after beta1: 7.26beta2 was never published. |
 | 7.26beta4 | Inside a CMR script, `local-id` is no longer masked (CMR-D7) and a client-side `/user/add` runs (CMR11, CMR11b). `/cmr/vlan/add` requires `port-labels` (CMR17). |
 | 7.26beta5 | Same as 7.26beta4. |
 
 Each split is a constant in `test/integration/chr.ts` (`CMR_*_SINCE`), and
 `execute-cmr.test.ts` asserts the side the running build is on. The suite
-passes on 7.26beta1, 7.26beta3, 7.26beta4 and 7.26beta5 (2026-11-11).
+passes on 7.26beta1, 7.26beta3, 7.26beta4 and 7.26beta5 (2026-11-11), and on
+7.26beta1 and 7.26beta5 again with the confirm-first pairing (2026-11-12). The
+complete `bun run test:integration` tier passed on the 7.26beta5 default on
+2026-11-12: 278 pass, 0 fail.
 
 The lab defaults to 7.26beta5. `CMR_SINCE` remains the capability floor
 (7.26beta1), and `CENTRS_CMR_VERSION` selects a historical build for triage.
@@ -74,8 +85,8 @@ CHR acceptance evidence:
   clarifies that IPv6-only networks are supported; when both addresses are
   reachable, IPv4 is preferred. This lab uses IPv4 and does not verify IPv6.
 - [Sergejs on caller policy](https://forum.mikrotik.com/t/7-26beta-development-is-released/273582/139)
-  places the read-group refusal in beta2. Our first booted refusing build is
-  beta3; beta2 is unavailable, so retain the measured bracket above.
+  places the read-group refusal in beta2. beta2 was never published; beta3
+  is the first build with it, so the boundary above is exact.
 - [Sergejs on port selectors](https://forum.mikrotik.com/t/7-26beta-development-is-released/273582/188)
   warns that empty or unset VLAN `port-labels` can include the uplink and
   disconnect clients. CMR17 tests a disabled add, not enabled provisioning
