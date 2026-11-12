@@ -206,6 +206,42 @@ describeFast("execute over ssh (per-command ssh host)", () => {
 			expect(stoppedOutput).toContain("boom (:error; line 2)");
 			expect(stoppedOutput).not.toContain("after");
 
+			// A quote inside an inline comment opens no string: the script is
+			// sent, and both lines run.
+			const commented = await executeEnvelope({
+				...base,
+				command: ':put before; # a lone " in a comment\n:put after',
+				yes: true,
+			});
+			expect(
+				commented.ok,
+				commented.ok ? "" : JSON.stringify(commented.error),
+			).toBe(true);
+			if (!commented.ok) return;
+			expect(retOf(commented.data)).toContain("before");
+			expect(retOf(commented.data)).toContain("after");
+
+			// Statements on one line are a partial run too: the add before
+			// `:error` is applied, so the write's outcome is unknown.
+			const oneLine = await executeEnvelope({
+				...base,
+				command:
+					"/ip/firewall/address-list/add list=centrs-s6 address=192.0.2.67; :error boom",
+				yes: true,
+			});
+			expect(oneLine.ok).toBe(false);
+			if (oneLine.ok) return;
+			expect(oneLine.error.context).toMatchObject({
+				via: "ssh",
+				exitCode: 1,
+				partialRunPossible: true,
+			});
+			expect(oneLine.warnings.map((w) => w.code)).toContain(
+				"transport/write-outcome-unknown",
+			);
+			const s6List = asRecordArray(await chr.rest("/ip/firewall/address-list"));
+			expect(s6List.some((a) => a["address"] === "192.0.2.67")).toBe(true);
+
 			// S7 — the budget runs out mid-script: an execution timeout that names
 			// the budget and keeps the output printed before the cutoff (#592).
 			const cut = await executeEnvelope({

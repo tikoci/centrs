@@ -16,6 +16,11 @@
 
 import { mapRouterOsResultError } from "../core/routeros-errors.ts";
 import { CentrsError } from "../errors.ts";
+import {
+	countExecutableStatements,
+	maskComments,
+	scanQuotedString,
+} from "../explain/segment.ts";
 import { formatEndpoint } from "./endpoint.ts";
 
 export interface SshConnectionConfig {
@@ -217,11 +222,6 @@ export function mapSshConnectError(
 }
 
 /**
- * Normalize RouterOS console output captured over `ssh host "cmd"`: CRLF→LF, trim
- * each line's trailing column padding, and drop leading/trailing blank lines.
- * Leading indentation (RouterOS's `print` alignment) is preserved — it is content.
- */
-/**
  * Encode a script for one `ssh host "<command>"` exec. Over SSH exec, RouterOS
  * ends the prompt at every LF (and CRLF): each line runs on its own, so menu
  * context, `:local` values and `{ }` blocks do not carry across lines. A CR is
@@ -233,19 +233,21 @@ export function mapSshConnectError(
  *
  * A raw line break inside a quoted string cannot be sent faithfully (an LF
  * ends the prompt mid-string; a CR would change the string's bytes), so it is
- * refused before anything is sent. A `#` comment line is skipped by the quote
- * scan.
+ * refused before anything is sent. Comments and strings are found with the
+ * same scanners `explain` uses (`maskComments`, `scanQuotedString`), so a
+ * quote inside a comment, including one after `;` or `{`, opens no string.
  */
 export function encodeSshScript(command: string): string {
 	const trimmed = command.replace(/[\r\n]+$/, "");
+	// Comments are blanked at the same offsets, so their quotes are not scanned.
+	const masked = maskComments(trimmed);
 	let out = "";
-	let inString = false;
-	let inComment = false;
-	let atLineStart = true;
 	for (let i = 0; i < trimmed.length; i++) {
-		const ch = trimmed[i] as string;
-		if (ch === "\r" || ch === "\n") {
-			if (inString) {
+		const ch = masked[i];
+		if (ch === '"') {
+			const { end } = scanQuotedString(masked, i);
+			const literal = trimmed.slice(i, end);
+			if (/[\r\n]/.test(literal)) {
 				throw new CentrsError({
 					code: "transport/capability-unsupported",
 					summary:
@@ -255,37 +257,16 @@ export function encodeSshScript(command: string): string {
 					context: { via: "ssh", operation: "multi-line string" },
 				});
 			}
-			if (ch === "\r" && trimmed[i + 1] === "\n") i++;
+			out += literal;
+			i = end - 1;
+			continue;
+		}
+		if (ch === "\r" || ch === "\n") {
+			if (ch === "\r" && masked[i + 1] === "\n") i++;
 			out += "\r";
-			inComment = false;
-			atLineStart = true;
 			continue;
 		}
-		if (inComment) {
-			out += ch;
-			continue;
-		}
-		if (atLineStart && !inString && ch === "#") {
-			inComment = true;
-		} else if (inString && ch === "\\") {
-			out += ch;
-			i++;
-			if (i < trimmed.length) {
-				const next = trimmed[i] as string;
-				if (next === "\r" || next === "\n") {
-					// A backslash-newline inside a string is still a raw break.
-					i--;
-					continue;
-				}
-				out += next;
-			}
-			atLineStart = false;
-			continue;
-		} else if (ch === '"') {
-			inString = !inString;
-		}
-		if (atLineStart && ch !== " " && ch !== "\t") atLineStart = false;
-		out += ch;
+		out += trimmed[i];
 	}
 	return out;
 }
@@ -295,6 +276,11 @@ function formatBudget(timeoutMs: number): string {
 	return timeoutMs >= 1000 ? `${timeoutMs / 1000}s` : `${timeoutMs}ms`;
 }
 
+/**
+ * Normalize RouterOS console output captured over `ssh host "cmd"`: CRLF→LF, trim
+ * each line's trailing column padding, and drop leading/trailing blank lines.
+ * Leading indentation (RouterOS's `print` alignment) is preserved — it is content.
+ */
 export function cleanConsoleOutput(stdout: string): string {
 	const lines = stdout
 		.split(/\r\n|\r|\n/)
@@ -425,7 +411,12 @@ export class SshExecClient {
 		const { host, port } = this.config;
 		const output = cleanConsoleOutput(result.stdout);
 		const stderr = result.stderr.trim();
-		const multiline = /[\r\n]/.test(command.trim());
+		// Statements, not physical lines: `/file/add …; :error boom` on one line
+		// also leaves the first statement applied. The command arrives
+		// CR-encoded (`encodeSshScript`, no raw break left inside a string), so
+		// CR is a line break here.
+		const multiStatement =
+			countExecutableStatements(command.replace(/\r\n?/g, "\n")) > 1;
 		const context = {
 			via: "ssh",
 			host,
@@ -434,8 +425,8 @@ export class SshExecClient {
 			exitCode: result.exitCode,
 			...(output ? { output } : {}),
 			...(stderr ? { stderr } : {}),
-			// RouterOS stops at the failing line; the lines before it ran (#576).
-			...(multiline ? { partialRunPossible: true } : {}),
+			// RouterOS stops at the failing statement; the ones before it ran (#576).
+			...(multiStatement ? { partialRunPossible: true } : {}),
 		};
 		const recognized = output
 			? mapRouterOsResultError(output, { transport: "ssh", context })
@@ -443,8 +434,8 @@ export class SshExecClient {
 		if (recognized) {
 			return recognized;
 		}
-		const lineNote = multiline
-			? " RouterOS stops a multi-line script at the failing line, so the lines before it have already run; check their effect before running the script again."
+		const lineNote = multiStatement
+			? " RouterOS stops a script at the failing statement, so the statements before it have already run; check their effect before running the script again."
 			: "";
 		return new CentrsError({
 			code: "routeros/command-failed",

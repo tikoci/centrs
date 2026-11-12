@@ -223,8 +223,32 @@ describe("SshExecClient: remote exit status (#576)", () => {
 			.catch((e) => e)) as CentrsError;
 		expect(error.code).toBe("routeros/command-failed");
 		expect(error.summary).toContain("exit 1: something RouterOS said");
-		expect(error.remediation).toContain("the lines before it have already run");
+		expect(error.remediation).toContain(
+			"the statements before it have already run",
+		);
 		expect(error.context?.["stderr"]).toBe(KNOWN_HOSTS);
+	});
+
+	test("statements on one line are a partial run too, not only line breaks", async () => {
+		const error = (await client({
+			exitCode: 1,
+			stdout: "boom (:error; line 1)\r\n",
+			stderr: KNOWN_HOSTS,
+		})
+			.exec("/file/add name=review-single.txt type=file; :error boom")
+			.catch((e) => e)) as CentrsError;
+		expect(error.context?.["partialRunPossible"]).toBe(true);
+	});
+
+	test("a CR-encoded script (as the adapter sends it) counts its lines", async () => {
+		const error = (await client({
+			exitCode: 1,
+			stdout: "before\r\nboom (:error; line 2)\r\n",
+			stderr: KNOWN_HOSTS,
+		})
+			.exec(encodeSshScript(":put before\n:error boom\n:put after"))
+			.catch((e) => e)) as CentrsError;
+		expect(error.context?.["partialRunPossible"]).toBe(true);
 	});
 
 	test("a nonzero exit with no output says there was no diagnostic", async () => {
@@ -313,6 +337,19 @@ describe("encodeSshScript (#576)", () => {
 	test("a quote inside a # comment line does not open a string", () => {
 		expect(encodeSshScript("# it's \"odd\n:put 1")).toBe(
 			"# it's \"odd\r:put 1",
+		);
+	});
+
+	test("a quote inside an inline comment does not open a string", () => {
+		expect(
+			encodeSshScript(':put before; # a lone " in a comment\n:put after'),
+		).toBe(':put before; # a lone " in a comment\r:put after');
+		expect(encodeSshScript('{ # a lone " in a comment\n:put after\n}')).toBe(
+			'{ # a lone " in a comment\r:put after\r}',
+		);
+		// A `#` inside a string is not a comment.
+		expect(encodeSshScript(':put "a # b"\n:put c')).toBe(
+			':put "a # b"\r:put c',
 		);
 	});
 
