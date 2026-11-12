@@ -1912,7 +1912,7 @@ export async function addDevice(
 export interface SetDeviceArgs {
 	cdb: LoadedCdb;
 	target: string;
-	/** Disambiguator passed through to {@link requireSingleMatch}. */
+	/** Disambiguator passed through to `requireSingleMatch`. */
 	match?: string;
 	/** `k=v` comment positionals (overrides + identity/mac/ip lookups). */
 	updates?: readonly CommentKvUpdate[];
@@ -1932,7 +1932,7 @@ export interface SetDeviceArgs {
  * Modify an existing CDB record (the `set` verb). Symmetric with {@link addDevice}:
  * first-class fields change via flags, comment override/lookup keys via `k=v`
  * positionals. Resolves `<router>` (target or lookup key) to a single record via
- * {@link requireSingleMatch}; a missing target throws `cdb/not-found-target`.
+ * `requireSingleMatch`; a missing target throws `cdb/not-found-target`.
  * Unchanged fields and the comment's free-form prose are preserved verbatim.
  */
 export function setDevice(
@@ -2029,7 +2029,7 @@ export async function setDevice(
 export interface RemoveDeviceArgs {
 	cdb: LoadedCdb;
 	target: string;
-	/** Disambiguator passed through to {@link requireSingleMatch}. */
+	/** Disambiguator passed through to `requireSingleMatch`. */
 	match?: string;
 	writeOptions?: WriteWinBoxCdbOptions;
 }

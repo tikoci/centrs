@@ -25,7 +25,7 @@
  * module never reports success on its behalf. `verdict: "warn"` is an
  * ABSTENTION, not a rejection, and passes through for the same reason.
  *
- * **One warning is refused by code: {@link REFUSED_WARNING_CODES}.** It is not
+ * **One warning is refused by code: `REFUSED_WARNING_CODES`.** It is not
  * an abstention but a known device behaviour. A `}` or `]` that closes nothing
  * at the top level makes RouterOS accept the script and silently stop reading
  * there, so `/system identity set name=a}` sets `a` and `:put 1};:put 2` runs
@@ -80,7 +80,7 @@ export interface OfflineGateResult {
 	/**
 	 * `pass` — the analyzer read the whole input. `warn` — it ABSTAINED on part
 	 * of it (an unresolved menu, say). Both proceed to the device stage; a
-	 * `fail`, or a warning in {@link REFUSED_WARNING_CODES}, throws.
+	 * `fail`, or a warning in `REFUSED_WARNING_CODES`, throws.
 	 */
 	verdict: "pass" | "warn";
 	/** Warning-severity diagnostics, kept so a caller can surface the abstention. */

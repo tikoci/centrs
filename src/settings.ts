@@ -111,7 +111,7 @@ export function buildSettingsErrorEnvelope(
 /** A managed key's typed value, as reported by `get`/`print`. */
 export type SettingsValue = string | number | boolean;
 
-interface ParsedSetting {
+export interface ParsedSetting {
 	value: SettingsValue;
 	/** Canonical on-disk form. Differs from `value` only for booleans (1/0). */
 	write: string;
@@ -318,7 +318,7 @@ export const settingsManagedKeys: readonly SettingsKeyDef[] = [
 	},
 ];
 
-interface RefusedKeyDef {
+export interface RefusedKeyDef {
 	attr: string;
 	envKey: string;
 	/** Secret-shaped: always redacted on read, regardless of source. */

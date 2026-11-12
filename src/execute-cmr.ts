@@ -166,7 +166,7 @@ export interface CmrScriptCall {
 	numbers: string;
 	labels: string;
 	script: string;
-	/** CMR `timeout=` in ms; the local wait adds {@link CMR_CALL_GRACE_MS}. */
+	/** CMR `timeout=` in ms; the local wait adds `CMR_CALL_GRACE_MS`. */
 	timeoutMs: number;
 }
 

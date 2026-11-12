@@ -198,7 +198,7 @@ function warningFromDevices(warning: DevicesWarning): ResolverWarning {
  * Returns `undefined` when no CDB is in play (no explicit CDB inputs and the
  * default file is absent, or the default CDB has no matching record) — the
  * caller then treats `<router>` as a literal host. An address-shaped
- * `<router>` ({@link isLiteralHostTarget}) that misses an explicit CDB is also a
+ * `<router>` (`isLiteralHostTarget`) that misses an explicit CDB is also a
  * literal host. Otherwise, with an explicit CDB, a missing file/record surfaces
  * as the underlying CDB error so the "name not found without credentials"
  * contract stays intact upstream.

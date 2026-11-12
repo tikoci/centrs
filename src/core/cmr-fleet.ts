@@ -412,7 +412,7 @@ export function cmrFleetContext(scope: CmrFleetScope): Record<string, unknown> {
 	};
 }
 
-/** Result of {@link readCmrFleet}: the scope and the warnings it raises. */
+/** Result of `readCmrFleet`: the scope and the warnings it raises. */
 export interface CmrFleetRead {
 	scope: CmrFleetScope;
 	warnings: Warning[];

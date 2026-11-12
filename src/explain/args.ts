@@ -103,7 +103,7 @@ export type ArgumentKind = "attribute" | "positional" | "query";
  * The ordered list is the primary shape and the object view is derived from it
  * (the phase-0 normal form: "an ordered token/argument list with spans, never a
  * pre-reduced args object"). Order and multiplicity are observable here and are
- * flattened by {@link ArgumentReading.args}, so a consumer that needs to know a
+ * flattened by {@link ArgumentsRead.args}, so a consumer that needs to know a
  * name was given twice still can.
  */
 export interface Argument {
@@ -218,7 +218,7 @@ export interface ValueAnchor {
 	 * that does not bind a key (#258): with an empty right side the device drops
 	 * the sign and keeps the name as a `str`, and with a left side that is not a
 	 * name the sign COMPARES, which returns `bool` whatever the operands hold.
-	 * None of the three survives {@link valueShapeHints}, which reads a decoded
+	 * None of the three survives `valueShapeHints`, which reads a decoded
 	 * scalar and cannot see the sign.
 	 */
 	sourceShape?: "array" | "str" | "bool";
@@ -1251,7 +1251,7 @@ function parenMemberFault(
 		: null;
 }
 
-/** Characters that cannot OPEN an array member; see {@link pushArrayMembers}. */
+/** Characters that cannot OPEN an array member; see `pushArrayMembers`. */
 function leadsInvalidMember(c: string | undefined): boolean {
 	return c === "*" || c === "+";
 }
@@ -1650,7 +1650,7 @@ function pushArrayMembers(
  * still stop the scan. The strict REST reading remains unchanged.
  *
  * A located array is then DESCENDED into, so each member is anchored in its own
- * right ({@link pushArrayMembers}); a member that does not parse withdraws the
+ * right (`pushArrayMembers`); a member that does not parse withdraws the
  * whole literal, since the device rejects the statement in that case.
  */
 export function lexValueAnchors(

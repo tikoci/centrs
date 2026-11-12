@@ -124,7 +124,7 @@ export interface TerminalIo {
 	cleanup(): void;
 }
 
-interface ResolvedTerminal {
+export interface ResolvedTerminal {
 	via: string;
 	target: ResolvedTarget;
 	auth: ResolvedAuth;

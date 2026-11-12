@@ -376,7 +376,7 @@ export function haversineMeters(
 /**
  * Parse `--near <lat>,<lon>,<radius>` (lat-first — see module doc-comment).
  * Requires exactly three non-empty comma parts (`input/invalid-command` on wrong
- * arity); the radius is resolved to meters ({@link parseRadius}).
+ * arity); the radius is resolved to meters (`parseRadius`).
  */
 export function parseNear(value: string): NearPredicate {
 	const parts = value.split(",").map((part) => part.trim());
