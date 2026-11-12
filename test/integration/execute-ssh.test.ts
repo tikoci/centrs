@@ -219,6 +219,20 @@ describeFast("execute over ssh (per-command ssh host)", () => {
 			if (!local.ok) return;
 			expect(retOf(local.data)).toBe("17");
 
+			// CRLF input (a Windows-edited script) is sent the same way: raw
+			// CRLF ends the exec prompt like LF, so centrs sends CR.
+			const crlfLocal = await executeEnvelope({
+				...base,
+				command: ":local x 17\r\n:put $x\r\n",
+				yes: true,
+			});
+			expect(
+				crlfLocal.ok,
+				crlfLocal.ok ? "" : JSON.stringify(crlfLocal.error),
+			).toBe(true);
+			if (!crlfLocal.ok) return;
+			expect(retOf(crlfLocal.data)).toBe("17");
+
 			// `:error` passes `:parse` and fails at run time, on line 2.
 			const stopped = await executeEnvelope({
 				...base,
@@ -368,9 +382,13 @@ describeFast("execute over ssh (per-command ssh host)", () => {
 			const proxy = await startStallProxy(chr.sshPort);
 			try {
 				const viaProxy = { ...base, port: proxy.port };
+				// A write, so the stalled run would carry the unknown-outcome
+				// warning if it were counted as sent.
 				const control = await executeEnvelope({
 					...viaProxy,
-					command: ":put hello",
+					command:
+						"/ip/firewall/address-list/add list=centrs-stall address=192.0.2.201",
+					yes: true,
 				});
 				expect(
 					control.ok,
@@ -382,14 +400,26 @@ describeFast("execute over ssh (per-command ssh host)", () => {
 				proxy.state.forwardFirst = connections - 1;
 				const stalled = await executeEnvelope({
 					...viaProxy,
-					command: ":put hello",
+					command:
+						"/ip/firewall/address-list/add list=centrs-stall address=192.0.2.202",
 					timeout: "1500ms",
+					yes: true,
 				});
 				expect(stalled.ok).toBe(false);
 				if (stalled.ok) return;
 				expect(stalled.error.code).toBe("transport/timeout");
 				expect(stalled.error.summary).not.toContain("may still be running");
 				expect(stalled.error.context?.["sessionReached"]).not.toBe(true);
+				// The command never left, so it is not reported as a sent write.
+				expect(stalled.warnings.map((w) => w.code)).not.toContain(
+					"transport/write-outcome-unknown",
+				);
+				const stallList = asRecordArray(
+					await chr.rest("/ip/firewall/address-list"),
+				);
+				expect(stallList.some((a) => a["address"] === "192.0.2.202")).toBe(
+					false,
+				);
 			} finally {
 				proxy.close();
 			}

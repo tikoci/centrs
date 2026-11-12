@@ -1225,11 +1225,12 @@ class SshExecAdapter implements ProtocolAdapter {
 					"Report this bug; runCommand must pass the raw command as `script` for ssh.",
 			});
 		}
-		// Encode before marking the request sent: a script SSH cannot carry is
-		// refused without dispatching anything (#576).
+		// A script SSH cannot carry is refused before anything is sent (#576).
 		const wire = encodeSshScript(cli);
-		options?.onSent?.();
-		const output = await this.client.exec(wire);
+		// One `ssh` process spans connect, login and the command, so the client
+		// fires `onSent` from this invocation's evidence that it reached
+		// RouterOS, not before connecting. Without `onSent` this is a check.
+		const output = await this.client.exec(wire, options);
 		return { records: [], ret: output };
 	}
 

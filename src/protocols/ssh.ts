@@ -345,6 +345,17 @@ export type SshExecRunner = (
 	timeoutMs: number,
 ) => Promise<SshExecResult>;
 
+/** Options for one {@link SshExecClient.exec}. */
+export interface SshExecOptions {
+	/**
+	 * Passed only for the requested command, never for a check before it.
+	 * Fires once this invocation shows it reached RouterOS (a logged login,
+	 * output, or a remote exit status), and never for a connect or login
+	 * failure: the adapter's `ProtocolSendOptions.onSent` contract (#448).
+	 */
+	onSent?: () => void;
+}
+
 export interface SshExecClientConfig extends SshConnectionConfig {
 	/** Override the `ssh` binary path (tests). */
 	binary?: string;
@@ -386,10 +397,17 @@ export class SshExecClient {
 	 * on a timeout (keeping any output captured before it, #592), and when
 	 * RouterOS ends the command with a nonzero exit (#576).
 	 */
-	async exec(command: string): Promise<string> {
+	async exec(command: string, options: SshExecOptions = {}): Promise<string> {
 		const ran = await this.run(this.argv(command), this.config.timeoutMs);
 		const { authenticated, stderr } = readExecStderr(ran.stderr);
 		const result = { ...ran, stderr };
+		// Evidence from this invocation that it reached RouterOS: OpenSSH
+		// logged the login, RouterOS printed something, or it exited 0.
+		const reached =
+			authenticated ||
+			result.stdout.trim() !== "" ||
+			(!result.timedOut && result.exitCode === 0);
+		if (reached) options.onSent?.();
 		const connect = (): CentrsError =>
 			mapSshConnectError(result.stderr, result.exitCode, {
 				host: this.config.host,
@@ -398,9 +416,12 @@ export class SshExecClient {
 				sshKeySelected: Boolean(this.config.sshKey),
 			});
 		if (result.timedOut) {
-			// This invocation logged in, or RouterOS printed something in it.
-			if (authenticated || result.stdout.trim() !== "") {
-				throw this.timeoutError(result);
+			if (reached) {
+				// Only the requested command (the call that tracks dispatch) may
+				// still be running; a check before it was all that ran.
+				throw options.onSent
+					? this.timeoutError(result)
+					: this.checkTimeoutError(result);
 			}
 			// No sign the session reached RouterOS. OpenSSH's own connect
 			// failure, when it printed one first, names the cause.
@@ -419,14 +440,41 @@ export class SshExecClient {
 			) {
 				throw failure;
 			}
+			// A remote exit status is RouterOS's answer, so the command ran.
+			if (!reached) options.onSent?.();
 			throw this.remoteExitError(command, result);
 		}
 		return cleanConsoleOutput(result.stdout);
 	}
 
 	/**
-	 * The budget ran out while the command ran: this invocation logged in to
-	 * RouterOS, or printed output. So this is an execution
+	 * A check before the requested command (the `:parse` gate, a version
+	 * probe) logged in and then ran out of budget. Checks do not execute the
+	 * command, and the command is sent only after they answer, so it was not
+	 * sent.
+	 */
+	private checkTimeoutError(result: SshExecResult): CentrsError {
+		const { host, port, timeoutMs } = this.config;
+		return new CentrsError({
+			code: "transport/timeout",
+			summary: `SSH to ${formatEndpoint(host, port)} logged in, but the check before the command did not finish within ${formatBudget(timeoutMs)}; the command was not sent.`,
+			remediation: `Raise \`--timeout\` (or \`CENTRS_TIMEOUT\`, it was ${formatBudget(timeoutMs)}); a loaded router can answer slowly. The check only parses the command, so nothing on the router changed.`,
+			context: {
+				via: "ssh",
+				host,
+				port,
+				op: "execute",
+				timeoutMs,
+				sessionReached: true,
+				commandSent: false,
+			},
+			causeData: result.stderr.trim() || "timed out",
+		});
+	}
+
+	/**
+	 * The budget ran out while the requested command ran: this invocation
+	 * logged in to RouterOS, or printed output. So this is an execution
 	 * timeout, and the command may still be running: on CHR 7.25.1 and 7.24.6 a
 	 * script kept going after `ssh` was killed and finished its write about 10 s
 	 * later (#592).

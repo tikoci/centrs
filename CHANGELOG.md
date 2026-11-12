@@ -87,7 +87,8 @@ no section of its own.
   cutoff (`context.partialOutput`), says the command may still be running on
   the router, and points to `--timeout` and `CENTRS_TIMEOUT`. A timeout with
   no sign of the session, such as an unreachable host, says the connection or
-  login may not have completed instead (`context.sessionReached`) (#592).
+  login may not have completed instead (`context.sessionReached`), and a write
+  that never left gets no unknown-outcome warning (#592).
 
 ### Maintenance
 

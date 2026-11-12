@@ -396,7 +396,10 @@ interactive prompts on its terminal relay. Controls using `$KEY`, or omitting
 Over SSH exec, RouterOS ends the prompt at every LF (and CRLF): each line would
 run on its own, so menu context, `:local` values and `{ }` blocks would not
 carry across lines, and a later line could exit 0 after an earlier one failed.
-A CR is a line break inside the prompt, like Enter inside a console block. So
+CRLF is not a console line ending here: it behaves exactly like LF on every
+S6 script (a failing middle line still lets the next run, with exit 0), even
+though RouterOS's own output uses CRLF. A CR is a line break inside the prompt,
+like Enter inside a console block. So
 centrs sends a script's line breaks as CR, and it runs the way `:parse`
 validated it and the way REST and native-API `/execute` run it (CHR 7.25.1 and
 7.24.6, #576).
@@ -447,7 +450,9 @@ printed output. A silent `:delay 6s` cut at 3s is therefore still an execution
 timeout. A timeout with neither, such as an unreachable host or a handshake
 that stalls after the `:parse` check answered, does not claim the command is
 running: its summary says the connection or login may not have completed, and
-`sessionReached` is `false`.
+`sessionReached` is `false`. Such a command was never sent, so a write gets no
+`transport/write-outcome-unknown` warning. A `:parse` check that logged in and
+then ran out of budget says the command was not sent (`commandSent: false`).
 
 ## Offline gate (stage 1)
 

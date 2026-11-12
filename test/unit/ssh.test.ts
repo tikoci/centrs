@@ -342,9 +342,11 @@ describe("SshExecClient: timeout keeps what it saw (#592)", () => {
 				timedOut: true,
 			}),
 		});
+		let sent = 0;
 		const error = (await c
-			.exec(":put begin; :delay 15s; :put end")
+			.exec(":put begin; :delay 15s; :put end", { onSent: () => sent++ })
 			.catch((e) => e)) as CentrsError;
+		expect(sent).toBe(1);
 		expect(error.code).toBe("transport/timeout");
 		expect(error.summary).toBe(
 			"SSH execute on 127.0.0.1:9272 did not finish within 10s; the command may still be running on the router.",
@@ -386,7 +388,7 @@ describe("SshExecClient: timeout keeps what it saw (#592)", () => {
 			...silentTimeout,
 			stderr: `${KNOWN_HOSTS}\r\n${AUTHENTICATED}\r\nKilled by signal 15.\r\n`,
 		})
-			.exec(":delay 15s")
+			.exec(":delay 15s", { onSent: () => {} })
 			.catch((e) => e)) as CentrsError;
 		expect(error.code).toBe("transport/timeout");
 		expect(error.summary).toContain("may still be running on the router");
@@ -406,10 +408,69 @@ describe("SshExecClient: timeout keeps what it saw (#592)", () => {
 			silentTimeout,
 		);
 		await c.exec(':put [:parse ":put hello"]');
-		const error = (await c.exec(":put hello").catch((e) => e)) as CentrsError;
+		let sent = 0;
+		const error = (await c
+			.exec(":put hello", { onSent: () => sent++ })
+			.catch((e) => e)) as CentrsError;
 		expect(error.code).toBe("transport/timeout");
 		expect(error.summary).not.toContain("may still be running");
 		expect(error.context?.["sessionReached"]).toBe(false);
+		// The command never left: no dispatch, so no unknown-write warning.
+		expect(sent).toBe(0);
+	});
+
+	test("a check that logged in and timed out says the command was not sent", async () => {
+		// No `onSent`: this is the `:parse` gate, not the requested command.
+		const error = (await sequence({
+			...silentTimeout,
+			stderr: `${AUTHENTICATED}\r\n`,
+		})
+			.exec(':put [:parse ":delay 15s"]')
+			.catch((e) => e)) as CentrsError;
+		expect(error.code).toBe("transport/timeout");
+		expect(error.summary).toBe(
+			"SSH to 127.0.0.1:9272 logged in, but the check before the command did not finish within 10s; the command was not sent.",
+		);
+		expect(error.summary).not.toContain("may still be running");
+		expect(error.context).toMatchObject({
+			sessionReached: true,
+			commandSent: false,
+		});
+	});
+
+	test("onSent fires only on evidence this invocation reached RouterOS", async () => {
+		const cases: [SshExecResult, number][] = [
+			[{ exitCode: 0, stdout: "", stderr: "" }, 1],
+			[{ exitCode: 1, stdout: "boom (:error; line 1)\r\n", stderr: "" }, 1],
+			[{ exitCode: 1, stdout: "", stderr: "" }, 1],
+			[{ ...silentTimeout, stderr: `${AUTHENTICATED}\r\n` }, 1],
+			[{ ...silentTimeout, stdout: "begin\r\n" }, 1],
+			[silentTimeout, 0],
+			[
+				{
+					exitCode: 255,
+					stdout: "",
+					stderr:
+						"ssh: connect to host 127.0.0.1 port 9272: Connection refused",
+				},
+				0,
+			],
+			[
+				{
+					exitCode: 255,
+					stdout: "",
+					stderr: "admin@127.0.0.1: Permission denied (publickey).",
+				},
+				0,
+			],
+		];
+		for (const [result, expected] of cases) {
+			let sent = 0;
+			await sequence(result)
+				.exec("/x", { onSent: () => sent++ })
+				.catch(() => {});
+			expect(sent, JSON.stringify(result)).toBe(expected);
+		}
 	});
 
 	test("a silent timeout on the first exec does not claim the command is running", async () => {
