@@ -251,6 +251,33 @@ describe("SshExecClient: remote exit status (#576)", () => {
 		expect(error.context?.["partialRunPossible"]).toBe(true);
 	});
 
+	test("a diagnostic after earlier output keeps its code; the full output stays in context", async () => {
+		const error = (await client({
+			exitCode: 1,
+			stdout: "before\r\nbad command name no-such (line 2 column 1)\r\n",
+			stderr: KNOWN_HOSTS,
+		})
+			.exec(encodeSshScript(":put before\n/no-such"))
+			.catch((e) => e)) as CentrsError;
+		expect(error.code).toBe("routeros/unknown-path");
+		expect(error.position).toEqual({ line: 2, column: 1 });
+		expect(error.context).toMatchObject({
+			output: "before\nbad command name no-such (line 2 column 1)",
+			partialRunPossible: true,
+		});
+	});
+
+	test("ordinary output before an unrecognized last line is still routeros/command-failed", async () => {
+		const error = (await client({
+			exitCode: 1,
+			stdout: "bad command name x (line 1 column 1)\r\nsomething else\r\n",
+			stderr: "",
+		})
+			.exec(":put a\n:put b")
+			.catch((e) => e)) as CentrsError;
+		expect(error.code).toBe("routeros/command-failed");
+	});
+
 	test("a nonzero exit with no output says there was no diagnostic", async () => {
 		const error = (await client({ exitCode: 1, stdout: "", stderr: "" })
 			.exec("/x")
@@ -297,9 +324,69 @@ describe("SshExecClient: timeout keeps what it saw (#592)", () => {
 		expect(error.remediation).toContain("`--timeout`");
 		expect(error.context).toMatchObject({
 			timeoutMs: 10_000,
+			sessionReached: true,
 			partialOutput: "begin",
 			outputComplete: false,
 		});
+	});
+
+	/** A client whose runs answer in order; the last answer repeats. */
+	function sequence(...results: SshExecResult[]) {
+		let i = 0;
+		return new SshExecClient({
+			host: "127.0.0.1",
+			port: 9272,
+			username: "admin",
+			timeoutMs: 10_000,
+			runner: async () =>
+				results[Math.min(i++, results.length - 1)] as SshExecResult,
+		});
+	}
+	const silentTimeout: SshExecResult = {
+		exitCode: 143,
+		stdout: "",
+		stderr: "",
+		timedOut: true,
+	};
+
+	test("a silent timeout after an earlier exec answered is an execution timeout", async () => {
+		// The `:parse` check answered, then the command ran past the budget.
+		const c = sequence(
+			{ exitCode: 0, stdout: "(evl …)\r\n", stderr: "" },
+			silentTimeout,
+		);
+		await c.exec(':put [:parse ":delay 15s"]');
+		const error = (await c.exec(":delay 15s").catch((e) => e)) as CentrsError;
+		expect(error.code).toBe("transport/timeout");
+		expect(error.summary).toContain("may still be running on the router");
+		expect(error.context?.["sessionReached"]).toBe(true);
+	});
+
+	test("a silent timeout on the first exec does not claim the command is running", async () => {
+		// An unreachable host: ssh is killed in the connect phase, before
+		// RouterOS answers anything.
+		const error = (await sequence(silentTimeout)
+			.exec(':put [:parse "/ip/address/print"]')
+			.catch((e) => e)) as CentrsError;
+		expect(error.code).toBe("transport/timeout");
+		expect(error.summary).toBe(
+			"SSH to 127.0.0.1:9272 got no answer within 10s; the connection or login may not have completed.",
+		);
+		expect(error.summary).not.toContain("may still be running");
+		expect(error.remediation).toContain("`/ip service`");
+		expect(error.context).toMatchObject({ sessionReached: false });
+		expect(error.context?.["partialOutput"]).toBeUndefined();
+	});
+
+	test("OpenSSH's own connect failure wins over the budget kill", async () => {
+		const error = (await sequence({
+			...silentTimeout,
+			stderr: "ssh: connect to host 127.0.0.1 port 9272: Connection timed out",
+		})
+			.exec("/x")
+			.catch((e) => e)) as CentrsError;
+		expect(error.code).toBe("transport/timeout");
+		expect(error.summary).toBe("SSH connection to 127.0.0.1:9272 timed out.");
 	});
 });
 

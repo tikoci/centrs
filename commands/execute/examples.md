@@ -415,7 +415,10 @@ run time) and stops at its second line: `ok: false`,
 `after`) and `partialRunPossible: true`; a write that fails like this also gets
 `transport/write-outcome-unknown`. Over SSH, a RouterOS diagnostic the error
 table recognizes keeps its specific code instead (for example
-`bad command name …` is `routeros/unknown-path` with its position). A raw line
+`bad command name …` is `routeros/unknown-path` with its position), also when
+it follows earlier output: `:put before` then a duplicate
+`/ip/firewall/address-list/add` reads `failure: already have such entry` from
+the output's last line, and `context.output` keeps both lines. A raw line
 break inside a quoted string cannot be sent this way and is refused before
 anything is sent (`transport/capability-unsupported`); write it as `\n` inside
 the string.
@@ -428,11 +431,14 @@ centrs execute 127.0.0.1 ':put begin; :delay 6s; :put end' --via ssh --port $SSH
 
 Envelope: `ok: false`, `error.code=transport/timeout`, summary "did not finish
 within 3s; the command may still be running on the router", and
-`error.context` carries `timeoutMs: 3000`, `partialOutput: "begin"`,
-`outputComplete: false`. The remediation names `--timeout` and
+`error.context` carries `timeoutMs: 3000`, `sessionReached: true`,
+`partialOutput: "begin"`, `outputComplete: false`. The remediation names `--timeout` and
 `CENTRS_TIMEOUT`. Killing the local `ssh` does not stop the script on the
 router: on CHR 7.25.1 and 7.24.6 a script's write landed about 10 s after the
-cutoff (#592).
+cutoff (#592). The session counts as reached when the `:parse` check answered
+on it or the command printed output. A timeout with neither, such as an
+unreachable host, does not claim the command is running: its summary says the
+connection or login may not have completed, and `sessionReached` is `false`.
 
 ## Offline gate (stage 1)
 

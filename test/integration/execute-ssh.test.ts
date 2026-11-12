@@ -242,6 +242,26 @@ describeFast("execute over ssh (per-command ssh host)", () => {
 			const s6List = asRecordArray(await chr.rest("/ip/firewall/address-list"));
 			expect(s6List.some((a) => a["address"] === "192.0.2.67")).toBe(true);
 
+			// A diagnostic RouterOS prints after earlier output is still
+			// recognized: the duplicate add fails at run time, after `:put`.
+			const dup = await executeEnvelope({
+				...base,
+				command:
+					":put before\n/ip/firewall/address-list/add list=centrs-s6 address=192.0.2.67",
+				yes: true,
+			});
+			expect(dup.ok).toBe(false);
+			if (dup.ok) return;
+			const dupOutput = String(dup.error.context?.["output"]);
+			expect(dupOutput.startsWith("before\n")).toBe(true);
+			expect(dup.error.context?.["detail"]).toBe(
+				dupOutput.slice("before\n".length),
+			);
+			expect(dup.error.code).toBe("routeros/command-failed");
+			expect(String(dup.error.context?.["failure"])).toContain(
+				"already have such entry",
+			);
+
 			// S7 — the budget runs out mid-script: an execution timeout that names
 			// the budget and keeps the output printed before the cutoff (#592).
 			const cut = await executeEnvelope({
@@ -256,6 +276,7 @@ describeFast("execute over ssh (per-command ssh host)", () => {
 			expect(cut.error.summary).toContain("did not finish within 3s");
 			expect(cut.error.context).toMatchObject({
 				timeoutMs: 3000,
+				sessionReached: true,
 				partialOutput: "begin",
 				outputComplete: false,
 			});

@@ -329,6 +329,12 @@ export interface SshExecClientConfig extends SshConnectionConfig {
  */
 export class SshExecClient {
 	private readonly run: SshExecRunner;
+	/**
+	 * An earlier `exec` on this client reached RouterOS (it answered, or exited
+	 * with a remote status). execute's `:parse` check runs first on the same
+	 * client, so a later timeout is an execution timeout, not a connect stall.
+	 */
+	private reached = false;
 
 	constructor(private readonly config: SshExecClientConfig) {
 		this.run = config.runner ?? spawnSshExec;
@@ -354,34 +360,48 @@ export class SshExecClient {
 	 */
 	async exec(command: string): Promise<string> {
 		const result = await this.run(this.argv(command), this.config.timeoutMs);
-		if (result.timedOut) {
-			throw this.timeoutError(result);
-		}
-		if (result.exitCode !== 0) {
-			const connect = mapSshConnectError(result.stderr, result.exitCode, {
+		const connect = (): CentrsError =>
+			mapSshConnectError(result.stderr, result.exitCode, {
 				host: this.config.host,
 				port: this.config.port,
 				op: "execute",
 				sshKeySelected: Boolean(this.config.sshKey),
 			});
+		if (result.timedOut) {
+			// Output means RouterOS ran something in this session.
+			if (this.reached || result.stdout.trim() !== "") {
+				throw this.timeoutError(result);
+			}
+			// No sign the session reached RouterOS. OpenSSH's own connect
+			// failure, when it printed one first, names the cause.
+			const early = connect();
+			throw early.code === "transport/network"
+				? this.noAnswerTimeoutError(result)
+				: early;
+		}
+		if (result.exitCode !== 0) {
+			const failure = connect();
 			// stderr evidence of a connect/auth problem wins; otherwise a non-255
 			// exit is the remote command's own status.
 			if (
-				connect.code !== "transport/network" ||
+				failure.code !== "transport/network" ||
 				result.exitCode === SSH_CLIENT_ERROR_EXIT
 			) {
-				throw connect;
+				throw failure;
 			}
+			this.reached = true;
 			throw this.remoteExitError(command, result);
 		}
+		this.reached = true;
 		return cleanConsoleOutput(result.stdout);
 	}
 
 	/**
-	 * The budget ran out while the command ran. Validation had already reached
-	 * the router, so this is an execution timeout, and the command may still be
-	 * running: on CHR 7.25.1 and 7.24.6 a script kept going after `ssh` was
-	 * killed and finished its write about 10 s later (#592).
+	 * The budget ran out while the command ran: an earlier `exec` on this client
+	 * reached RouterOS, or this one printed output. So this is an execution
+	 * timeout, and the command may still be running: on CHR 7.25.1 and 7.24.6 a
+	 * script kept going after `ssh` was killed and finished its write about 10 s
+	 * later (#592).
 	 */
 	private timeoutError(result: SshExecResult): CentrsError {
 		const { host, port, timeoutMs } = this.config;
@@ -396,7 +416,33 @@ export class SshExecClient {
 				port,
 				op: "execute",
 				timeoutMs,
+				sessionReached: true,
 				...(partial ? { partialOutput: partial, outputComplete: false } : {}),
+			},
+			causeData: result.stderr.trim() || "timed out",
+		});
+	}
+
+	/**
+	 * The budget ran out with no sign that the session reached RouterOS: no
+	 * earlier `exec` on this client answered and this one printed nothing.
+	 * `ssh` spans connect, login and the command, so the stall may be in any of
+	 * them; an unreachable host is the common case. When this `exec` is the
+	 * `:parse` check, the command itself was not sent.
+	 */
+	private noAnswerTimeoutError(result: SshExecResult): CentrsError {
+		const { host, port, timeoutMs } = this.config;
+		return new CentrsError({
+			code: "transport/timeout",
+			summary: `SSH to ${formatEndpoint(host, port)} got no answer within ${formatBudget(timeoutMs)}; the connection or login may not have completed.`,
+			remediation: `Confirm the host and port are reachable and the RouterOS SSH service is enabled (\`/ip service\`); raise \`--timeout\` (or \`CENTRS_TIMEOUT\`, it was ${formatBudget(timeoutMs)}) for a slow link. centrs cannot tell whether the session reached RouterOS: with validation off, the command itself may have been sent, so check its effect before running it again.`,
+			context: {
+				via: "ssh",
+				host,
+				port,
+				op: "execute",
+				timeoutMs,
+				sessionReached: false,
 			},
 			causeData: result.stderr.trim() || "timed out",
 		});
@@ -428,9 +474,7 @@ export class SshExecClient {
 			// RouterOS stops at the failing statement; the ones before it ran (#576).
 			...(multiStatement ? { partialRunPossible: true } : {}),
 		};
-		const recognized = output
-			? mapRouterOsResultError(output, { transport: "ssh", context })
-			: undefined;
+		const recognized = output ? diagnosticError(output, context) : undefined;
 		if (recognized) {
 			return recognized;
 		}
@@ -447,6 +491,25 @@ export class SshExecClient {
 			causeData: output || stderr || `exit ${result.exitCode}`,
 		});
 	}
+}
+
+/**
+ * The RouterOS diagnostic in the output of a command that exited nonzero.
+ * RouterOS prints it last, after whatever the statements before the failure
+ * printed (`:put before` then `bad command name …`), so when the whole output
+ * is not a diagnostic, its last line is tried. The full output stays in
+ * `context.output`.
+ */
+function diagnosticError(
+	output: string,
+	context: Record<string, unknown>,
+): CentrsError | undefined {
+	const opts = { transport: "ssh" as const, context };
+	const whole = mapRouterOsResultError(output, opts);
+	if (whole) return whole;
+	const lines = output.split("\n");
+	if (lines.length < 2) return undefined;
+	return mapRouterOsResultError(lines[lines.length - 1] ?? "", opts);
 }
 
 function startSsh(argv: readonly string[]) {
@@ -488,7 +551,7 @@ async function spawnSshExec(
 		return {
 			exitCode,
 			stdout,
-			stderr: timedOut ? `${stderr}\nConnection timed out`.trim() : stderr,
+			stderr,
 			timedOut,
 		};
 	} finally {
