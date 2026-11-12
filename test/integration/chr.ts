@@ -275,8 +275,10 @@ export const CMR_CLIENT_LOCAL_ID_UNMASKED_SINCE = "7.26beta4";
  *   - new: it runs and the user is created
  *
  * Measured: old on 7.26beta1 and 7.26beta3; new on 7.26beta4 and 7.26beta5
- * (adjacent builds, so exact). Which policies CMR scripts still lack on the
- * new side was not measured.
+ * (adjacent builds, so exact). This suite does not measure the other policies.
+ * quickchr's CMR policy study did on 7.26beta5 (examples/cmr/FINDINGS.md):
+ * user/group add, plaintext secrets, backup and sniffer all ran, from a
+ * controller login without `policy` or `sensitive`.
  */
 export const CMR_SCRIPT_USER_ADD_ALLOWED_SINCE = "7.26beta4";
 

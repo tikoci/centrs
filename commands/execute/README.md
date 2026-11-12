@@ -413,13 +413,18 @@ when the target is itself a CMR client.
   another policy (`/user add`, `/tool sniffer`) passes `:parse` on the client
   and is refused when it runs: `cmr/policy-denied`. The script stops at that
   statement, but statements before it already ran and are not rolled back;
-  their output is in `context.output`. Sensitive
+  their output is in `context.output`. On 7.26beta1 sensitive
   values read back as `*` or empty. Multi-line commands run every line (the
   manual says single-line; 7.26beta1 ran both LF and CRLF scripts in full), and
   `/export` works. From beta4, `/user/add` succeeds and `local-id` is
-  visible inside the script (CMR11, CMR11b, CMR-D7). The remaining policy
-  limits have not been measured; `cmr/policy-denied` still describes an
-  actual runtime permission refusal, not a promise that user creation fails.
+  visible inside the script (CMR11, CMR11b, CMR-D7). On 7.26beta5, quickchr's
+  policy study measured more: from a controller login with only
+  `read,write,reboot,test,api,rest-api`, a script added a `group=full` user and
+  a user group, printed a PPP secret in plaintext, saved a backup and started
+  the sniffer; only `/export file=` was refused
+  ([FINDINGS.md → run-script and policy](https://github.com/tikoci/quickchr/blob/feat/cmr-grounding-lab/examples/cmr/FINDINGS.md#run-script-and-policy)).
+  `cmr/policy-denied` still describes an actual runtime permission refusal,
+  not a promise that any of these fail.
 - **Unknown outcomes:** a CMR timeout (`timed out (6)`, `std failure: timeout
   (13)`), a local deadline, a cancellation, or a lost call after sending all
   give `cmr/outcome-unknown`. A cancellation before anything is sent, including
