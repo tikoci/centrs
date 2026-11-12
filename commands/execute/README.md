@@ -238,9 +238,14 @@ The change between 7.24.6 and 7.25 is bracketed, not pinned
 script that runs past about 60 s fails (on 7.25 and later, when it ends) as
 `routeros/action-timed-out` (RouterOS's `action timed out (13)`). Over REST
 the same script hits the 60-second session cap first. `--timeout` extends
-neither, and no transport avoids them. A write that ends this way, or with
+neither. Over SSH, `execute` runs the script at the console rather than
+through `/execute as-string`, so neither limit applies; only centrs
+`--timeout` bounds it (`transport/timeout`, #592). No SSH reply limit has
+been measured. A write that ends this way, or with
 `routeros/session-closed` after it was sent, carries
-`transport/write-outcome-unknown`.
+`transport/write-outcome-unknown`. When either code comes from the `:parse`
+check instead, nothing was sent: the error says so (`context.commandSent:
+false`) and the device stage reads `not reached`.
 
 For long work, start it in the background and poll: `:execute {…}` without
 `as-string` runs the script as a `/system/script/job` and returns at once,

@@ -156,6 +156,23 @@ describe("execute preflight keeps a device non-answer's own code (#638)", () => 
 		).rejects.toMatchObject({ code: "routeros/action-timed-out" });
 	});
 
+	test("the preflight text says the command was not sent, not that it may still run", async () => {
+		for (const [raw, transport] of [
+			["Session closed", "rest-api"],
+			["action timed out (13)", "native-api"],
+		] as const) {
+			const error = (await validateRouterOsScript(
+				"/ip/address/print",
+				parseThrowing(raw, transport),
+				transport,
+			).catch((e) => e)) as CentrsError;
+			expect(error.summary, raw).toContain("the command was not sent");
+			expect(error.remediation, raw).toContain("Nothing ran");
+			expect(error.remediation, raw).not.toContain("may still be running");
+			expect(error.context, raw).toMatchObject({ commandSent: false });
+		}
+	});
+
 	test("a RouterOS rejection that is a parse answer is still validation/syntax", async () => {
 		await expect(
 			validateRouterOsScript(

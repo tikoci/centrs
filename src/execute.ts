@@ -1010,6 +1010,12 @@ export async function validateRouterOsScript(
 		// sees the real `transport/*` cause instead of a misleading
 		// `validation/syntax`. Only genuine RouterOS parse rejections (mapped to
 		// `routeros/*`) are relabeled as a syntax failure below.
+		if (
+			error instanceof CentrsError &&
+			PREFLIGHT_NO_ANSWER_CODES.has(error.code)
+		) {
+			throw preflightNoAnswerError(error, via);
+		}
 		if (error instanceof CentrsError && isPreflightTransportError(error)) {
 			throw error;
 		}
@@ -1066,6 +1072,36 @@ const PREFLIGHT_NO_ANSWER_CODES: ReadonlySet<string> = new Set([
 	"routeros/action-timed-out",
 	"routeros/session-closed",
 ]);
+
+/**
+ * The same code, with text for the preflight: the generic text for these codes
+ * is about a dispatched command whose reply was lost ("may still be running"),
+ * but here only the `:parse` check was sent, so nothing ran.
+ */
+function preflightNoAnswerError(
+	error: CentrsError,
+	via: RouterOsProtocol,
+): CentrsError {
+	const what =
+		error.code === "routeros/session-closed"
+			? "closed the session"
+			: "dropped the reply (action timed out)";
+	return new CentrsError({
+		code: error.code,
+		summary: `RouterOS ${what} during the \`:parse\` check, so the command was not sent.`,
+		remediation:
+			"Nothing ran: centrs sends the command only after its `:parse` check is answered. The router was busy or slow to answer. Run the command again once it answers; `centrs retrieve <target> /system/resource` shows its load.",
+		context: {
+			...error.context,
+			via,
+			validationSource: ":put [:parse ...]",
+			commandSent: false,
+		},
+		...(error.position ? { position: error.position } : {}),
+		cause: error,
+		causeData: error.causeData,
+	});
+}
 
 /**
  * True when a `:parse` preflight error is not a parse answer: a transport,

@@ -1,8 +1,14 @@
 # `routeros/action-timed-out`
 
 RouterOS stopped waiting for a command's reply at that command's own limit
-and dropped it. The command was sent and started, so it may still be running,
-or it may have finished: centrs cannot tell which.
+and dropped it. After the command was sent, it may still be running, or it
+may have finished: centrs cannot tell which.
+
+During `execute`'s `:parse` check, before the command is sent, the same trap
+means the router did not answer the check. Nothing ran: the summary says the
+command was not sent, `context.commandSent` is `false`, and the device
+validation stage reads `not reached`. Run the command again once the router
+answers.
 
 ## Typical RouterOS strings
 
@@ -22,11 +28,13 @@ REST has its own, separate 60-second cap on every request:
 
 ## Fix
 
-- Check the router's state before running the command again. A write that
-  hits this also carries the `transport/write-outcome-unknown` warning.
+- After the command was sent: check the router's state before running it
+  again. A write that hits this also carries the
+  `transport/write-outcome-unknown` warning.
 - centrs `--timeout` does not extend the limit; it belongs to the RouterOS
-  command. Neither does switching transport for `execute`: REST caps every
-  request at 60 seconds.
+  command. Switching `execute` to REST does not help either: REST caps every
+  request at 60 seconds. `execute --via ssh` runs the script at the console,
+  not through `/execute as-string`, so this limit does not apply there.
 - For long work, start it in the background and poll for its result:
   `:execute {…}` without `as-string` runs the script as a
   `/system/script/job` and returns at once; then wait on what it changes with
