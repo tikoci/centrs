@@ -337,6 +337,11 @@ that keeps growing is being used as an issue.
   docs. MCP Apps (an interactive tool result rendered in the chat, a generic
   MCP extension) is a candidate rendering for tables and topology; T3 Code
   shows them for Codex only (tikoci/app-t3code#29).
+  A shareable bug report is not built: an inline `--bug-report` that
+  re-renders the envelope with credential fields stripped and `details_url`
+  kept was written into the constitution as if it existed, and moved here
+  (#659). Until it exists, error pages ask for the command, the `--json`
+  envelope and `centrs --version`.
 - **Ready when:** now. #605's `isError` fix landed; its `structuredContent`,
   `outputSchema` and result-size budget are the next MCP slice.
 - **Absorbed:** #95, #129, #148, #360, #528, #593, #606.
@@ -374,7 +379,8 @@ that keeps growing is being used as an issue.
   are safe to allowlist. Pages publishes `llms.txt` and the generated CLI
   reference, the README shows real envelopes, and one worked example spans
   retrieve → export → transfer → `api --stream`. Many error pages are still
-  scaffold stubs, and tip `detailsUrl`s have no pages behind them yet (#659).
+  scaffold stubs, tracked by a shrinking list in `error-pages.test.ts`; a tip
+  carries a `detailsUrl` only when it has a page (#659).
   TIKOCI-wide instruction files are collected in `tikoci.github.io` and
   vendored here, each recording its source and revision.
 - **Ready when:** now.

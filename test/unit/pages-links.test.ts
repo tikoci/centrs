@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	brokenLinks,
+	brokenSourceLinks,
 	REPO_BLOB_BASE,
 	rewriteHref,
 	rewriteHtmlLinks,
@@ -84,6 +85,34 @@ describe("Pages link rewriting (#464)", () => {
 		);
 		expect(brokenLinks(html, "errors/transport/network/", repo, repo)).toEqual([
 			`${REPO_BLOB_BASE}docs/NO-SUCH-FILE.md`,
+		]);
+	});
+
+	test("brokenSourceLinks sees the navigation links the Pages build sees, and no code (#659)", () => {
+		const root = mkdtempSync(join(tmpdir(), "centrs-pages-src-"));
+		mkdirSync(join(root, "docs", "errors", "transport"), { recursive: true });
+		writeFileSync(join(root, "docs", "errors", "transport", "ok.md"), "");
+		const markdown = [
+			"[fine](ok.md) [fine-anchor](ok.md#x) [abs](https://x.test/)",
+			"[single](gone-single.md 'title') [angle](<gone-angle.md>)",
+			"[ref][r]",
+			"",
+			'[r]: gone-ref.md "title"',
+			"",
+			"<a href=\"gone-html.md\">html</a> <a href='gone-html-single.md'>html</a>",
+			"",
+			"`[span](gone-span.md)`",
+			"",
+			"```",
+			"[fence](gone-fence.md)",
+			"```",
+		].join("\n");
+		expect(brokenSourceLinks(markdown, "transport/page.md", root)).toEqual([
+			"gone-single.md",
+			"gone-angle.md",
+			"gone-ref.md",
+			"gone-html.md",
+			"gone-html-single.md",
 		]);
 	});
 });

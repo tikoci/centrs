@@ -280,12 +280,10 @@ path-POST reads and `/console/inspect` are `rest-api`/`native-api`-only. Green v
 no-PTY/clean-output grounding.
 
 `ssh-key` stores a private key **path**, never private key material. The resolved
-path may appear in `meta.settings.sshKey` with its source so bug reports can
-explain why a key was selected. Private key contents, passphrases, agent socket
-contents, and any inline key material are always sensitive and must be listed in
-`error.redactable_fields` if they appear in structured error data; key paths are
-redacted only if the caller marks them sensitive or the error couples them with
-key material.
+path may appear in `meta.settings.sshKey` with its source, so an issue report
+can explain why a key was selected. Private key contents, passphrases, agent
+socket contents, and any inline key material are secrets under
+[`SECURITY.md`](../../SECURITY.md) and must stay out of structured error data.
 
 ## Target selection
 

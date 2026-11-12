@@ -36,7 +36,8 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	// auth/*
 	{
 		code: "auth/failed",
-		summary: "RouterOS rejected the stored credentials for the device.",
+		summary:
+			"Batch SSH authentication failed (execute --via ssh, sftp transfer).",
 	},
 
 	// cdb/*
@@ -458,10 +459,6 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary: "An EC-SRP5 authentication message or key could not be processed.",
 	},
 	{
-		code: "routeros/error",
-		summary: "RouterOS returned an error executing the command.",
-	},
-	{
 		code: "routeros/invalid-value",
 		summary: "RouterOS rejected the value supplied for an argument.",
 	},
@@ -665,10 +662,6 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary: "TLS certificate validation failed for the device.",
 	},
 	{
-		code: "transport/unreachable",
-		summary: "The device could not be reached over the chosen transport.",
-	},
-	{
 		code: "transport/unsupported-operation",
 		summary: "The chosen transport does not support this operation.",
 	},
@@ -762,7 +755,8 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "validation/not-implemented",
-		summary: "The requested validation feature is not implemented yet.",
+		summary:
+			"Retired: emitted by 0.1.0–0.1.7 for a validation feature that was not built yet.",
 	},
 	{
 		code: "validation/menu-unavailable",

@@ -93,3 +93,39 @@ export function brokenLinks(
 	}
 	return broken;
 }
+
+/**
+ * Raw HTML passes through `Bun.markdown` as written, so a source page can hold
+ * `<a href='…'>`; pandoc output (the {@link HREF} consumers) is always `"…"`.
+ */
+const SOURCE_HREF = /href=(?:"([^"]*)"|'([^']*)')/g;
+
+/**
+ * Relative links in the markdown of `docs/errors/<errorsRelPath>` that name no
+ * file in the repo. This is the source-side twin of {@link brokenLinks}: it
+ * renders with `Bun.markdown` instead of pandoc, so a unit test can run it on
+ * every PR (#659). Rendering first means it sees exactly the navigation links
+ * HTML gets — inline and reference links with any title form, and raw
+ * `<a href>` — and never a link-shaped string inside code. Fragments are not
+ * checked.
+ */
+export function brokenSourceLinks(
+	markdown: string,
+	errorsRelPath: string,
+	repoRoot: string,
+): string[] {
+	const broken: string[] = [];
+	const sourceDir = posix.dirname(posix.join("docs/errors", errorsRelPath));
+	for (const [, double, single] of Bun.markdown
+		.html(markdown)
+		.matchAll(SOURCE_HREF)) {
+		const href = (double ?? single ?? "").replaceAll("&amp;", "&");
+		if (SCHEME.test(href) || href.startsWith("#") || href.startsWith("/"))
+			continue;
+		const path = decodeURI(href.split("#")[0] ?? "");
+		if (path === "") continue;
+		if (!existsSync(join(repoRoot, posix.join(sourceDir, path))))
+			broken.push(href);
+	}
+	return broken;
+}

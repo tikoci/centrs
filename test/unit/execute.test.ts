@@ -444,7 +444,8 @@ describe("resolvedExecuteTips — mac-telnet no-credentials tip (JG-24)", () => 
 		// Select by code, not index, so the assertion survives added/reordered tips.
 		const tip = tips.find((t) => t.code === "tip/mac-telnet-no-credentials");
 		expect(tip).toBeDefined();
-		expect(tip?.detailsUrl).toContain("/tips/tip/mac-telnet-no-credentials");
+		// No tip page yet, so no URL (#659): a tip links only to a page that exists.
+		expect(tip?.detailsUrl).toBeUndefined();
 		expect(tip?.fix).toContain("MTWEI");
 	});
 
@@ -488,7 +489,7 @@ describe("resolvedExecuteTips — bare menu path steering tip", () => {
 		expect(tip?.message).toContain("/system/identity");
 		expect(tip?.fix).toContain("/system/identity/print");
 		expect(tip?.fix).toContain("centrs retrieve <router> /system/identity");
-		expect(tip?.detailsUrl).toContain("/tips/tip/execute-bare-menu-path");
+		expect(tip?.detailsUrl).toBeUndefined();
 	});
 
 	test("does not fire for a real command or a gated write", () => {
@@ -631,7 +632,10 @@ describe("validation metadata survives the error boundary (#354, PR #356 review)
 		const resolved = await resolveFor("/ip/address/print", { validate: false });
 		const envelope = buildExecuteErrorEnvelopeFromResolved(
 			resolved,
-			new CentrsError({ code: "transport/unreachable", summary: "nope" }),
+			new CentrsError({
+				code: "transport/connection-refused",
+				summary: "nope",
+			}),
 			undefined,
 			{},
 		);
@@ -648,10 +652,10 @@ describe("validation metadata survives the error boundary (#354, PR #356 review)
 	test("a gate interrupted by a transport error reports not reached, never a verdict (GH#435)", async () => {
 		const resolved = await resolveFor("/ip/address/print");
 		const refused = new CentrsError({
-			code: "transport/unreachable",
+			code: "transport/connection-refused",
 			summary: "nope",
 		});
-		const reason = notReachedReason("transport/unreachable");
+		const reason = notReachedReason("transport/connection-refused");
 		const device: EnvelopeValidationStage = {
 			stage: "device",
 			source: ":put [:parse] + /console/inspect",

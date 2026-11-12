@@ -27,6 +27,7 @@
 
 import type { SerializedCentrsError } from "../errors.ts";
 import type { RouterOsProtocol } from "../protocols/index.ts";
+import { type TipCode, tipDetailsUrl } from "./tip-catalog.ts";
 
 /**
  * Where a resolved setting/identity field came from. Precedence (low → high)
@@ -63,7 +64,8 @@ export interface Warning {
  * act on (no username set, no CDB found, consider a `__default__` record). Tips
  * ride their own envelope channel so "this is not a problem, just a suggestion"
  * never has to masquerade as a warning. See `docs/CONSTITUTION.md` (Result
- * envelope). Same shape as {@link Warning} plus an optional `fix`/`detailsUrl`.
+ * envelope). Same shape as {@link Warning} plus an optional `fix`/`detailsUrl`;
+ * `detailsUrl` is present only for a tip that has a page.
  */
 export interface Tip {
 	/** Slash-namespaced `tip/*` code. Example: `tip/credentials-missing`. */
@@ -75,14 +77,14 @@ export interface Tip {
 }
 
 /**
- * Base URL for the human-readable tip pages (mirrors the error catalog scheme,
- * on the same canonical host). The tip pages are not published yet (#464).
+ * Build a {@link Tip}. It carries a `detailsUrl` only when the tip catalog
+ * says a page exists (`src/core/tip-catalog.ts`, #659).
  */
-export const TIPS_BASE_URL = "https://tikoci.dev/centrs/tips/";
-
-/** Build a {@link Tip} with a `tip/*` code and its generated `detailsUrl`. */
-export function buildTip(code: string, message: string, fix: string): Tip {
-	return { code, message, fix, detailsUrl: `${TIPS_BASE_URL}${code}/` };
+export function buildTip(code: TipCode, message: string, fix: string): Tip {
+	const detailsUrl = tipDetailsUrl(code);
+	return detailsUrl
+		? { code, message, fix, detailsUrl }
+		: { code, message, fix };
 }
 
 /** Resolved target identity plus per-field provenance. */

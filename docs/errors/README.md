@@ -67,14 +67,64 @@ Codes are slash-namespaced `family/slug`. The families and where they originate:
 - `validation/*` — the canonicalize → validate gate (`:parse` + `/console/inspect`).
 - `wait/*` — readiness/condition deadlines and cancellation (`retrieveWait`).
 
-The hand-enriched pages (richer trigger strings and remediation) currently are
-the `routeros/*` set produced by `src/core/routeros-errors.ts`, the
-`target/*` MAC-resolution pages, the `wait/*` deadline/cancellation pages, and
-the common connection faults (`transport/connection-refused`, `network`,
-`timeout`, `dns`, `tls-certificate`, `host-key-mismatch`, `connection-closed`,
-`incomplete-transfer`, and `auth/failed`); the rest are generated stubs to be
-enriched as each code is grounded (#659). The Pages build lists every code on the
-catalog index and rewrites these pages' relative links for the site.
+The Pages build lists every code on the catalog index and rewrites the pages'
+relative links for the site. `test/unit/error-pages.test.ts` checks those links
+on every PR, and holds a shrinking list of pages that are still scaffold stubs
+(#659): a new scaffold fails until it is written, and a written page leaves
+the list.
+
+## Page contract
+
+The envelope already carries the code, a one-line `summary` and a one-line
+`remediation`. A page is for what does not fit on that line: fixes that depend
+on the transport, version or platform, causes that interact, and the cases
+with no fix. Keep pages short. This shape is a baseline for authors and
+reviewers, not a form to fill; leave a section out when it has nothing to say,
+and depart from it when a code needs to.
+
+1. **H1** — `` # `<code>` ``, exactly (the test checks it).
+2. **Lead** (one or two sentences, required) — what failed, and whether
+   anything ran or changed on the device. It must agree with the catalog
+   summary, which MCP resources serve on its own.
+3. **Emitted by** (required when more than one command or transport raises
+   it) — which commands and `--via` transports. This tells a reader whether
+   switching transport can help.
+4. **Context** — what each `context.*` key means.
+5. **Typical triggers** — each one says where it comes from: *(code)* read from
+   the emission site, *(CHR 7.x)* reproduced on a device, *(field)* seen in a
+   real session, or *(unverified)*. An unverified trigger is allowed and is
+   better than silence; it is never written as fact.
+6. **Fix** — ordered, concrete `centrs` and RouterOS commands.
+7. **Limits** — RouterOS versions, platforms or transports where no fix exists.
+8. **If this looks wrong** — the centrs bug it most likely is (a missing
+   mapping, a wrong suggestion, a stale install) and what to put in an issue:
+   the command, the `--json` envelope, `centrs --version`. There is no
+   `--bug-report` flag.
+9. **Related** — sibling codes, as relative `.md` links.
+
+RouterOS-side claims follow
+[`routeros-grounding.instructions.md`](../../.github/instructions/routeros-grounding.instructions.md).
+A page for a code that only rides as a warning (warnings carry no
+`details_url`) is reached from this index alone, so it can be a lead and a fix.
+`internal/*` pages say that the code is a centrs bug and what to report.
+
+A code that is no longer emitted keeps its page, marked **Retired** in the
+lead, when it shipped in a release (the URL is stable). A code that never
+shipped is removed with its page.
+
+### Tips
+
+Tips follow the same contract with one difference: most tips need no page. A
+tip is advice whose `message` and `fix` already say everything; it gets a page
+only when its advice does not fit in one sentence of about 40 words, or when
+it depends on the version, platform or transport. A tip with a page is flagged
+`page: true` in [`src/core/tip-catalog.ts`](../../src/core/tip-catalog.ts), its
+page is `docs/tips/<slug>.md`, and only then does it carry a `detailsUrl`
+(`https://tikoci.dev/centrs/tips/<slug>/`, without the `tip/` segment).
+`test/unit/tip-catalog.test.ts` keeps the flag and the file in step. The
+Pages build does not publish `docs/tips/` yet: the change that sets the first
+`page: true` also teaches `scripts/build-pages-site.ts` to build
+`tips/<slug>/` with the same link rewriting and checks, or the URL 404s.
 
 ## RouterOS-fault mapping (`routeros/*`)
 

@@ -96,8 +96,13 @@ publish `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
   `https://tikoci.dev/centrs/errors/<code>/`. The old
   `https://tikoci.github.io/centrs/errors/<code>` links redirected through
   plain HTTP, which some agent fetch tools refuse to follow; they still
-  redirect. Tip URLs move to the same host; tip pages are not published yet
-  (#464).
+  redirect.
+- A tip carries a `detailsUrl` only when it has a page; no tip has one yet, so
+  tips no longer link to URLs that 404. Earlier builds emitted
+  `…/centrs/tips/tip/<slug>/` for every tip (#659).
+- Error codes `routeros/error` and `transport/unreachable` are removed; no
+  release ever emitted them. `validation/not-implemented` (0.1.0–0.1.7) keeps a
+  page marked retired (#659).
 - The published error pages: the catalog index lists every code with its
   summary, and links between pages (and to repo docs) no longer 404 on the
   site. The Pages build now fails on a broken relative link. The common
@@ -140,8 +145,8 @@ regression from 0.1.10.
 - [#657](https://github.com/tikoci/centrs/issues/657): `execute --cmr` drops a
   connected client that RouterOS will not select (half-paired or pending) as
   if no label matched.
-- [#659](https://github.com/tikoci/centrs/issues/659): tip `detailsUrl`s
-  point at pages that do not exist yet, and some error pages are still stubs.
+- [#659](https://github.com/tikoci/centrs/issues/659): some error pages are
+  still stubs.
 
 ## 0.1.10 — 2026-11-05
 

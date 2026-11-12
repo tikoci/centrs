@@ -187,7 +187,7 @@ foreground, user-invoked** command, **not** a daemon and **not** the proxy. It
 **binds `127.0.0.1` by default** (pass `--bind 0.0.0.0` to expose on the LAN) and
 **requires auth by default** (`authenticate=true`, mirroring RouterOS). The
 accepted credential (`--user`/`--password`/`CENTRS_*`) and any client credentials
-are redactable in bug-report output.
+are secrets under [`SECURITY.md`](../../SECURITY.md).
 
 ## Errors
 

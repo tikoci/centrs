@@ -145,8 +145,8 @@ swapped). The no-pseudo-tty console reader is likewise resolved — a CHR spike
 proved `ssh user@host` opens a clean console with no screen emulation.
 
 The setting stores a key path only. Private key material, passphrases, and agent
-contents are always sensitive and belong in `error.redactable_fields` if an
-error carries them; the selected key path may appear in `meta.settings.sshKey`
+contents are always secrets under [`SECURITY.md`](../../SECURITY.md) and must
+stay out of errors; the selected key path may appear in `meta.settings.sshKey`
 with its source unless the caller marks paths sensitive.
 
 ## RouterOS SSH surface (device-side option alignment)
