@@ -780,6 +780,15 @@ import { centrsVersion } from "./core/version.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 
 export const plannedSurfaces = ["api", "cli", "tui", "mcp", "proxy"] as const;
+/**
+ * The surfaces a caller can use today. `tui` and `proxy` are stubs, so help
+ * does not advertise them.
+ */
+export const implementedSurfaces: readonly CentrsSurface[] = [
+	"api",
+	"cli",
+	"mcp",
+];
 export const plannedDeviceSources = [
 	"explicit-input",
 	"environment",

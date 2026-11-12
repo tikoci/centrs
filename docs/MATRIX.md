@@ -423,7 +423,6 @@ done or declined. A nit that needs more explanation is an issue.
   pass an unknown property (`/container/print proplist=status` then fails as
   `routeros/invalid-value`, tikoci/app-t3code#29). A
   `/console/inspect request=completion` check of the names would catch it.
-- `centrs --help` lists the `tui` and `proxy` surfaces, which are stubs.
 - `btest` UDP: RouterOS's `tx-size` includes the 28-byte IP+UDP header (a
   1000 sends a 972-byte payload), while centrs sends the full size as payload;
   RouterOS's UDP client also fans out over 20 source ports
