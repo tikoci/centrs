@@ -240,8 +240,18 @@ export function decodePoint(key: Uint8Array): Point {
 			remediation: "The peer sent a malformed key; confirm the device.",
 		});
 	}
+	// The parity byte is the LSB of Weierstrass Y: 0 or 1, as encodePoint
+	// writes it. Refuse anything else rather than masking it with `& 1` (#584).
+	const parity = key[32] as number;
+	if (parity !== 0 && parity !== 1) {
+		throw new CentrsError({
+			code: "routeros/ec-srp5-protocol",
+			summary: `EC-SRP5 public key parity byte must be 0 or 1 (got ${parity}).`,
+			remediation: "The peer sent a malformed key; confirm the device.",
+		});
+	}
 	const xWeier = mod(bytesToBigIntBE(key.subarray(0, 32)) + M2W, P);
-	const point = liftX(xWeier, key[32] as number);
+	const point = liftX(xWeier, parity);
 	if (point === null) {
 		throw new CentrsError({
 			code: "routeros/ec-srp5-protocol",

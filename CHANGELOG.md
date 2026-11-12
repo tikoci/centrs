@@ -33,6 +33,19 @@ no section of its own.
   relabeled `validation/syntax`, telling the caller to fix a command that was
   fine (#638).
 
+### Fixed
+
+- MAC-Telnet: when a device using RADIUS logins (`/user aaa use-radius=yes`)
+  answers MTWEI with a 33-byte PASSSALT (server key, no salt) because the
+  username has no local login, the login fails as `transport/auth-failed` with
+  a remediation that names the cause. It used to be reported as
+  `routeros/mac-telnet-unsupported-auth`, "unsupported salt length (33)",
+  which pointed at the device and RouterOS version (#559). Grounded on CHR
+  7.25.1 and 7.24.6.
+- EC-SRP5 (MAC-Telnet and btest): a peer public key whose parity byte is not 0
+  or 1 is refused as `routeros/ec-srp5-protocol` instead of being masked to its
+  low bit (#584).
+
 ### Maintenance
 
 - A new `components/` tree holds specs for parts of centrs that span
