@@ -22,6 +22,14 @@ no section of its own.
   protocol that cannot retrieve no longer suggests `snmp`, and the retrieve
   docs no longer describe a planned SNMP form.
 
+### Fixed
+
+- `execute`: when RouterOS does not answer the `:parse` preflight (REST
+  `Session closed`, or a native-API `action timed out` trap), the error keeps
+  its own code and the device stage reads `not reached`. It used to be
+  relabeled `validation/syntax`, telling the caller to fix a command that was
+  fine (#638).
+
 ### Maintenance
 
 - A new `components/` tree holds specs for parts of centrs that span
