@@ -40,7 +40,7 @@ REST has its own, separate 60-second cap on every request:
 - For long work, start it in the background and poll for its result:
   `:execute {…}` without `as-string` runs the script as a
   `/system/script/job` and returns at once; then wait on what it changes with
-  `centrs retrieve … --wait --until …`.
+  `centrs retrieve … --wait 2m --until …`.
 - Where the command has its own timeout, bound it below the limit:
   `/container/shell timeout=<seconds>` takes bare seconds (`timeout=200s` is
   rejected) and kills the command cleanly at that time. It only lowers the

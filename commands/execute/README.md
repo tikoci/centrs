@@ -250,7 +250,7 @@ false`) and the device stage reads `not reached`.
 
 For long work, start it in the background and poll: `:execute {…}` without
 `as-string` runs the script as a `/system/script/job` and returns at once,
-then `centrs retrieve … --wait --until …` waits on what it changes. Where a
+then `centrs retrieve … --wait 2m --until …` waits on what it changes. Where a
 command has its own timeout, bound it below the limit:
 `/container/shell timeout=<seconds>` takes bare seconds (`timeout=200s` is
 rejected), kills the command cleanly (`ret=exited with signal 9`, no trap),

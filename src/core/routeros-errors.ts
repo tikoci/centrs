@@ -212,7 +212,7 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		build: () => ({
 			summary: "RouterOS closed the session before the request completed.",
 			remediation:
-				"RouterOS ends a REST request after 60 seconds, or sooner when it is still busy with earlier requests, and `--timeout` cannot extend that. A command that was already sent may still be running or may have finished, so check the router's state before running it again. Keep each REST call under 60 seconds: start long work in the background (`:execute {…}` without `as-string` runs it as a `/system/script/job`) and poll for its result (`centrs retrieve … --wait --until …`).",
+				"RouterOS ends a REST request after 60 seconds, or sooner when it is still busy with earlier requests, and `--timeout` cannot extend that. A command that was already sent may still be running or may have finished, so check the router's state before running it again. Keep each REST call under 60 seconds: start long work in the background (`:execute {…}` without `as-string` runs it as a `/system/script/job`) and poll for its result (`centrs retrieve … --wait 2m --until …`).",
 		}),
 	},
 	{
@@ -230,7 +230,7 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 			summary:
 				"RouterOS dropped the reply for this command (action timed out): the command may still be running, or may have finished.",
 			remediation:
-				"This RouterOS command has its own reply limit of about 60 seconds (a script run through `/execute as-string`, `/container/shell`); centrs `--timeout` does not extend it. Check the router's state before running the command again. For long work, start it in the background (`:execute {…}` without `as-string` runs it as a `/system/script/job`) and poll for its result (`centrs retrieve … --wait --until …`), or bound it with the command's own timeout where it has one (`/container/shell timeout=<seconds>`, bare seconds).",
+				"This RouterOS command has its own reply limit of about 60 seconds (a script run through `/execute as-string`, `/container/shell`); centrs `--timeout` does not extend it. Check the router's state before running the command again. For long work, start it in the background (`:execute {…}` without `as-string` runs it as a `/system/script/job`) and poll for its result (`centrs retrieve … --wait 2m --until …`), or bound it with the command's own timeout where it has one (`/container/shell timeout=<seconds>`, bare seconds).",
 		}),
 	},
 	{

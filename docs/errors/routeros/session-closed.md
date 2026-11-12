@@ -28,5 +28,5 @@ some commands carry on any transport, which surface over native API as
 - `--timeout` cannot extend the cap. Keep each REST call under 60 seconds:
   start long work in the background (`:execute {…}` without `as-string` runs
   it as a `/system/script/job`) and poll for its result with
-  `centrs retrieve … --wait --until …`.
+  `centrs retrieve … --wait 2m --until …`.
 - For SFTP, grant the `ftp` policy to the user's group (`/user/group`).

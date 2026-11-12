@@ -72,6 +72,7 @@ describe("mapRouterOsError grounded vocabulary", () => {
 		// #639: a sent command may have run; the REST cap stays its own limit.
 		expect(error.remediation).toMatch(/may still be running/);
 		expect(error.remediation).toMatch(/`--timeout` cannot extend/);
+		expect(error.remediation).toMatch(/--wait \d+[a-z]+ --until/);
 	});
 
 	test("maps native 'action timed out (13)' to routeros/action-timed-out (#639)", () => {
@@ -85,7 +86,8 @@ describe("mapRouterOsError grounded vocabulary", () => {
 		// extends it: no `--via native-api` workaround, no "router may be busy".
 		expect(error.remediation).toMatch(/`--timeout` does not extend it/);
 		expect(error.remediation).toMatch(/\/container\/shell timeout=<seconds>/);
-		expect(error.remediation).toMatch(/--wait --until/);
+		// `--wait` takes a deadline; bare, it would read `--until` as one (#445).
+		expect(error.remediation).toMatch(/--wait \d+[a-z]+ --until/);
 		expect(error.remediation).not.toMatch(/--via|native API|may be busy/i);
 	});
 

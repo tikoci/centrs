@@ -750,8 +750,8 @@ later report it when the script ends (about 65 s); 7.24.6 at a fixed 60 s,
 while the script keeps running. `--timeout 200s` changes neither. The
 write-shaped form (`:delay 65s; /ip/address/add …` with `--yes`) fails the same
 way and carries `transport/write-outcome-unknown`, and
-`centrs retrieve $A /ip/address --until comment=… --wait 20s` then finds the
-address: the script ran to the end.
+`centrs retrieve $A /ip/address --via native-api --port $API_PORT --username $U --password $P --until comment=… --wait 20s`
+then finds the address: the script ran to the end.
 
 `test/integration/execute.test.ts` runs both at once on one CHR.
 
