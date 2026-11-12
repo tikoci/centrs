@@ -489,9 +489,11 @@ describe("SshExecClient: timeout keeps what it saw (#592)", () => {
 		expect(error.context?.["partialOutput"]).toBeUndefined();
 	});
 
-	test("argv asks OpenSSH for its login evidence", () => {
+	test("argv asks OpenSSH for its login evidence, on its own connection", () => {
 		const argv = sequence(silentTimeout).argv(":put 1");
-		expect(argv.join(" ")).toContain("-o LogLevel=VERBOSE --");
+		expect(argv.join(" ")).toContain(
+			"-o LogLevel=VERBOSE -o ControlPath=none --",
+		);
 	});
 
 	test("OpenSSH's own connect failure wins over the budget kill", async () => {

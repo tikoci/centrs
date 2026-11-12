@@ -320,7 +320,8 @@ const SSH_CLIENT_ERROR_EXIT = 255;
  * using "<method>".` once login completes (OpenSSH 10.6 against CHR 7.25.1 and
  * 7.24.6). Each `exec` is a fresh `ssh` process and login, so this line is the
  * evidence that *this* invocation reached RouterOS; an earlier invocation's
- * success says nothing about the next handshake. The level also adds the
+ * success says nothing about the next handshake. `ControlPath=none` keeps it
+ * a fresh login: a multiplexed `ssh` logs nothing. The level also adds the
  * `Transferred:` / `Bytes per second:` exit summary; both are progress lines
  * and are dropped before stderr is read for a failure.
  */
@@ -386,6 +387,12 @@ export class SshExecClient {
 			// Login evidence for this invocation (see SSH_VERBOSE_PROGRESS).
 			"-o",
 			"LogLevel=VERBOSE",
+			// No connection reuse: a command sent over a `ControlMaster`
+			// connection from the user's config skips login and logs nothing,
+			// so a silent cut-off command would read as never sent (CHR 7.25.1).
+			// A command-line option overrides the config file.
+			"-o",
+			"ControlPath=none",
 			"--",
 			sshUserHost(this.config),
 			command,
