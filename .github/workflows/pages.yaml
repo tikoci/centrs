@@ -17,6 +17,7 @@ on:
       - "docs/errors/**"
       - "package.json"
       - "typedoc.json"
+      - "README.md"
       - "scripts/build-pages-site.ts"
       - "scripts/pages-links.ts"
       - "scripts/gen-error-pages.ts"

@@ -198,3 +198,31 @@ describe("docs-only guard", () => {
 		}
 	});
 });
+
+/**
+ * TypeDoc renders the root README.md as its landing page, and README.md is
+ * docs-only, so the job that runs it must not be one the classifier can skip
+ * (#661). A README-only PR with an unresolved link would otherwise merge and
+ * fail the next Pages build under `treatWarningsAsErrors`.
+ */
+describe("typedoc gate", () => {
+	interface Job {
+		if?: string;
+		needs?: string | string[];
+		steps?: { run?: string }[];
+	}
+
+	test("runs in a CI job that docs-only changes do not skip", async () => {
+		expect(isDocsOnlyPath("README.md")).toBe(true);
+		const workflow = Bun.YAML.parse(
+			await Bun.file(`${ROOT}.github/workflows/ci.yaml`).text(),
+		) as { jobs: Record<string, Job> };
+		const gated = Object.entries(workflow.jobs).filter(([, job]) =>
+			job.steps?.some((step) => step.run?.includes("build:doc:api")),
+		);
+		expect(gated.map(([name]) => name)).toEqual(["checks"]);
+		const [, job] = gated[0] as [string, Job];
+		expect(job.if).toBeUndefined();
+		expect(job.needs).toBeUndefined();
+	});
+});
