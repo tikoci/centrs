@@ -8,13 +8,13 @@
  * example traced its 90 s stalls to exactly this).
  *
  * CMR exists from 7.26beta1, so the lab pins its own version and ignores
- * `CENTRS_CHR_CHANNEL`. `CENTRS_CMR_VERSION` overrides it for a later beta.
+ * `CENTRS_CHR_CHANNEL`. `CENTRS_CMR_VERSION` overrides it for reproductions.
  */
 
 import { CMR_SINCE, routerOsAtLeast, splitQuickChrAuth } from "./chr.ts";
 
 export const CMR_LAB_VERSION =
-	Bun.env["CENTRS_CMR_VERSION"]?.trim() || CMR_SINCE;
+	Bun.env["CENTRS_CMR_VERSION"]?.trim() || "7.26beta5";
 
 type Row = Record<string, string>;
 
