@@ -670,6 +670,8 @@ unmodeled
 distinguisher
 vlanid
 vlanbytes
+# RouterOS virtual ethernet interface (`/interface/veth`), used by containers.
+veth
 ipprefix
 octive
 lppp
