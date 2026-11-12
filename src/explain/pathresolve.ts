@@ -498,7 +498,7 @@ export interface Resolution {
 	/**
 	 * The `[…]` in DOCUMENT analyzed-byte space, closing bracket included. Widens
 	 * to the enclosing statement where interior offsets cannot be mapped — see
-	 * {@link Loc}.
+	 * `Loc`.
 	 */
 	span: Span;
 	/**

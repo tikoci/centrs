@@ -323,7 +323,7 @@ export interface ResolvedApiRequest {
 	/**
 	 * REST `.query` words (no `?` prefix), structured then raw, in order. A bare
 	 * `--query` name reads "is set" here until validation asks the device which
-	 * bare names are booleans ({@link withQueryBooleans}).
+	 * bare names are booleans (`withQueryBooleans`).
 	 */
 	query: readonly string[];
 	/** The parsed `--query` expressions, when any were given. */

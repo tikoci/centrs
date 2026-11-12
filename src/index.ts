@@ -74,6 +74,12 @@ export {
 	renderBtestClientEnvelope,
 	renderBtestServerEnvelope,
 } from "./btest.ts";
+export type { CmrCallerPolicy } from "./core/cmr.ts";
+export type {
+	CmrFleetDevice,
+	CmrFleetRead,
+	CmrFleetScope,
+} from "./core/cmr-fleet.ts";
 export {
 	type CentrsEnvelope,
 	type CentrsErrorEnvelope,
@@ -81,6 +87,8 @@ export {
 	type CommonSettingsMeta,
 	type EnvelopeMeta,
 	type EnvelopeTargetMeta,
+	type EnvelopeTimingMeta,
+	type EnvelopeTruncationMeta,
 	type EnvelopeValidationMeta,
 	type EnvelopeValidationStage,
 	type FanoutData,
@@ -90,9 +98,11 @@ export {
 	type SettingSource,
 	type SettingSourceKind,
 	type StreamLineEnvelope,
+	type Tip,
 	type ValidationTrace,
 	type Warning,
 } from "./core/envelope.ts";
+export type { CanonicalExecuteCommand } from "./core/execute-command.ts";
 export {
 	buildFanoutEnvelope,
 	buildFanoutResolveFailure,
@@ -144,6 +154,7 @@ export {
 	versionFactFromComment,
 	versionInRange,
 } from "./core/preflight.ts";
+export type { ParsedQuery, QueryComparison, QueryNode } from "./core/query.ts";
 export { centrsVersion } from "./core/version.ts";
 export {
 	encodeMndpPacket,
@@ -229,6 +240,7 @@ export {
 	type DevicesMutationEnvelope,
 	type DevicesOperationMeta,
 	type DevicesOutputFormat,
+	type DevicesSettings,
 	type DevicesShowEnvelopeData,
 	type DevicesShowItem,
 	type DevicesShowItemWithPassword,
@@ -241,6 +253,8 @@ export {
 	encryptCdb,
 	type InitCdbOptions,
 	initCdb,
+	type ListDevicesArgs,
+	type ListGroupsArgs,
 	type LoadCdbOptions,
 	type LoadedCdb,
 	listDevices,
@@ -254,6 +268,7 @@ export {
 	resolveDevicesSettings,
 	retryOnCdbConflict,
 	type SetDeviceArgs,
+	type ShowDeviceArgs,
 	setDevice,
 	showDevice,
 } from "./devices.ts";
@@ -285,6 +300,8 @@ export {
 	asCentrsError,
 	CentrsError,
 	type CentrsErrorCode,
+	type CentrsErrorInit,
+	type RouterOsErrorPosition,
 	type SerializedCentrsError,
 	serializeCentrsError,
 } from "./errors.ts";
@@ -305,6 +322,7 @@ export {
 	executeOutputFormats,
 	executeVerboseLines,
 	isWriteShaped,
+	type ResolvedExecuteRequest,
 	renderExecuteEnvelope,
 	resolveExecuteGlobalContext,
 	resolveExecuteRequest,
@@ -314,6 +332,7 @@ export {
 export {
 	buildExecuteCmrErrorEnvelope,
 	CMR_VALIDATION_SOURCE,
+	type CmrAbsence,
 	type CmrController,
 	type CmrDevice,
 	type CmrScriptCall,
@@ -413,6 +432,7 @@ export {
 	type StatementResolution,
 } from "./explain/pathresolve.ts";
 export {
+	type MaskedRange,
 	maskComments,
 	type QuotedStringScan,
 	type Segment,
@@ -489,6 +509,8 @@ export {
 	type ExplainCanonical,
 	type ExplainCommandOptions,
 	type ExplainCommandReading,
+	type ExplainCompletion,
+	type ExplainCompletionCandidate,
 	type ExplainData,
 	type ExplainDiagnostic,
 	type ExplainEnvelope,
@@ -505,6 +527,10 @@ export {
 	type ExplainReading,
 	type ExplainRefusal,
 	type ExplainResolution,
+	type ExplainSchema,
+	type ExplainSchemaArgument,
+	type ExplainSchemaChild,
+	type ExplainSchemaTypeFact,
 	type ExplainSeverity,
 	type ExplainSpan,
 	type ExplainSpanClass,
@@ -517,6 +543,7 @@ export {
 	type ExplainSymbolClass,
 	type ExplainSymbolOccurrence,
 	type ExplainSymbols,
+	type ExplainSyntaxRow,
 	type ExplainToken,
 	type ExplainTokenClass,
 	type ExplainValueFacts,
@@ -545,6 +572,26 @@ export {
 	type OfflineGateResult,
 	type ValidationStageName,
 } from "./offline-gate.ts";
+export type {
+	ProtocolListenOptions,
+	ProtocolSendOptions,
+	ProtocolStreamReply,
+	ProtocolTappedReply,
+	RetrieveReadOptions,
+} from "./protocols/adapter.ts";
+export type {
+	BtestAuthKind,
+	BtestDirection,
+	BtestProtocol,
+} from "./protocols/btest.ts";
+export type {
+	BtestClientSessionOptions,
+	BtestControlChannel,
+	BtestIntervalSample,
+	BtestRunSummary,
+	BtestStopReason,
+	BtestUdpSocket,
+} from "./protocols/btest-session.ts";
 export {
 	type ApiVerb,
 	createProtocolAdapter,
@@ -564,6 +611,11 @@ export {
 	type RetrieveListOptions,
 	type RouterOsProtocol,
 } from "./protocols/index.ts";
+export type { DefaultCreds } from "./resolver/cdb.ts";
+export {
+	type CommentKvLookupKey,
+	commentKvLookupKeys,
+} from "./resolver/comment-kv.ts";
 export {
 	type AltitudeType,
 	applyCommentKv,
@@ -625,12 +677,25 @@ export {
 	type TargetSelection,
 	toCoreSource,
 } from "./resolver/index.ts";
+export type { QuickchrResolution } from "./resolver/quickchr-provider.ts";
+export type {
+	AvailableEndpointBase,
+	ServiceEndpoint,
+	ServiceEndpointAuth,
+	ServiceEndpointFor,
+	ServiceEndpointMap,
+	ServiceEndpointSource,
+	SshEndpointAuth,
+	SshServiceEndpoint,
+	UnavailableEndpoint,
+} from "./resolver/service-endpoint.ts";
 export type { RetrieveWaitMeta, RetrieveWaitSettings } from "./retrieve.ts";
 export {
 	buildResolvedRetrieve,
 	buildRetrieveErrorEnvelope,
 	buildRetrieveErrorEnvelopeFromResolved,
 	FOLLOW_SWEEP_DEFAULT_MS,
+	type ResolvedRetrieveQuery,
 	type ResolvedRetrieveRequest,
 	type RetrieveEnvelope,
 	type RetrieveErrorEnvelope,
@@ -693,6 +758,8 @@ export {
 export { type RetrieveWaitOptions, retrieveWait } from "./retrieve-wait.ts";
 export {
 	buildSettingsErrorEnvelope,
+	type ParsedSetting,
+	type RefusedKeyDef,
 	renderSettingsEnvelope,
 	type SettingsCommand,
 	type SettingsDefaultDeviceSummary,
@@ -724,6 +791,7 @@ export {
 export {
 	buildSshTerminalArgv,
 	buildTerminalErrorEnvelope,
+	type ResolvedTerminal,
 	type ResolveTerminalOptions,
 	resolveTerminalRequest,
 	runTerminal,
@@ -735,6 +803,8 @@ export {
 	buildTransferErrorEnvelope,
 	buildTransferErrorEnvelopeFromResolved,
 	FILE_READ_CHUNK_BYTES,
+	type FileBackend,
+	type FileRow,
 	isTransferWriteVerb,
 	normalizeRemotePath,
 	REST_FILE_WRITE_CAP_BYTES,
@@ -744,6 +814,7 @@ export {
 	runResolvedTransfer,
 	selectTransferMethod,
 	type TransferData,
+	type TransferDirection,
 	type TransferEnvelope,
 	type TransferErrorEnvelope,
 	type TransferMethod,

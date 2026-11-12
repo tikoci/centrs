@@ -128,6 +128,13 @@ publish `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
   starting with `components/cmr/`. The matrix's side tables merge into one
   Components table, and its parked themes gain CMR across surfaces,
   Provisioning, and SNMP and OIDs.
+- API docs: TypeDoc settings move to `typedoc.json` with
+  `treatWarningsAsErrors`, and CI's Build job runs `bun run build:doc:api`, so
+  a docs break fails the PR instead of the Pages deploy on main. **Library:**
+  the root export gains about 60 types (plus `commentKvLookupKeys`) that public
+  signatures already used but that `@tikoci/centrs` did not export, such as
+  `CentrsErrorInit`, `ListDevicesArgs`, `ProtocolSendOptions` and
+  `FileBackend`.
 
 ### Known issues
 

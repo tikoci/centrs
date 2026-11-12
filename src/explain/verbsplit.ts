@@ -176,7 +176,7 @@ export function describeStatement(
 	 *     disagree), so no offset was established for it at all.
 	 *
 	 * A word END is the only offset that survives a `\<newline>` continuation —
-	 * the joined bytes are interior to the word (see {@link asciiWordSpans}),
+	 * the joined bytes are interior to the word (see `asciiWordSpans`),
 	 * which is why no per-token START is published.
 	 */
 	runEnds: (number | null)[];
@@ -678,7 +678,7 @@ export type DocumentVerbSplit = VerbSplit & {
 	/**
 	 * The statement's own text, as the resolver segmented it (#202c).
 	 *
-	 * Carried for the same reason {@link DocumentVerbSplit.span} is: the caller
+	 * Carried for the same reason `DocumentVerbSplit.span` is: the caller
 	 * that lexes ARGUMENTS from {@link VerbSplitCommandReading.argsAt} needs the
 	 * text those offsets index, and re-slicing the document by `span` to recover
 	 * it is exactly the step that silently succeeds when the span is a widened
@@ -724,8 +724,8 @@ export interface VerbAnalysis {
  * benign statements. The distinction is only visible to the resolver; this
  * module sees flattened statements.
  *
- * What the walker does add is {@link DocumentVerbSplit.contextCertain} and
- * {@link DocumentVerbSplit.span}: the resolver's per-statement certainty and
+ * What the walker does add is `DocumentVerbSplit.contextCertain` and
+ * `DocumentVerbSplit.span`: the resolver's per-statement certainty and
  * location, carried through instead of dropped. The certainty was the last of
  * #192's three bullets — the cascade FIX shipped in #197, but the signal it
  * produced stopped here.

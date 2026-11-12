@@ -258,6 +258,12 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Build
         run: bun run build
+      # Pages runs typedoc only after a merge, so a docs break used to surface
+      # as a failed deploy on main. typedoc.json sets treatWarningsAsErrors:
+      # a public type that index.ts does not export, or a {@link} to an
+      # internal helper, fails here instead.
+      - name: Build API docs (typedoc)
+        run: bun run build:doc:api
 
   # The `explain` censuses read a 948-script RouterOS corpus (schema 5, read
   # through scripts/corpus-db.ts since #498) that lives in

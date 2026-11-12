@@ -112,7 +112,7 @@ export interface SelectionExpansion {
 	/** Members ordered by record index; literals appended in positional order. */
 	targets: readonly SelectionMember[];
 	warnings: readonly ResolverWarning[];
-	/** True when nothing matched (an error only for a write; see {@link emptyWriteSelectionError}). */
+	/** True when nothing matched (an error only for a write; see `emptyWriteSelectionError`). */
 	empty: boolean;
 }
 

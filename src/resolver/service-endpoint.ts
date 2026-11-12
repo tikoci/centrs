@@ -26,7 +26,7 @@
  * `SshServiceEndpoint`), which states that centrs reuses *this same internal
  * type* for TikTOML resolution. It is provider-neutral: `source.provider` is a
  * free string, not a quickchr literal. Mapping a resolved endpoint's auth onto
- * centrs' {@link ../resolver/target.ts | ResolvedAuth} (notably
+ * centrs' {@link ResolvedAuth} (notably
  * `privateKeyPath` → `sshKey`) is the provider adapter's job, not this type's.
  *
  * Phase 1 (this file) defines the contract only; the quickchr provider adapter
@@ -60,7 +60,7 @@ export interface SshEndpointAuth {
 	/**
 	 * Path to a usable private key. Populated only when the provider has actually
 	 * verified a batch (non-interactive) login with it — maps to
-	 * {@link ../resolver/target.ts | ResolvedAuth.sshKey} in the provider adapter.
+	 * {@link ResolvedAuth.sshKey} in the provider adapter.
 	 */
 	privateKeyPath?: string;
 	/** Every auth mode the endpoint accepts. */
@@ -76,7 +76,7 @@ export interface SshEndpointAuth {
 }
 
 /** Fields shared by every available endpoint regardless of auth flavor. */
-interface AvailableEndpointBase {
+export interface AvailableEndpointBase {
 	available: true;
 	/** Hostname/IP to dial — NOT a port. `"127.0.0.1"` for a SLiRP-forwarded service. */
 	host: string;

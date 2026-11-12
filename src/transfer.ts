@@ -573,7 +573,7 @@ async function runCopy(
 
 // ── FileBackend: the seam the verb runners drive ─────────────────────────────
 
-interface FileRow {
+export interface FileRow {
 	id: string;
 	name: string;
 	type?: string;
@@ -1139,7 +1139,7 @@ export async function resolveTransferRequest(
 	};
 }
 
-type TransferDirection = "upload" | "download";
+export type TransferDirection = "upload" | "download";
 
 /**
  * Size/direction-aware method selection plus explicit-`--via` gating.

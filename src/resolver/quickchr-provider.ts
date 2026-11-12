@@ -84,7 +84,7 @@ export interface QuickchrResolution {
 	name: string;
 	/** Per-`--via` endpoints; only protocols quickchr forwards are present. */
 	services: ServiceEndpointMap;
-	/** The descriptor schema version quickchr emitted (≤ {@link SUPPORTED_DESCRIPTOR_VERSION}). */
+	/** The descriptor schema version quickchr emitted (≤ `SUPPORTED_DESCRIPTOR_VERSION`). */
 	descriptorVersion: number;
 	/** The `@tikoci/quickchr` package version that produced the descriptor, when reported. */
 	packageVersion?: string;
