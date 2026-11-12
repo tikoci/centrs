@@ -329,8 +329,9 @@ the **same single console `:put [:parse …]`** as mac-telnet (over SSH it retur
 the identical `(evl …)` / `bad parameter <name>` strings), so syntax and the
 unknown-attribute gate are covered at once. Key auth is the path (`--ssh-key` /
 agent); `--insecure` accepts the device's host key. `$SSH_PORT` is the SSH port,
-`$KEY` the private key. Examples S1–S4 are green via `bun run test:integration`
-(`test/integration/execute-ssh.test.ts`, CHR 7.23.1).
+`$KEY` the private key. Examples S1–S4, S6 and S7 are green via
+`bun run test:integration` (`test/integration/execute-ssh.test.ts`, CHR
+7.23.1; S6–S7 on 7.25.1 and 7.24.6).
 
 ### S1. Read a command over ssh
 
@@ -389,6 +390,69 @@ Execute and transfer fail with `auth/failed`; the terminal relay preserves
 OpenSSH's nonzero exit and `Permission denied` diagnostic. The test disables
 interactive prompts on its terminal relay. Controls using `$KEY`, or omitting
 `--ssh-key` to use the private agent, succeed for all three commands.
+
+### S6. A multi-line script runs as one unit over ssh
+
+Over SSH exec, RouterOS ends the prompt at every LF (and CRLF): each line would
+run on its own, so menu context, `:local` values and `{ }` blocks would not
+carry across lines, and a later line could exit 0 after an earlier one failed.
+CRLF is not a console line ending here: it behaves exactly like LF on every
+S6 script (a failing middle line still lets the next run, with exit 0), even
+though RouterOS's own output uses CRLF. A CR is a line break inside the prompt,
+like Enter inside a console block. So
+centrs sends a script's line breaks as CR, and it runs the way `:parse`
+validated it and the way REST and native-API `/execute` run it (CHR 7.25.1 and
+7.24.6, #576).
+
+```bash
+centrs execute 127.0.0.1 $'/ip/firewall/address-list\nprint where list=centrs-s6\n' --via ssh --port $SSH_PORT --username $U --ssh-key $KEY --insecure --yes --json
+centrs execute 127.0.0.1 $':local x 17\n:put $x' --via ssh --port $SSH_PORT --username $U --ssh-key $KEY --insecure --yes --json
+centrs execute 127.0.0.1 $':put before\n:error boom\n:put after' --via ssh --port $SSH_PORT --username $U --ssh-key $KEY --insecure --yes --json
+```
+
+The first two are `ok: true`: the `print` runs in the address-list menu, and
+`data.ret` of the second is `17`. The third passes `:parse` (`:error` fails at
+run time) and stops at its second line: `ok: false`,
+`error.code=routeros/command-failed`, and `error.context` carries
+`exitCode: 1`, the `output` (`before` and `boom (:error; line 2)`, never
+`after`) and `partialRunPossible: true`; a write that fails like this also gets
+`transport/write-outcome-unknown`. Over SSH, a RouterOS diagnostic the error
+table recognizes keeps its specific code instead (for example
+`bad command name …` is `routeros/unknown-path` with its position), also when
+it follows earlier output: `:put before` then a duplicate
+`/ip/firewall/address-list/add` reads `failure: already have such entry` from
+the output's last line, and `context.output` keeps both lines. A loop counts
+too: `:foreach i in={1;2} do={ /ip/firewall/address-list/add … }` adds the
+entry on its first iteration and fails on the second, so it is
+`partialRunPossible` with `transport/write-outcome-unknown`. Line breaks are
+read from the script as written, so a CRLF comment inside a continued
+statement (`:put \` CRLF `# comment` CRLF `"after"`) still prints `after`. A raw line
+break inside a quoted string cannot be sent this way and is refused before
+anything is sent (`transport/capability-unsupported`); write it as `\n` inside
+the string.
+
+### S7. A cut-off script is an execution timeout that keeps its partial output
+
+```bash
+centrs execute 127.0.0.1 ':put begin; :delay 6s; :put end' --via ssh --port $SSH_PORT --username $U --ssh-key $KEY --insecure --yes --timeout 3s --json
+```
+
+Envelope: `ok: false`, `error.code=transport/timeout`, summary "did not finish
+within 3s; the command may still be running on the router", and
+`error.context` carries `timeoutMs: 3000`, `sessionReached: true`,
+`partialOutput: "begin"`, `outputComplete: false`. The remediation names `--timeout` and
+`CENTRS_TIMEOUT`. Killing the local `ssh` does not stop the script on the
+router: on CHR 7.25.1 and 7.24.6 a script's write landed about 10 s after the
+cutoff (#592). Each exec is a fresh `ssh` login, so the session counts as
+reached only on evidence from this invocation: OpenSSH logged
+`Authenticated to …` (centrs runs it with `LogLevel=VERBOSE`), or the command
+printed output. A silent `:delay 6s` cut at 3s is therefore still an execution
+timeout. A timeout with neither, such as an unreachable host or a handshake
+that stalls after the `:parse` check answered, does not claim the command is
+running: its summary says the connection or login may not have completed, and
+`sessionReached` is `false`. Such a command was never sent, so a write gets no
+`transport/write-outcome-unknown` warning. A `:parse` check that logged in and
+then ran out of budget says the command was not sent (`commandSent: false`).
 
 ## Offline gate (stage 1)
 

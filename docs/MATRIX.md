@@ -428,6 +428,9 @@ done or declined. A nit that needs more explanation is an issue.
   RouterOS's UDP client also fans out over 20 source ports
   (`connection-count=20`). Measured on CHR 7.25.1 and 7.24.6 in the #172
   retest.
+- `execute --via ssh` sends a multi-line script as one prompt (CR line breaks,
+  #576). An opt-in line-by-line mode (one prompt per line, as the console
+  would run typed lines) could come later if a caller needs it.
 - `.github/instructions/`: trim Copilot-era verbosity when the TIKOCI-wide
   files are collected in `tikoci.github.io`.
 - `test/integration/api-stream-command.test.ts` fails intermittently in the

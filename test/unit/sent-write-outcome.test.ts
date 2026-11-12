@@ -289,6 +289,27 @@ test("a missing local client (e.g. no ssh binary) never counts as sent", () => {
 	expect(sentWriteWarnings(true, error, { dispatched: true })).toEqual([]);
 });
 
+test("a multi-line SSH write that failed partway warns that it may have partly run (#576)", () => {
+	// Over SSH each line runs on its own, so a refused later line does not undo
+	// the earlier ones. The SSH client flags that on the error.
+	const partial = new CentrsError({
+		code: "routeros/unknown-path",
+		summary: "bad command name print (line 1 column 1)",
+		context: { via: "ssh", exitCode: 1, partialRunPossible: true },
+	});
+	expect(
+		sentWriteWarnings(true, partial, { dispatched: true }).map((w) => w.code),
+	).toEqual(["transport/write-outcome-unknown"]);
+	// The same code without the flag (a single line) stays silent.
+	const single = new CentrsError({
+		code: "routeros/unknown-path",
+		summary: "bad command name x",
+	});
+	expect(sentWriteWarnings(true, single, { dispatched: true })).toEqual([]);
+	// And a read never warns.
+	expect(sentWriteWarnings(false, partial, { dispatched: true })).toEqual([]);
+});
+
 /**
  * #549: a dispatched multi-statement write refused with
  * `routeros/permission-denied` can be partly applied — statements before the

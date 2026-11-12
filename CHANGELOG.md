@@ -69,6 +69,26 @@ no section of its own.
   plain HTTP, which some agent fetch tools refuse to follow. Old links still
   redirect. Tip URLs move to the same host; the tip pages themselves are not
   published yet (#464).
+- `execute --via ssh`: a command RouterOS ends with a nonzero exit is reported
+  as the router's answer (its diagnostic on stdout keeps a specific code such
+  as `routeros/unknown-path`, also when it follows earlier output, else
+  `routeros/command-failed`, with exit code and full output in `context`), not `transport/network` with the diagnostic
+  dropped. A write that fails partway, including a loop that fails on a later
+  iteration, gets `transport/write-outcome-unknown` (#576).
+- `execute --via ssh` runs a multi-line script as one unit. RouterOS ends the
+  SSH exec prompt at every LF, so each line ran on its own: menu context and
+  `:local` values were lost between lines, and a later line could exit 0 after
+  an earlier one failed. centrs now sends the script's line breaks as CR, a
+  line break inside the prompt. A raw line break inside a quoted string is
+  refused before sending (#576).
+- `execute --via ssh`: a timeout after the session reached RouterOS (OpenSSH
+  logged this invocation's login, or the command printed output) is now an
+  execution timeout that names the budget, keeps the output printed before the
+  cutoff (`context.partialOutput`), says the command may still be running on
+  the router, and points to `--timeout` and `CENTRS_TIMEOUT`. A timeout with
+  no sign of the session, such as an unreachable host, says the connection or
+  login may not have completed instead (`context.sessionReached`), and a write
+  that never left gets no unknown-outcome warning (#592).
 
 ### Maintenance
 

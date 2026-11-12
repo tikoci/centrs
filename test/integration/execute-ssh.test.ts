@@ -11,11 +11,12 @@
  * mints an ed25519 keypair, imports the public half to the CHR user, and uses key
  * auth (`--insecure` accepts the ephemeral host key). Grounded on CHR 7.23.1; REST
  * is the source of truth for the cross-checks. Maps `commands/execute/examples.md`
- * (S1–S4).
+ * (S1–S4, S6–S7).
  */
 
 import { describe, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
+import { type AddressInfo, connect, createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCli } from "../../src/cli.ts";
@@ -64,6 +65,37 @@ async function keygen(path: string): Promise<void> {
 			`ssh-keygen failed to mint the execute/ssh test key: ${await new Response(proc.stderr).text()}`,
 		);
 	}
+}
+
+/**
+ * A loopback TCP proxy to the CHR's SSH port. The first `forwardFirst`
+ * connections are piped through; later ones are accepted and never forwarded,
+ * so their SSH handshake stalls. `forwardFirst` defaults to every connection.
+ */
+async function startStallProxy(upstreamPort: number) {
+	const state = { forwardFirst: Number.POSITIVE_INFINITY, seen: 0 };
+	const sockets: Socket[] = [];
+	const server = createServer((client) => {
+		sockets.push(client);
+		client.on("error", () => {});
+		state.seen++;
+		if (state.seen > state.forwardFirst) return;
+		const upstream = connect(upstreamPort, "127.0.0.1");
+		sockets.push(upstream);
+		upstream.on("error", () => client.destroy());
+		client.pipe(upstream).pipe(client);
+	});
+	await new Promise<void>((resolve) =>
+		server.listen(0, "127.0.0.1", () => resolve()),
+	);
+	return {
+		state,
+		port: (server.address() as AddressInfo).port,
+		close() {
+			for (const socket of sockets) socket.destroy();
+			server.close();
+		},
+	};
 }
 
 describeFast("execute over ssh (per-command ssh host)", () => {
@@ -162,6 +194,236 @@ describeFast("execute over ssh (per-command ssh host)", () => {
 				after.some((a) => (a["address"] ?? "").startsWith("198.51.100.51")),
 			).toBe(false);
 
+			// S6 — a multi-line script runs as one unit over SSH. RouterOS ends
+			// the exec prompt at every LF, so centrs sends line breaks as CR (#576):
+			// menu context and `:local` carry across lines, and a failing line
+			// stops the script with its diagnostic.
+			await chr.exec(
+				"/ip/firewall/address-list/add list=centrs-s6 address=192.0.2.66",
+			);
+			const menu = await executeEnvelope({
+				...base,
+				command: "/ip/firewall/address-list\nprint where list=centrs-s6\n",
+				yes: true,
+			});
+			expect(menu.ok, menu.ok ? "" : JSON.stringify(menu.error)).toBe(true);
+			if (!menu.ok) return;
+			expect(retOf(menu.data)).toContain("192.0.2.66");
+
+			const local = await executeEnvelope({
+				...base,
+				command: ":local x 17\n:put $x",
+				yes: true,
+			});
+			expect(local.ok, local.ok ? "" : JSON.stringify(local.error)).toBe(true);
+			if (!local.ok) return;
+			expect(retOf(local.data)).toBe("17");
+
+			// CRLF input (a Windows-edited script) is sent the same way: raw
+			// CRLF ends the exec prompt like LF, so centrs sends CR.
+			const crlfLocal = await executeEnvelope({
+				...base,
+				command: ":local x 17\r\n:put $x\r\n",
+				yes: true,
+			});
+			expect(
+				crlfLocal.ok,
+				crlfLocal.ok ? "" : JSON.stringify(crlfLocal.error),
+			).toBe(true);
+			if (!crlfLocal.ok) return;
+			expect(retOf(crlfLocal.data)).toBe("17");
+
+			// `:error` passes `:parse` and fails at run time, on line 2.
+			const stopped = await executeEnvelope({
+				...base,
+				command: ":put before\n:error boom\n:put after",
+				yes: true,
+			});
+			expect(stopped.ok).toBe(false);
+			if (stopped.ok) return;
+			expect(stopped.error.code).toBe("routeros/command-failed");
+			expect(stopped.error.context).toMatchObject({
+				via: "ssh",
+				exitCode: 1,
+				partialRunPossible: true,
+			});
+			const stoppedOutput = String(stopped.error.context?.["output"]);
+			expect(stoppedOutput).toContain("before");
+			expect(stoppedOutput).toContain("boom (:error; line 2)");
+			expect(stoppedOutput).not.toContain("after");
+
+			// A quote inside an inline comment opens no string: the script is
+			// sent, and both lines run.
+			const commented = await executeEnvelope({
+				...base,
+				command: ':put before; # a lone " in a comment\n:put after',
+				yes: true,
+			});
+			expect(
+				commented.ok,
+				commented.ok ? "" : JSON.stringify(commented.error),
+			).toBe(true);
+			if (!commented.ok) return;
+			expect(retOf(commented.data)).toContain("before");
+			expect(retOf(commented.data)).toContain("after");
+
+			// Statements on one line are a partial run too: the add before
+			// `:error` is applied, so the write's outcome is unknown.
+			const oneLine = await executeEnvelope({
+				...base,
+				command:
+					"/ip/firewall/address-list/add list=centrs-s6 address=192.0.2.67; :error boom",
+				yes: true,
+			});
+			expect(oneLine.ok).toBe(false);
+			if (oneLine.ok) return;
+			expect(oneLine.error.context).toMatchObject({
+				via: "ssh",
+				exitCode: 1,
+				partialRunPossible: true,
+			});
+			expect(oneLine.warnings.map((w) => w.code)).toContain(
+				"transport/write-outcome-unknown",
+			);
+			const s6List = asRecordArray(await chr.rest("/ip/firewall/address-list"));
+			expect(s6List.some((a) => a["address"] === "192.0.2.67")).toBe(true);
+
+			// A diagnostic RouterOS prints after earlier output is still
+			// recognized: the duplicate add fails at run time, after `:put`.
+			const dup = await executeEnvelope({
+				...base,
+				command:
+					":put before\n/ip/firewall/address-list/add list=centrs-s6 address=192.0.2.67",
+				yes: true,
+			});
+			expect(dup.ok).toBe(false);
+			if (dup.ok) return;
+			const dupOutput = String(dup.error.context?.["output"]);
+			expect(dupOutput.startsWith("before\n")).toBe(true);
+			expect(dup.error.context?.["detail"]).toBe(
+				dupOutput.slice("before\n".length),
+			);
+			expect(dup.error.code).toBe("routeros/command-failed");
+			expect(String(dup.error.context?.["failure"])).toContain(
+				"already have such entry",
+			);
+
+			// A loop's one statement can apply on an earlier iteration than the
+			// one that fails: the first adds the entry, the second fails on the
+			// duplicate, so the write's outcome is unknown.
+			const loop = await executeEnvelope({
+				...base,
+				command:
+					":foreach i in={1;2} do={ /ip/firewall/address-list/add list=centrs-s6 address=192.0.2.200 }",
+				yes: true,
+			});
+			expect(loop.ok).toBe(false);
+			if (loop.ok) return;
+			expect(loop.error.context).toMatchObject({
+				via: "ssh",
+				exitCode: 1,
+				partialRunPossible: true,
+			});
+			expect(loop.warnings.map((w) => w.code)).toContain(
+				"transport/write-outcome-unknown",
+			);
+			const loopList = asRecordArray(
+				await chr.rest("/ip/firewall/address-list"),
+			);
+			expect(loopList.some((a) => a["address"] === "192.0.2.200")).toBe(true);
+
+			// A CRLF comment inside a continued statement: one CR per line break,
+			// so the continuation reaches `"after"`.
+			const crlf = await executeEnvelope({
+				...base,
+				command: ':put \\\r\n# comment\r\n"after"',
+				yes: true,
+			});
+			expect(crlf.ok, crlf.ok ? "" : JSON.stringify(crlf.error)).toBe(true);
+			if (!crlf.ok) return;
+			expect(retOf(crlf.data)).toBe("after");
+
+			// S7 — the budget runs out mid-script: an execution timeout that names
+			// the budget and keeps the output printed before the cutoff (#592).
+			const cut = await executeEnvelope({
+				...base,
+				command: ":put begin; :delay 6s; :put end",
+				timeout: "3s",
+				yes: true,
+			});
+			expect(cut.ok).toBe(false);
+			if (cut.ok) return;
+			expect(cut.error.code).toBe("transport/timeout");
+			expect(cut.error.summary).toContain("did not finish within 3s");
+			expect(cut.error.context).toMatchObject({
+				timeoutMs: 3000,
+				sessionReached: true,
+				partialOutput: "begin",
+				outputComplete: false,
+			});
+
+			// S7 — a silent command is still an execution timeout: OpenSSH logged
+			// this invocation's login (`LogLevel=VERBOSE`), so it reached RouterOS.
+			const silent = await executeEnvelope({
+				...base,
+				command: ":delay 6s",
+				timeout: "3s",
+				yes: true,
+			});
+			expect(silent.ok).toBe(false);
+			if (silent.ok) return;
+			expect(silent.error.code).toBe("transport/timeout");
+			expect(silent.error.summary).toContain("may still be running");
+			expect(silent.error.context).toMatchObject({ sessionReached: true });
+
+			// S7 — the `:parse` check answers, then the command's own handshake
+			// stalls: each exec is a fresh login, so the earlier answer does not
+			// make this a running command.
+			const proxy = await startStallProxy(chr.sshPort);
+			try {
+				const viaProxy = { ...base, port: proxy.port };
+				// A write, so the stalled run would carry the unknown-outcome
+				// warning if it were counted as sent.
+				const control = await executeEnvelope({
+					...viaProxy,
+					command:
+						"/ip/firewall/address-list/add list=centrs-stall address=192.0.2.201",
+					yes: true,
+				});
+				expect(
+					control.ok,
+					control.ok ? "" : JSON.stringify(control.error),
+				).toBe(true);
+				const connections = proxy.state.seen;
+				expect(connections).toBeGreaterThanOrEqual(2);
+				proxy.state.seen = 0;
+				proxy.state.forwardFirst = connections - 1;
+				const stalled = await executeEnvelope({
+					...viaProxy,
+					command:
+						"/ip/firewall/address-list/add list=centrs-stall address=192.0.2.202",
+					timeout: "1500ms",
+					yes: true,
+				});
+				expect(stalled.ok).toBe(false);
+				if (stalled.ok) return;
+				expect(stalled.error.code).toBe("transport/timeout");
+				expect(stalled.error.summary).not.toContain("may still be running");
+				expect(stalled.error.context?.["sessionReached"]).not.toBe(true);
+				// The command never left, so it is not reported as a sent write.
+				expect(stalled.warnings.map((w) => w.code)).not.toContain(
+					"transport/write-outcome-unknown",
+				);
+				const stallList = asRecordArray(
+					await chr.rest("/ip/firewall/address-list"),
+				);
+				expect(stallList.some((a) => a["address"] === "192.0.2.202")).toBe(
+					false,
+				);
+			} finally {
+				proxy.close();
+			}
+
 			const res = asRecord(await chr.rest("/system/resource"));
 			await recordIntegrationEvidence({
 				suite: "execute over ssh (per-command ssh host)",
@@ -172,7 +434,7 @@ describeFast("execute over ssh (per-command ssh host)", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: [1, 2, 3, 4],
+				exampleIds: [1, 2, 3, 4, "S6", "S7"],
 			});
 		} finally {
 			await chr.destroy();

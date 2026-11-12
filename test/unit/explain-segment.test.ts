@@ -878,4 +878,27 @@ describe("countExecutableStatements — dispatch effects at any depth (#549)", (
 	])("counts %s as %i", (input, count) => {
 		expect(countExecutableStatements(input)).toBe(count);
 	});
+
+	// With `loopsRepeat` (SSH remote exit, #576), a loop body may run more
+	// than once, so a later iteration can fail after an earlier one applied.
+	test.each([
+		[
+			":foreach i in={1;2} do={ /ip/firewall/address-list/add list=l address=192.0.2.200 }",
+			2,
+		],
+		[":for i from=1 to=2 do={ :put $i }", 2],
+		[":while (true) do={ :put 1 }", 2],
+		[":do { :put 1 } while=(false)", 2],
+		[":if (true) do={ :foreach i in={1;2} do={ :put $i } }", 2],
+		// Not loops: an `:if`, a plain `:do`, and a stored loop body.
+		[":if (true) do={ /user/add name=u }", 1],
+		[":do { :put 1 }", 1],
+		[
+			"/system/script/add name=x source={ :foreach i in={1;2} do={ :put $i } }",
+			1,
+		],
+		["/ip/address/add address=192.0.2.1/32 interface=ether1", 1],
+	])("loopsRepeat counts %s as %i", (input, count) => {
+		expect(countExecutableStatements(input, { loopsRepeat: true })).toBe(count);
+	});
 });

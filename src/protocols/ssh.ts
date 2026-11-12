@@ -14,7 +14,13 @@
  * See `commands/execute/README.md` (ssh) and `commands/terminal/README.md`.
  */
 
+import { mapRouterOsResultError } from "../core/routeros-errors.ts";
 import { CentrsError } from "../errors.ts";
+import {
+	countExecutableStatements,
+	maskComments,
+	scanQuotedString,
+} from "../explain/segment.ts";
 import { formatEndpoint } from "./endpoint.ts";
 
 export interface SshConnectionConfig {
@@ -132,9 +138,10 @@ export function sshUserHost(config: SshConnectionConfig): string {
 /**
  * Map a host-`ssh` connect/auth failure (non-zero exit) to a CentrsError. Mirrors
  * the connect-level cases in {@link ./sftp.ts}'s `mapError` — both clients face
- * the same OpenSSH stderr. RouterOS *command* failures do not land here: a valid
- * SSH channel exits 0 and surfaces RouterOS errors in stdout (the execute
- * orchestrator's `routerOsFailureFromResult` classifies those).
+ * the same OpenSSH stderr. RouterOS *command* failures do not land here: an
+ * error the channel reports with exit 0 is classified from stdout by the execute
+ * orchestrator's `routerOsFailureFromResult`, and a nonzero remote exit (not
+ * 255) is `SshExecClient`'s `remoteExitError` (#576).
  */
 export function mapSshConnectError(
 	stderr: string,
@@ -215,6 +222,68 @@ export function mapSshConnectError(
 }
 
 /**
+ * Encode a script for one `ssh host "<command>"` exec. Over SSH exec, RouterOS
+ * ends the prompt at every LF (and CRLF): each line runs on its own, so menu
+ * context, `:local` values and `{ }` blocks do not carry across lines. A CR is
+ * a line break *inside* the prompt, like Enter inside a console block: the
+ * script runs as one unit, and an error stops the rest with a nonzero exit.
+ * Measured on CHR 7.25.1 and 7.24.6 (#576). So line breaks outside quoted
+ * strings are sent as CR, which runs the script the way `:parse` validated it
+ * and the way REST and native-API `/execute` run it.
+ *
+ * A raw line break inside a quoted string cannot be sent faithfully (an LF
+ * ends the prompt mid-string; a CR would change the string's bytes), so it is
+ * refused before anything is sent. Comments and strings are found with the
+ * same scanners `explain` uses (`maskComments`, `scanQuotedString`), so a
+ * quote inside a comment, including one after `;` or `{`, opens no string.
+ * Line breaks are read from the original text, not the mask: the mask blanks
+ * the CR of a CRLF that ends a comment, and a continued statement can cross
+ * that comment (`:put \` CRLF `# note` CRLF `"after"`).
+ */
+export function encodeSshScript(command: string): string {
+	const trimmed = command.replace(/[\r\n]+$/, "");
+	// Comments are blanked at the same offsets, so their quotes are not scanned.
+	// A lone CR is a line break over SSH (it is what this encoder sends), but
+	// the mask ends a comment only at LF, so a comment would swallow the next
+	// line: mask a copy with lone CRs as LF (same length, same offsets).
+	const masked = maskComments(trimmed.replace(/\r(?!\n)/g, "\n"));
+	let out = "";
+	for (let i = 0; i < trimmed.length; i++) {
+		const ch = masked[i];
+		if (ch === '"') {
+			const { end } = scanQuotedString(masked, i);
+			const literal = trimmed.slice(i, end);
+			if (/[\r\n]/.test(literal)) {
+				throw new CentrsError({
+					code: "transport/capability-unsupported",
+					summary:
+						"A quoted string in this script contains a raw line break, which cannot be sent over SSH.",
+					remediation:
+						"Write the line break as an escape inside the string (`\\n`), or run the script with `--via rest-api` or `--via native-api`.",
+					context: { via: "ssh", operation: "multi-line string" },
+				});
+			}
+			out += literal;
+			i = end - 1;
+			continue;
+		}
+		const raw = trimmed[i];
+		if (raw === "\r" || raw === "\n") {
+			if (raw === "\r" && trimmed[i + 1] === "\n") i++;
+			out += "\r";
+			continue;
+		}
+		out += raw;
+	}
+	return out;
+}
+
+/** `10s`, `1.5s`, or `250ms` for a budget in milliseconds. */
+function formatBudget(timeoutMs: number): string {
+	return timeoutMs >= 1000 ? `${timeoutMs / 1000}s` : `${timeoutMs}ms`;
+}
+
+/**
  * Normalize RouterOS console output captured over `ssh host "cmd"`: CRLF→LF, trim
  * each line's trailing column padding, and drop leading/trailing blank lines.
  * Leading indentation (RouterOS's `print` alignment) is preserved — it is content.
@@ -236,6 +305,39 @@ export interface SshExecResult {
 	exitCode: number;
 	stdout: string;
 	stderr: string;
+	/** The runner killed `ssh` because the budget ran out (#592). */
+	timedOut?: boolean;
+}
+
+/**
+ * OpenSSH exits 255 for its own failures (connect, auth, host key) and
+ * otherwise passes the remote command's exit status through.
+ */
+const SSH_CLIENT_ERROR_EXIT = 255;
+
+/**
+ * `LogLevel=VERBOSE` makes OpenSSH log `Authenticated to <host> ([<addr>]:<port>)
+ * using "<method>".` once login completes (OpenSSH 10.6 against CHR 7.25.1 and
+ * 7.24.6). Each `exec` is a fresh `ssh` process and login, so this line is the
+ * evidence that *this* invocation reached RouterOS; an earlier invocation's
+ * success says nothing about the next handshake. `ControlPath=none` keeps it
+ * a fresh login: a multiplexed `ssh` logs nothing. The level also adds the
+ * `Transferred:` / `Bytes per second:` exit summary; both are progress lines
+ * and are dropped before stderr is read for a failure.
+ */
+const SSH_VERBOSE_PROGRESS =
+	/^(?:Authenticated to |Transferred: |Bytes per second: )/;
+
+/** stderr without OpenSSH's verbose progress lines, and whether login completed. */
+export function readExecStderr(stderr: string): {
+	authenticated: boolean;
+	stderr: string;
+} {
+	const lines = stderr.split(/\r?\n/);
+	return {
+		authenticated: lines.some((line) => line.startsWith("Authenticated to ")),
+		stderr: lines.filter((line) => !SSH_VERBOSE_PROGRESS.test(line)).join("\n"),
+	};
 }
 
 /** Injectable runner (the default spawns the host `ssh`); tests pin behavior. */
@@ -243,6 +345,17 @@ export type SshExecRunner = (
 	argv: readonly string[],
 	timeoutMs: number,
 ) => Promise<SshExecResult>;
+
+/** Options for one {@link SshExecClient.exec}. */
+export interface SshExecOptions {
+	/**
+	 * Passed only for the requested command, never for a check before it.
+	 * Fires once this invocation shows it reached RouterOS (a logged login,
+	 * output, or a remote exit status), and never for a connect or login
+	 * failure: the adapter's `ProtocolSendOptions.onSent` contract (#448).
+	 */
+	onSent?: () => void;
+}
 
 export interface SshExecClientConfig extends SshConnectionConfig {
 	/** Override the `ssh` binary path (tests). */
@@ -271,25 +384,218 @@ export class SshExecClient {
 			"-p",
 			String(this.config.port),
 			...sshCommonOptions(this.config),
+			// Login evidence for this invocation (see SSH_VERBOSE_PROGRESS).
+			"-o",
+			"LogLevel=VERBOSE",
+			// No connection reuse: a command sent over a `ControlMaster`
+			// connection from the user's config skips login and logs nothing,
+			// so a silent cut-off command would read as never sent (CHR 7.25.1).
+			// A command-line option overrides the config file.
+			"-o",
+			"ControlPath=none",
 			"--",
 			sshUserHost(this.config),
 			command,
 		];
 	}
 
-	/** Run one command; returns cleaned stdout. Throws on connect/auth failure. */
-	async exec(command: string): Promise<string> {
-		const result = await this.run(this.argv(command), this.config.timeoutMs);
-		if (result.exitCode !== 0) {
-			throw mapSshConnectError(result.stderr, result.exitCode, {
+	/**
+	 * Run one command; returns cleaned stdout. Throws on a connect/auth failure,
+	 * on a timeout (keeping any output captured before it, #592), and when
+	 * RouterOS ends the command with a nonzero exit (#576).
+	 */
+	async exec(command: string, options: SshExecOptions = {}): Promise<string> {
+		const ran = await this.run(this.argv(command), this.config.timeoutMs);
+		const { authenticated, stderr } = readExecStderr(ran.stderr);
+		const result = { ...ran, stderr };
+		// Evidence from this invocation that it reached RouterOS: OpenSSH
+		// logged the login, RouterOS printed something, or it exited 0.
+		const reached =
+			authenticated ||
+			result.stdout.trim() !== "" ||
+			(!result.timedOut && result.exitCode === 0);
+		if (reached) options.onSent?.();
+		const connect = (): CentrsError =>
+			mapSshConnectError(result.stderr, result.exitCode, {
 				host: this.config.host,
 				port: this.config.port,
 				op: "execute",
 				sshKeySelected: Boolean(this.config.sshKey),
 			});
+		if (result.timedOut) {
+			if (reached) {
+				// Only the requested command (the call that tracks dispatch) may
+				// still be running; a check before it was all that ran.
+				throw options.onSent
+					? this.timeoutError(result)
+					: this.checkTimeoutError(result);
+			}
+			// No sign the session reached RouterOS. OpenSSH's own connect
+			// failure, when it printed one first, names the cause.
+			const early = connect();
+			throw early.code === "transport/network"
+				? this.noAnswerTimeoutError(result)
+				: early;
+		}
+		if (result.exitCode !== 0) {
+			const failure = connect();
+			// stderr evidence of a connect/auth problem wins; otherwise a non-255
+			// exit is the remote command's own status.
+			if (
+				failure.code !== "transport/network" ||
+				result.exitCode === SSH_CLIENT_ERROR_EXIT
+			) {
+				throw failure;
+			}
+			// A remote exit status is RouterOS's answer, so the command ran.
+			if (!reached) options.onSent?.();
+			throw this.remoteExitError(command, result);
 		}
 		return cleanConsoleOutput(result.stdout);
 	}
+
+	/**
+	 * A check before the requested command (the `:parse` gate, a version
+	 * probe) logged in and then ran out of budget. Checks do not execute the
+	 * command, and the command is sent only after they answer, so it was not
+	 * sent.
+	 */
+	private checkTimeoutError(result: SshExecResult): CentrsError {
+		const { host, port, timeoutMs } = this.config;
+		return new CentrsError({
+			code: "transport/timeout",
+			summary: `SSH to ${formatEndpoint(host, port)} logged in, but the check before the command did not finish within ${formatBudget(timeoutMs)}; the command was not sent.`,
+			remediation: `Raise \`--timeout\` (or \`CENTRS_TIMEOUT\`, it was ${formatBudget(timeoutMs)}); a loaded router can answer slowly. The check only parses the command, so nothing on the router changed.`,
+			context: {
+				via: "ssh",
+				host,
+				port,
+				op: "execute",
+				timeoutMs,
+				sessionReached: true,
+				commandSent: false,
+			},
+			causeData: result.stderr.trim() || "timed out",
+		});
+	}
+
+	/**
+	 * The budget ran out while the requested command ran: this invocation
+	 * logged in to RouterOS, or printed output. So this is an execution
+	 * timeout, and the command may still be running: on CHR 7.25.1 and 7.24.6 a
+	 * script kept going after `ssh` was killed and finished its write about 10 s
+	 * later (#592).
+	 */
+	private timeoutError(result: SshExecResult): CentrsError {
+		const { host, port, timeoutMs } = this.config;
+		const partial = cleanConsoleOutput(result.stdout);
+		return new CentrsError({
+			code: "transport/timeout",
+			summary: `SSH execute on ${formatEndpoint(host, port)} did not finish within ${formatBudget(timeoutMs)}; the command may still be running on the router.`,
+			remediation: `Raise \`--timeout\` (or \`CENTRS_TIMEOUT\`) above the command's run time; it was ${formatBudget(timeoutMs)}. Disconnecting does not stop a running RouterOS script, so check its effect (for example \`/system/script/job\`) before running it again.${partial ? " The output printed before the cutoff is in `context.partialOutput`; it is incomplete." : ""}`,
+			context: {
+				via: "ssh",
+				host,
+				port,
+				op: "execute",
+				timeoutMs,
+				sessionReached: true,
+				...(partial ? { partialOutput: partial, outputComplete: false } : {}),
+			},
+			causeData: result.stderr.trim() || "timed out",
+		});
+	}
+
+	/**
+	 * The budget ran out with no sign that this invocation reached RouterOS:
+	 * OpenSSH logged no completed login and nothing was printed. The stall is
+	 * in connect or login (an unreachable host, a router restart or connection
+	 * limit between the `:parse` check and the command), so the command was
+	 * most likely not sent.
+	 */
+	private noAnswerTimeoutError(result: SshExecResult): CentrsError {
+		const { host, port, timeoutMs } = this.config;
+		return new CentrsError({
+			code: "transport/timeout",
+			summary: `SSH to ${formatEndpoint(host, port)} got no answer within ${formatBudget(timeoutMs)}; the connection or login may not have completed.`,
+			remediation: `Confirm the host and port are reachable and the RouterOS SSH service is enabled (\`/ip service\`); raise \`--timeout\` (or \`CENTRS_TIMEOUT\`, it was ${formatBudget(timeoutMs)}) for a slow link. OpenSSH reported no completed login for this attempt, so the command was most likely not sent; for a write, check its effect before running it again.`,
+			context: {
+				via: "ssh",
+				host,
+				port,
+				op: "execute",
+				timeoutMs,
+				sessionReached: false,
+			},
+			causeData: result.stderr.trim() || "timed out",
+		});
+	}
+
+	/**
+	 * RouterOS ran the command and ended it with a nonzero exit. Its diagnostic
+	 * is on stdout (CHR 7.25.1 / 7.24.6: `bad command name print (line 1
+	 * column 1)`); a recognized one keeps its specific `routeros/*` code.
+	 */
+	private remoteExitError(command: string, result: SshExecResult): CentrsError {
+		const { host, port } = this.config;
+		const output = cleanConsoleOutput(result.stdout);
+		const stderr = result.stderr.trim();
+		// Statements, not physical lines: `/file/add …; :error boom` on one line
+		// also leaves the first statement applied, and a loop's one statement
+		// can apply on an earlier iteration than the one that fails. The
+		// command arrives CR-encoded (`encodeSshScript`, no raw break left
+		// inside a string), so CR is a line break here.
+		const multiStatement =
+			countExecutableStatements(command.replace(/\r\n?/g, "\n"), {
+				loopsRepeat: true,
+			}) > 1;
+		const context = {
+			via: "ssh",
+			host,
+			port,
+			op: "execute",
+			exitCode: result.exitCode,
+			...(output ? { output } : {}),
+			...(stderr ? { stderr } : {}),
+			// RouterOS stops at the failing statement; the ones before it ran (#576).
+			...(multiStatement ? { partialRunPossible: true } : {}),
+		};
+		const recognized = output ? diagnosticError(output, context) : undefined;
+		if (recognized) {
+			return recognized;
+		}
+		const lineNote = multiStatement
+			? " RouterOS stops a script at the failing statement, so the statements (and loop iterations) before it have already run; check their effect before running the script again."
+			: "";
+		return new CentrsError({
+			code: "routeros/command-failed",
+			summary: output
+				? `RouterOS ended the SSH command with exit ${result.exitCode}: ${output.split("\n")[0]}`
+				: `RouterOS ended the SSH command with exit ${result.exitCode} and printed no diagnostic.`,
+			remediation: `The command reached the router and RouterOS refused it; its output is in \`context.output\`.${lineNote}`,
+			context,
+			causeData: output || stderr || `exit ${result.exitCode}`,
+		});
+	}
+}
+
+/**
+ * The RouterOS diagnostic in the output of a command that exited nonzero.
+ * RouterOS prints it last, after whatever the statements before the failure
+ * printed (`:put before` then `bad command name …`), so when the whole output
+ * is not a diagnostic, its last line is tried. The full output stays in
+ * `context.output`.
+ */
+function diagnosticError(
+	output: string,
+	context: Record<string, unknown>,
+): CentrsError | undefined {
+	const opts = { transport: "ssh" as const, context };
+	const whole = mapRouterOsResultError(output, opts);
+	if (whole) return whole;
+	const lines = output.split("\n");
+	if (lines.length < 2) return undefined;
+	return mapRouterOsResultError(lines[lines.length - 1] ?? "", opts);
 }
 
 function startSsh(argv: readonly string[]) {
@@ -331,7 +637,8 @@ async function spawnSshExec(
 		return {
 			exitCode,
 			stdout,
-			stderr: timedOut ? `${stderr}\nConnection timed out`.trim() : stderr,
+			stderr,
+			timedOut,
 		};
 	} finally {
 		clearTimeout(timer);

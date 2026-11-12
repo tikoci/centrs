@@ -35,7 +35,7 @@ import {
 	type NativeApiCommand,
 	type NativeApiSession,
 } from "./native-api.ts";
-import { SshExecClient } from "./ssh.ts";
+import { encodeSshScript, SshExecClient } from "./ssh.ts";
 
 /** Connection inputs an adapter needs, free of retrieve-specific resolver types. */
 export interface ProtocolAdapterConfig {
@@ -1225,8 +1225,12 @@ class SshExecAdapter implements ProtocolAdapter {
 					"Report this bug; runCommand must pass the raw command as `script` for ssh.",
 			});
 		}
-		options?.onSent?.();
-		const output = await this.client.exec(cli);
+		// A script SSH cannot carry is refused before anything is sent (#576).
+		const wire = encodeSshScript(cli);
+		// One `ssh` process spans connect, login and the command, so the client
+		// fires `onSent` from this invocation's evidence that it reached
+		// RouterOS, not before connecting. Without `onSent` this is a check.
+		const output = await this.client.exec(wire, options);
 		return { records: [], ret: output };
 	}
 

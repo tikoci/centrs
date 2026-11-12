@@ -16,11 +16,12 @@ import slice from "../fixtures/explain/context-matrix.slice.json" with {
  * disagrees with the slice means the slice (and these assertions) needs
  * re-recording, not a silent update.
  *
- * Two cells are KNOWN centrs bugs, not device answers: the mac-telnet reader
- * drops :put output for trailing-newline single-line sends (the committed
- * raw screens prove the device printed), and ssh multiline menu navigation
- * exits 1 while validation passed. Both have follow-up issues; the slice
- * pins the broken behavior until a re-recorded matrix shows the fix.
+ * One cell family is a KNOWN centrs bug, not a device answer: the mac-telnet
+ * reader drops :put output for trailing-newline single-line sends (the
+ * committed raw screens prove the device printed). It has a follow-up issue;
+ * the slice pins the broken behavior until a re-recorded matrix shows the fix.
+ * The ssh multiline cells were re-recorded after #576 fixed them (CR line
+ * breaks keep one prompt); only those three cells changed.
  */
 
 interface Submission {
@@ -97,13 +98,12 @@ describe("context-matrix evidence slice (#574)", () => {
 		expect(out(cell("I4-braces-multi-session"), 0)).toContain("a=2");
 	});
 
-	test("ssh and mac-telnet run multiline sends per line", () => {
-		const ssh = out(cell("I1-nl-scope-ssh"), 0);
-		expect(ssh).toContain("syntax error (line 1 column 6)");
-		expect(ssh).toContain("a=");
-		expect(ssh).not.toContain("a=2");
-		const sshBraces = out(cell("I4-braces-multi-ssh"), 0);
-		expect(sshBraces).toContain("missing closing brace (line 1 column 2)");
+	test("ssh runs a multiline send as one prompt (#576); mac-telnet runs it per line", () => {
+		// Before #576, LF ended the SSH exec prompt and each line ran alone
+		// (`syntax error (line 1 column 6)` + `a=`).
+		expect(out(cell("I1-nl-scope-ssh"), 0)).toContain("a=2");
+		expect(out(cell("I1-nl-scope-ssh"), 0)).not.toContain("syntax error");
+		expect(out(cell("I4-braces-multi-ssh"), 0)).toContain("a=2");
 		const mac = out(cell("I1-nl-scope-mactelnet"), 0);
 		expect(mac).toContain("a=");
 		expect(mac).not.toContain("a=2");
@@ -162,16 +162,16 @@ describe("context-matrix evidence slice (#574)", () => {
 		for (const id of [
 			"I6-menu-rest",
 			"I6-menu-native",
+			"I6-menu-ssh",
 			"I6-menu-stored",
 			"I6-menu-mactelnet",
 			"I6-menu-session",
 		])
 			expect(out(cell(id), 0)).toContain("192.0.2.44");
-		// ...except ssh, where the device channel exits 1 with no output
-		// after validation passed (reproduced 3/3; follow-up filed).
+		// ssh joined this list with #576; before it, the LF-split send exited 1
+		// with no output (recorded as transport/network).
 		const ssh = cell("I6-menu-ssh").submissions[0];
-		expect(code(cell("I6-menu-ssh"), 0)).toBe("transport/network");
-		expect(ssh?.infraSuspect).toBe(true);
+		expect(ssh?.ok).toBe(true);
 		expect(ssh?.stages).toContainEqual(["device", "passed"]);
 	});
 
