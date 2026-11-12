@@ -243,7 +243,10 @@ export function mapSshConnectError(
 export function encodeSshScript(command: string): string {
 	const trimmed = command.replace(/[\r\n]+$/, "");
 	// Comments are blanked at the same offsets, so their quotes are not scanned.
-	const masked = maskComments(trimmed);
+	// A lone CR is a line break over SSH (it is what this encoder sends), but
+	// the mask ends a comment only at LF, so a comment would swallow the next
+	// line: mask a copy with lone CRs as LF (same length, same offsets).
+	const masked = maskComments(trimmed.replace(/\r(?!\n)/g, "\n"));
 	let out = "";
 	for (let i = 0; i < trimmed.length; i++) {
 		const ch = masked[i];

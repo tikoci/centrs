@@ -517,6 +517,10 @@ describe("encodeSshScript (#576)", () => {
 			':put \\\r# comment\r"after"',
 		);
 		expect(encodeSshScript("# a\r\n# b\r\n:put 1")).toBe("# a\r# b\r:put 1");
+		// A quote in a CR-only comment opens no string either.
+		expect(encodeSshScript("# it's \"odd\r:put 1")).toBe(
+			"# it's \"odd\r:put 1",
+		);
 	});
 
 	test("a raw line break inside a quoted string is refused", () => {
@@ -524,6 +528,8 @@ describe("encodeSshScript (#576)", () => {
 			':put "a\nb"',
 			':put "a\\\nb"',
 			'{ :put "a\r\nb" }',
+			// A lone CR ends the comment, so the string after it is scanned.
+			'# note\r:put "a\nb"',
 		]) {
 			expect(() => encodeSshScript(script)).toThrow(
 				expect.objectContaining({ code: "transport/capability-unsupported" }),
