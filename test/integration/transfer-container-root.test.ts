@@ -17,6 +17,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { transferEnvelope } from "../../src/transfer.ts";
+import { HERMETIC_ENV } from "../unit/hermetic-env.ts";
 import {
 	isChrIntegrationEnabled,
 	readEnv,
@@ -72,7 +73,7 @@ describeFast("transfer under a container root (#636)", () => {
 			// Container root from the committed image: upload the tar, add.
 			const imageUp = await transferEnvelope(
 				{ ...base, verb: "upload", local: IMAGE, remote: "scratch-hello.tar" },
-				{},
+				HERMETIC_ENV,
 			);
 			expect(imageUp.ok, JSON.stringify(imageUp)).toBe(true);
 			for (const command of [
@@ -116,7 +117,7 @@ describeFast("transfer under a container root (#636)", () => {
 						{ ...base, ...extra, via, ...request } as Parameters<
 							typeof transferEnvelope
 						>[0],
-						{},
+						HERMETIC_ENV,
 					);
 
 				const up = await call({ verb: "upload", local: firstPath, remote });
@@ -174,7 +175,7 @@ describeFast("transfer under a container root (#636)", () => {
 					remote: `${ROOT}/hello.txt`,
 					local: join(work, "hello.txt"),
 				},
-				{},
+				HERMETIC_ENV,
 			);
 			expect(hello.ok, JSON.stringify(hello)).toBe(true);
 			expect(await readFile(join(work, "hello.txt"), "utf8")).toBe(
