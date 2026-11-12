@@ -148,7 +148,9 @@ per push, so a regression on main surfaces within a day and then blocks
 ordinary merges through main health; macOS/Windows **integration** is the
 dispatch-only `verify-extended` sweep. `startIntegrationChr` now takes arch +
 packages from quickchr (`CENTRS_CHR_ARCH`, `CENTRS_CHR_PACKAGES`), so the
-centrs side is ready; what stays deferred is the **arm64 job** — quickchr 0.4.2
-has an arm64 REST-POST bug (returns the prior GET's body; quickchr BACKLOG P3)
-that breaks centrs's execute path, so an arm64 job would be known-red until that
-upstream fix lands — and wiring extra packages into the release gate (#97).
+centrs side is ready; what stays deferred is the **arm64 job** and wiring extra
+packages into the release gate (#97). quickchr 0.4.2's arm64 REST-POST bug
+(a POST returned the prior GET's body) was gone by quickchr 0.4.7: a
+`/console/inspect` POST answered correctly on an arm64 CHR 7.23.3 under TCG
+(2026-08-04). centrs's own integration tier has not been run on arm64 since,
+so an arm64 job needs that run first.

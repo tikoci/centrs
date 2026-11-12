@@ -6,9 +6,11 @@ import {
 	buildTerminalErrorEnvelope,
 	resolveTerminalRequest,
 } from "../../src/index.ts";
+import { HERMETIC_ENV } from "./hermetic-env.ts";
 
 const MAC = "aa:bb:cc:dd:ee:ff";
-const noEnv: Record<string, string | undefined> = {};
+// Never `{}`: a bare map falls back to the developer's real CDB (#550).
+const noEnv = HERMETIC_ENV;
 
 describe("terminal rejects a multi-target selection (single-session)", () => {
 	for (const flag of [

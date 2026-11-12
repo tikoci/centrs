@@ -11,11 +11,10 @@ type Channel = "stable" | "long-term" | "testing" | "development";
 
 /**
  * Guest architecture quickchr can boot (subset of its `Arch`). Default is the
- * host arch; `CENTRS_CHR_ARCH=arm64` forces an aarch64 CHR. NOTE: as of quickchr
- * 0.4.2 an arm64 CHR has a REST-POST bug (a `restPost` to `/rest/execute` returns
- * the prior `restGet`'s body — quickchr BACKLOG, P3), which breaks centrs's
- * execute path, so no arm64 integration job is wired yet — the plumbing here just
- * makes centrs ready for the day that lands. x86 is the validated path.
+ * host arch; `CENTRS_CHR_ARCH=arm64` forces an aarch64 CHR. quickchr 0.4.2's
+ * arm64 REST-POST bug (a POST returned the prior GET's body) was gone by 0.4.7
+ * (2026-08-04, arm64 CHR 7.23.3 under TCG), but this tier has not been run on
+ * arm64 since, so no arm64 job is wired. x86 is the validated path.
  */
 type Arch = "arm64" | "x86";
 

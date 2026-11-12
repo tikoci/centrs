@@ -17,6 +17,7 @@ on:
       - "docs/errors/**"
       - "package.json"
       - "scripts/build-pages-site.ts"
+      - "scripts/pages-links.ts"
       - "scripts/gen-error-pages.ts"
       - ".github/workflows/pages.yaml"
   workflow_dispatch: {}

@@ -813,7 +813,7 @@ export const projectSummary: ProjectSummary = {
 	name: "centrs",
 	version: centrsVersion,
 	description:
-		"RouterOS interaction hub for typed APIs, CLI, TUI, MCP, and proxy frontends.",
+		"RouterOS interaction hub for validated device access and offline analysis, from TypeScript, the CLI, or MCP.",
 	surfaces: plannedSurfaces,
 	protocols: plannedProtocols,
 	deviceSources: plannedDeviceSources,

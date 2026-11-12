@@ -14,117 +14,128 @@ no section of its own.
 
 ## 0.2.0 — next
 
+The minor bump marks the coming transport-default change (native-api first,
+with availability-aware fallback; not in these previews yet). Preview builds
+publish `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
+
 ### Changed
 
-- `centrs --help` lists only the protocols that work today. `snmp`, `romon`
-  and `winbox-terminal` are no longer advertised; `--via` with one of them
-  still fails as `routeros/protocol-not-implemented`. The fix text for a
-  protocol that cannot retrieve no longer suggests `snmp`, and the retrieve
-  docs no longer describe a planned SNMP form.
-- `centrs --help` lists only the surfaces that work today (`api`, `cli`,
-  `mcp`). The `tui` and `proxy` stubs are no longer advertised.
-- `devices set --strict` now allows deleting an unknown comment key
-  (`key=`), present or already absent, and no longer warns about it. Adding
-  or changing an unknown key under `--strict` is still refused (#623).
+- `centrs --help` lists only what works today: the `api`, `cli` and `mcp`
+  surfaces and the implemented protocols. `tui`, `proxy`, `snmp`, `romon` and
+  `winbox-terminal` are no longer advertised, and the help headline no longer
+  names TUI or proxy frontends. `--via` with an unimplemented protocol still
+  fails as `routeros/protocol-not-implemented`, and no fix text suggests
+  `snmp` any more.
+- `devices set --strict` may delete an unknown comment key (`key=`), present
+  or already absent, without a warning. Adding or changing an unknown key under
+  `--strict` is still refused (#623).
 - The Docker image runs as the base image's non-root `bun` user (user ID 1000)
   instead of root. **Container users:** the default config directory moves
   from `/root/.config/tikoci/` to `/home/bun/.config/tikoci/`. Mount your CDB
-  and `centrs.env` there, readable by user ID 1000. To keep the CDB elsewhere,
-  set `CENTRS_CDB_FILE` or pass `--cdb-file`; `XDG_CONFIG_HOME` moves only
-  `centrs.env` (#614).
+  and `centrs.env` there, readable by user ID 1000, or set `CENTRS_CDB_FILE` /
+  `--cdb-file`; `XDG_CONFIG_HOME` moves only `centrs.env` (#614).
 
 ### Fixed
 
+- `execute --via ssh` runs a multi-line script as one unit. RouterOS ended
+  the SSH exec prompt at every LF, so each line ran on its own: menu context
+  and `:local` values were lost, and a later line could exit 0 after an
+  earlier one failed. centrs now sends line breaks as CR, and refuses a raw
+  line break inside a quoted string before sending (#576).
+- `execute --via ssh`: a nonzero RouterOS exit is the router's answer, not
+  `transport/network`. Its diagnostic keeps a specific code such as
+  `routeros/unknown-path` (else `routeros/command-failed`), with the exit code
+  and full output in `context`. A write that fails partway gets
+  `transport/write-outcome-unknown` (#576).
+- `execute --via ssh` timeouts say what happened. After the session reached
+  RouterOS, the error names the budget, keeps the output so far
+  (`context.partialOutput`), says the command may still be running, and points
+  to `--timeout` / `CENTRS_TIMEOUT`. With no sign of the session, it says the
+  connection or login may not have completed (`context.sessionReached`), and a
+  write that never left gets no unknown-outcome warning (#592).
+- RouterOS's native-API `action timed out (13)` trap has its own code,
+  `routeros/action-timed-out`, instead of the `routeros/api-trap` catch-all.
+  It comes from commands with their own reply limit of about 60 s:
+  `/execute as-string`, which `execute` uses for every script over native API,
+  and `/container/shell`. The fix text says the command may still be running
+  or may have finished, that `--timeout` cannot extend the limit, and how to
+  run long work in the background. REST `Session closed` says the same about a
+  sent command. A sent write that ends either way carries
+  `transport/write-outcome-unknown`; when the trap hits a validation check
+  instead (`:parse` or `/console/inspect`), the error says the command was not
+  sent (`context.commandSent: false`) (#639).
 - `execute`: when RouterOS does not answer the `:parse` preflight (REST
-  `Session closed`, or a native-API `action timed out` trap), the error keeps
-  its own code and the device stage reads `not reached`. It used to be
-  relabeled `validation/syntax`, telling the caller to fix a command that was
-  fine (#638).
-- MAC-Telnet: when a device using RADIUS logins (`/user aaa use-radius=yes`)
-  answers MTWEI with a 33-byte PASSSALT (server key, no salt) because the
-  username has no local login, the login fails as `transport/auth-failed` with
-  a remediation that names the cause. It used to be reported as
-  `routeros/mac-telnet-unsupported-auth`, "unsupported salt length (33)",
-  which pointed at the device and RouterOS version (#559). Grounded on CHR
-  7.25.1 and 7.24.6.
-- EC-SRP5 (MAC-Telnet and btest): a peer public key whose parity byte is not 0
-  or 1 is refused as `routeros/ec-srp5-protocol` instead of being masked to its
-  low bit (#584).
-- `transfer` over rest/native works on files under a container's root
-  directory, which `/file print` does not list: a lookup with no listed row
-  now asks for the pathname directly, so `upload --force` overwrites instead
-  of failing "file already exists", and `download` and `remove` find the file
-  (#636). Grounded on CHR 7.25.1 and 7.24.6.
+  `Session closed`, native-API `action timed out`), the error keeps its own
+  code and the device stage reads `not reached`, instead of being relabeled
+  `validation/syntax` (#638).
+- `transfer` over rest/native finds files under a container's root
+  directory, which `/file print` does not list: `upload --force` overwrites
+  instead of failing "file already exists", and `download` and `remove` find
+  the file. Grounded on CHR 7.25.1 and 7.24.6 (#636).
 - `transfer upload` and `download` no longer report `verified: "size"` when
-  RouterOS shows no size for the file; that is now
-  `transport/incomplete-transfer`, and a download writes nothing locally
-  (#636, #589).
-- MCP: a tool result whose envelope has `ok: false` now sets `isError`, so a
-  host that follows the MCP spec shows the failure as a failure (#605).
-  `structuredContent`, an `outputSchema` and a default result-size budget are
-  still open on #605.
-- Error `detailsUrl`s now use the site's canonical host and the page's own
-  URL: `https://tikoci.dev/centrs/errors/<code>/`. The old
+  RouterOS shows no size for the file: that is `transport/incomplete-transfer`,
+  and a download writes nothing locally (#636, #589).
+- MAC-Telnet: a user with no local login on a RADIUS device
+  (`/user aaa use-radius=yes`), answered with a 33-byte MTWEI PASSSALT, now
+  fails as `transport/auth-failed` with a remediation that names the cause,
+  not `routeros/mac-telnet-unsupported-auth`. Grounded on CHR 7.25.1 and
+  7.24.6 (#559).
+- EC-SRP5 (MAC-Telnet and btest): a peer public key whose parity byte is not
+  0 or 1 is refused as `routeros/ec-srp5-protocol` instead of being masked to
+  its low bit (#584).
+- MCP: a tool result whose envelope has `ok: false` sets `isError`, so a host
+  that follows the MCP spec shows it as a failure. `structuredContent`, an
+  `outputSchema` and a result-size budget are still open (#605).
+- Error `detailsUrl`s use the canonical host and the page's own URL,
+  `https://tikoci.dev/centrs/errors/<code>/`. The old
   `https://tikoci.github.io/centrs/errors/<code>` links redirected through
-  plain HTTP, which some agent fetch tools refuse to follow. Old links still
-  redirect. Tip URLs move to the same host; the tip pages themselves are not
-  published yet (#464).
-- `execute --via ssh`: a command RouterOS ends with a nonzero exit is reported
-  as the router's answer (its diagnostic on stdout keeps a specific code such
-  as `routeros/unknown-path`, also when it follows earlier output, else
-  `routeros/command-failed`, with exit code and full output in `context`), not `transport/network` with the diagnostic
-  dropped. A write that fails partway, including a loop that fails on a later
-  iteration, gets `transport/write-outcome-unknown` (#576).
-- `execute --via ssh` runs a multi-line script as one unit. RouterOS ends the
-  SSH exec prompt at every LF, so each line ran on its own: menu context and
-  `:local` values were lost between lines, and a later line could exit 0 after
-  an earlier one failed. centrs now sends the script's line breaks as CR, a
-  line break inside the prompt. A raw line break inside a quoted string is
-  refused before sending (#576).
-- `execute --via ssh`: a timeout after the session reached RouterOS (OpenSSH
-  logged this invocation's login, or the command printed output) is now an
-  execution timeout that names the budget, keeps the output printed before the
-  cutoff (`context.partialOutput`), says the command may still be running on
-  the router, and points to `--timeout` and `CENTRS_TIMEOUT`. A timeout with
-  no sign of the session, such as an unreachable host, says the connection or
-  login may not have completed instead (`context.sessionReached`), and a write
-  that never left gets no unknown-outcome warning (#592).
-- RouterOS's native-API `action timed out (13)` trap now has its own code,
-  `routeros/action-timed-out`, instead of the `routeros/api-trap` catch-all
-  that said "the router may be busy". It comes from commands with their own
-  reply limit of about 60 s: `/execute as-string`, which `execute` uses for
-  every script over native API (it traps when the script ends on 7.25 and
-  later, at a fixed 60 s on 7.24.6), and `/container/shell`. The fix text says the
-  command may still be running or may have finished, that `--timeout` does not
-  extend the limit, and how to run long work in the background. REST
-  `Session closed` now says the same about a sent command, and keeps its own
-  60-second cap. A write that ends with either after it was sent carries
-  `transport/write-outcome-unknown`. When either comes from a validation
-  check before the command is sent (`execute`'s `:parse` or
-  `/console/inspect`, or the `/console/inspect` checks of `api` and
-  `retrieve`, `--follow` included), the error instead names that check and
-  says the command was not sent (`context.commandSent: false`) (#639).
+  plain HTTP, which some agent fetch tools refuse to follow; they still
+  redirect. Tip URLs move to the same host; tip pages are not published yet
+  (#464).
+- The published error pages: the catalog index lists every code with its
+  summary, and links between pages (and to repo docs) no longer 404 on the
+  site. The Pages build now fails on a broken relative link. The common
+  connection faults (`transport/connection-refused`, `network`, `timeout`,
+  `dns`, `tls-certificate`, `host-key-mismatch`, `connection-closed`,
+  `incomplete-transfer`, `auth/failed`) get real pages instead of stubs
+  (#464).
 
 ### Maintenance
 
-- A new `components/` tree holds specs for parts of centrs that span
-  commands, starting with `components/cmr/`. The matrix's four side tables
-  merge into one Components table, and its parked themes gain CMR across
-  surfaces, Provisioning, and a separate SNMP and OIDs theme.
-
-- Start the 0.2.0 development cycle with package version `0.2.0-next`. The
-  minor bump marks the coming transport-default change (native-api first, with
-  availability-aware fallback). Preview releases publish
-  `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
+- CI: a docs-only change runs repo checks only; unit tests run on Linux,
+  macOS and Windows; the CHR channel sweep moves to a nightly run that skips
+  when nothing changed, and a `Main health (nightly QA)` check blocks ordinary
+  PRs while the nightly is red on a must-pass channel (a `fixes-main` PR can
+  still merge). A release reuses the nightly sweep of its commit, or sweeps
+  itself (#631).
 - CHR integration tests can lease one default CHR per `bun test` process,
   restored to a baseline QEMU snapshot before each lease, instead of booting
-  one per test (#612). Seven multi-boot files opt in with
-  `startIntegrationChr({}, { reuse: true })`. A failed restore triggers one
-  replacement boot, then fails closed. `CENTRS_CHR_REUSE=0` restores
-  private boots everywhere.
-- Bump `@tikoci/quickchr` to `^0.5.4` (from 0.5.2). Its snapshot operations
-  get their own monitor timeouts (quickchr#80); 0.5.2's flat 5 s often cut a
-  CHR `savevm` short.
+  one per test (#612). `CENTRS_CHR_REUSE=0` restores private boots.
+- Bump `@tikoci/quickchr` to `^0.5.4`: its snapshot operations get their own
+  monitor timeouts (quickchr#80).
+- A new `components/` tree holds specs for parts of centrs that span commands,
+  starting with `components/cmr/`. The matrix's side tables merge into one
+  Components table, and its parked themes gain CMR across surfaces,
+  Provisioning, and SNMP and OIDs.
+
+### Known issues
+
+Confirmed, pre-existing defects carried into these previews; none is a
+regression from 0.1.10.
+
+- [#575](https://github.com/tikoci/centrs/issues/575): `execute --via
+  mac-telnet` can silently drop `:put` output from single-line commands with
+  a trailing newline. Use REST, native API, or SSH when reliable captured
+  output is required.
+- [#604](https://github.com/tikoci/centrs/issues/604): MCP authorization and
+  dialing read the CDB separately, so a concurrent record edit can change the
+  target, credentials or write policy in between. Avoid CDB edits during MCP
+  device calls.
+- [#657](https://github.com/tikoci/centrs/issues/657): `execute --cmr` drops a
+  connected client that RouterOS will not select (half-paired or pending) as
+  if no label matched.
+- [#464](https://github.com/tikoci/centrs/issues/464): tip `detailsUrl`s
+  point at pages that do not exist yet.
 
 ## 0.1.10 — 2026-11-05
 

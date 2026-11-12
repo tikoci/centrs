@@ -226,7 +226,7 @@ Notes:
 Errors are typed values, not thrown strings. Every error has:
 
 - `code` — slash-namespaced, RouterOS-style, no spaces. Example:
-  `routeros/unsupported-path`, `transport/connection-refused`,
+  `routeros/unknown-path`, `transport/connection-refused`,
   `validation/unknown-attribute`, `cdb/decrypt-failed`.
 - `message` — one human sentence. No stack trace.
 - `fix` — one human sentence describing the next step the caller should take.
@@ -505,7 +505,11 @@ Rules:
 
 REST-specific constraint: RouterOS REST has a 60-second hard timeout. Do not
 let `--timeout` exceed 60s when `via=rest-api`; reject with a clear error.
-Other transports may accept longer timeouts.
+Other transports may accept longer timeouts, but some RouterOS commands carry
+their own reply limit that `--timeout` cannot extend: over native API,
+`/execute as-string` (every `execute` script) and `/container/shell` drop
+their reply at about 60 s (`routeros/action-timed-out`, #639; measured limits
+in `commands/execute/README.md`).
 
 ### Transport trust (TLS / SSH host keys)
 
