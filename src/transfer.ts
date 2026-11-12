@@ -949,6 +949,18 @@ function verifyReadSize(
 				"RouterOS exposes no file digest over REST/native; verifying by size instead.",
 		});
 	}
+	// As for uploads: with no device-reported size there is nothing to compare,
+	// so REST/native never claim `size` (#636, #589). The check runs before the
+	// local sink is written. sftp rows carry no size by design.
+	if (expected === undefined && isRestFamily(resolved.method)) {
+		throw new CentrsError({
+			code: "transport/incomplete-transfer",
+			summary: `RouterOS reports no size for ${remote}, so the download could not be verified.`,
+			remediation:
+				"Nothing was written locally. Check the file with `transfer list` or `retrieve /file`, then re-run the download; use `--verify off` only if an unverified copy is acceptable.",
+			context: { remote, actual },
+		});
+	}
 	if (expected !== undefined && expected !== actual) {
 		throw new CentrsError({
 			code: "transport/incomplete-transfer",

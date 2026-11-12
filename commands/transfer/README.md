@@ -279,9 +279,12 @@ than re-reading a size. Two RouterOS facts shape the `/file`-size path:
 
 A confirmed shortfall (clear truncation after the poll window) is
 `transport/incomplete-transfer`. So is an upload whose result RouterOS cannot
-show at all (no row and no size): the write was sent, but nothing confirms it,
-so `verified: "size"` is never claimed without an observed size (#636). `--verify checksum` is stronger but only where
-RouterOS exposes a usable digest; otherwise it degrades to `size` with a warning.
+show at all (no row and no size): the write was sent, but nothing confirms it.
+A download of a file RouterOS reports no size for fails the same way, before
+anything is written locally. Over REST and native API, `verified: "size"` is
+never claimed without an observed size (#636). `--verify checksum` is stronger
+but only where RouterOS exposes a usable digest; otherwise it degrades to
+`size` with a warning.
 
 ## Output shape
 

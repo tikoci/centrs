@@ -867,6 +867,30 @@ describe("transfer: files /file print does not list (#636)", () => {
 		}
 	});
 
+	test("a download RouterOS reports no size for is not size-verified, and writes nothing", async () => {
+		const out = join(TMP, "hidden-no-size.txt");
+		const fetchMock = mockFetchSequence([
+			() => json([]),
+			() => json({ ret: "" }), // get by pathname: exists, no size
+			() => json({ ret: "hello-centrs" }),
+		]);
+		try {
+			let error: CentrsError | undefined;
+			try {
+				await runTransfer(
+					baseRequest({ verb: "download", remote: HIDDEN, local: out }),
+				);
+			} catch (caught) {
+				error = caught as CentrsError;
+			}
+			expect(error?.code).toBe("transport/incomplete-transfer");
+			expect(error?.summary).toContain("reports no size");
+			expect(existsSync(out)).toBe(false);
+		} finally {
+			fetchMock.restore();
+		}
+	});
+
 	test("remove addresses a hidden file by pathname", async () => {
 		const fetchMock = mockFetchSequence([
 			() => json([]),

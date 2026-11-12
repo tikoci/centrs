@@ -29,8 +29,9 @@ no section of its own.
   now asks for the pathname directly, so `upload --force` overwrites instead
   of failing "file already exists", and `download` and `remove` find the file
   (#636). Grounded on CHR 7.25.1 and 7.24.6.
-- `transfer upload` no longer reports `verified: "size"` when RouterOS shows
-  no size for the uploaded file; that is now `transport/incomplete-transfer`
+- `transfer upload` and `download` no longer report `verified: "size"` when
+  RouterOS shows no size for the file; that is now
+  `transport/incomplete-transfer`, and a download writes nothing locally
   (#636, #589).
 
 ### Maintenance
