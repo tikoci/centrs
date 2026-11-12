@@ -650,6 +650,51 @@ describe("retrieve error envelopes keep what resolution found (#433)", () => {
 });
 
 describe("retrieve meta.validation reports what the gate concluded (GH#435)", () => {
+	test("a `/console/inspect` check RouterOS dropped says the read was not sent (#639)", async () => {
+		const seen: string[] = [];
+		const server = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch(req) {
+				const path = new URL(req.url).pathname;
+				seen.push(path);
+				if (path === "/rest/console/inspect") {
+					return Response.json({ detail: "Session closed" }, { status: 400 });
+				}
+				return Response.json([]);
+			},
+		});
+		try {
+			const envelope = await retrieveEnvelope(
+				{
+					targetInput: `http://127.0.0.1:${server.port}`,
+					username: "admin",
+					password: "",
+					path: "/ip/address",
+				},
+				HERMETIC_ENV,
+			);
+			expect(envelope.ok).toBe(false);
+			if (envelope.ok) return;
+			expect(envelope.error.code).toBe("routeros/session-closed");
+			expect(envelope.error.summary).toContain("`/console/inspect` check");
+			expect(envelope.error.summary).toContain("the command was not sent");
+			expect(envelope.error.remediation).not.toContain("may still be running");
+			expect(envelope.error.context).toMatchObject({
+				commandSent: false,
+				validationSource: "/console/inspect request=child",
+			});
+			expect(seen.every((path) => path === "/rest/console/inspect")).toBe(true);
+			// The device stage is still reported as never reached.
+			const device = envelope.meta.validation?.stages?.find(
+				(stage) => stage.stage === "device",
+			);
+			expect(device?.reason).toBe(notReachedReason("routeros/session-closed"));
+		} finally {
+			server.stop(true);
+		}
+	});
+
 	const inspectChildren = (names: readonly string[]) => () =>
 		new Response(
 			JSON.stringify(

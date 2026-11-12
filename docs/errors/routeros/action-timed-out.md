@@ -4,8 +4,9 @@ RouterOS stopped waiting for a command's reply at that command's own limit
 and dropped it. After the command was sent, it may still be running, or it
 may have finished: centrs cannot tell which.
 
-During `execute`'s validation checks (`:parse`, and `/console/inspect` for a
-structured command), before the command is sent, the same trap means the
+During a validation check before the command is sent (`execute`'s `:parse`
+and `/console/inspect`, and the `/console/inspect` checks of `api` and of
+`retrieve` in every mode, `--follow` included), the same trap means the
 router did not answer the check. Nothing ran: the summary says the
 command was not sent, `context.commandSent` is `false`, and the device
 validation stage reads `not reached`. Run the command again once the router

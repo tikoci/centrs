@@ -47,6 +47,10 @@ import {
 } from "./core/inspect.ts";
 import { assertRouterOsMenuPath } from "./core/menu-path.ts";
 import {
+	asPreflightNoAnswer,
+	INSPECT_CHECK,
+} from "./core/preflight-no-answer.ts";
+import {
 	compileQueryWords,
 	type ParsedQuery,
 	parseQueries,
@@ -60,8 +64,6 @@ import {
 	serializeCentrsError,
 } from "./errors.ts";
 import {
-	asPreflightNoAnswer,
-	INSPECT_CHECK,
 	promptForWriteConfirmation,
 	validateRouterOsScript,
 } from "./execute.ts";

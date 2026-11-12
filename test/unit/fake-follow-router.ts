@@ -27,6 +27,8 @@ export interface FakeRouterOptions {
 	sweepTrapAfterMs?: number;
 	/** Runs on every `/console/inspect` (live validation). */
 	onInspect?: () => void;
+	/** Trap this message on a `/console/inspect` of this path (`ip,address,print`). */
+	inspectTrap?: { path: string; message: string };
 	/** A newer wire change before an older membership result is returned. */
 	onMembership?: (router: FakeFollowRouter) => void;
 	/** Answer `/cancel` but never end the cancelled listen. */
@@ -124,13 +126,20 @@ export class FakeFollowRouter {
 			case "/login":
 				done();
 				return;
-			case "/console/inspect":
+			case "/console/inspect": {
 				this.options.onInspect?.();
+				const trap = this.options.inspectTrap;
+				if (trap && attrs["path"] === trap.path) {
+					this.send(["!trap", `=message=${trap.message}`, `.tag=${tag}`]);
+					done();
+					return;
+				}
 				for (const row of this.inspect(attrs["request"], attrs["path"])) {
 					this.send(["!re", ...attributeWords(row), `.tag=${tag}`]);
 				}
 				done();
 				return;
+			}
 			case "/ip/address/listen":
 				this.listens.set(tag, proplist);
 				return;

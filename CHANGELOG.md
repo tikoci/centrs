@@ -100,9 +100,10 @@ no section of its own.
   `Session closed` now says the same about a sent command, and keeps its own
   60-second cap. A write that ends with either after it was sent carries
   `transport/write-outcome-unknown`. When either comes from a validation
-  check before the command is sent (`:parse`, or `/console/inspect` for a
-  structured command), the error instead names that check and says the
-  command was not sent (`context.commandSent: false`) (#639).
+  check before the command is sent (`execute`'s `:parse` or
+  `/console/inspect`, or the `/console/inspect` checks of `api` and
+  `retrieve`, `--follow` included), the error instead names that check and
+  says the command was not sent (`context.commandSent: false`) (#639).
 
 ### Maintenance
 

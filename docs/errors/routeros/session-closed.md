@@ -20,10 +20,11 @@ some commands carry on any transport, which surface over native API as
 
 - A command that was already sent may still be running or may have finished.
   Check the router's state before running it again; a write that hits this
-  also carries the `transport/write-outcome-unknown` warning. During
-  `execute`'s validation checks (`:parse`, and `/console/inspect` for a
-  structured command) nothing was run yet: the device stage reads
-  `not reached`.
+  also carries the `transport/write-outcome-unknown` warning. During a
+  validation check before the command (`execute`'s `:parse` and
+  `/console/inspect`, and the `/console/inspect` checks of `api` and
+  `retrieve`) nothing was run yet: the summary says the command was not sent
+  (`context.commandSent: false`) and the device stage reads `not reached`.
 - `--timeout` cannot extend the cap. Keep each REST call under 60 seconds:
   start long work in the background (`:execute {…}` without `as-string` runs
   it as a `/system/script/job`) and poll for its result with

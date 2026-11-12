@@ -32,6 +32,12 @@ import {
 } from "./core/execute-command.ts";
 import { sentWriteWarnings } from "./core/fanout.ts";
 import { inspectArgumentNames, pathTokens } from "./core/inspect.ts";
+import {
+	asPreflightNoAnswer,
+	INSPECT_CHECK,
+	isPreflightNoAnswer,
+	PARSE_CHECK,
+} from "./core/preflight-no-answer.ts";
 import { mapRouterOsResultError } from "./core/routeros-errors.ts";
 import { routerOsStringLiteral } from "./core/routeros-string.ts";
 import { toYaml } from "./core/yaml.ts";
@@ -1015,11 +1021,8 @@ export async function validateRouterOsScript(
 		// sees the real `transport/*` cause instead of a misleading
 		// `validation/syntax`. Only genuine RouterOS parse rejections (mapped to
 		// `routeros/*`) are relabeled as a syntax failure below.
-		if (
-			error instanceof CentrsError &&
-			PREFLIGHT_NO_ANSWER_CODES.has(error.code)
-		) {
-			throw preflightNoAnswerError(error, via, PARSE_CHECK);
+		if (isPreflightNoAnswer(error)) {
+			throw asPreflightNoAnswer(error, via, PARSE_CHECK);
 		}
 		if (error instanceof CentrsError && isPreflightTransportError(error)) {
 			throw error;
@@ -1067,89 +1070,16 @@ function assertNotStructuredDashboard(
 }
 
 /**
- * RouterOS errors that mean the device did not answer the `:parse` request at
- * all, rather than rejecting the command: REST's `Session closed` (60-second
- * session cap, or a router still busy with earlier requests, #638) and the
- * native-API `action timed out` trap (#639). The gate gave no verdict, so the
- * error keeps its own code and the device stage reads `not reached`.
- */
-const PREFLIGHT_NO_ANSWER_CODES: ReadonlySet<string> = new Set([
-	"routeros/action-timed-out",
-	"routeros/session-closed",
-]);
-
-/** A validation request sent before the command: its name and envelope source. */
-export interface PreflightCheck {
-	readonly name: string;
-	readonly validationSource: string;
-}
-
-const PARSE_CHECK: PreflightCheck = {
-	name: "`:parse` check",
-	validationSource: ":put [:parse ...]",
-};
-
-export const INSPECT_CHECK: PreflightCheck = {
-	name: "`/console/inspect` attribute check",
-	validationSource: "/console/inspect request=child",
-};
-
-/**
- * The same code, with text for the preflight: the generic text for these codes
- * is about a dispatched command whose reply was lost ("may still be running"),
- * but here only a validation check was sent, so nothing ran.
- */
-function preflightNoAnswerError(
-	error: CentrsError,
-	via: RouterOsProtocol,
-	check: PreflightCheck,
-): CentrsError {
-	const what =
-		error.code === "routeros/session-closed"
-			? "closed the session"
-			: "dropped the reply (action timed out)";
-	return new CentrsError({
-		code: error.code,
-		summary: `RouterOS ${what} during the ${check.name}, so the command was not sent.`,
-		remediation: `Nothing ran: centrs sends the command only after its ${check.name} is answered. The router was busy or slow to answer. Run the command again once it answers; \`centrs retrieve <target> /system/resource\` shows its load.`,
-		context: {
-			...error.context,
-			via,
-			validationSource: check.validationSource,
-			commandSent: false,
-		},
-		...(error.position ? { position: error.position } : {}),
-		cause: error,
-		causeData: error.causeData,
-	});
-}
-
-/**
- * `error` with preflight text when it is a no-answer from a check sent before
- * the command (see {@link preflightNoAnswerError}); otherwise `error` itself.
- */
-export function asPreflightNoAnswer(
-	error: unknown,
-	via: RouterOsProtocol,
-	check: PreflightCheck,
-): unknown {
-	return error instanceof CentrsError &&
-		PREFLIGHT_NO_ANSWER_CODES.has(error.code)
-		? preflightNoAnswerError(error, via, check)
-		: error;
-}
-
-/**
  * True when a `:parse` preflight error is not a parse answer: a transport,
  * auth or connection failure, or a device that did not answer (see
- * {@link PREFLIGHT_NO_ANSWER_CODES}). These must not be relabeled as
+ * {@link isPreflightNoAnswer}). These must not be relabeled as
  * `validation/syntax`.
  */
 function isPreflightTransportError(error: CentrsError): boolean {
 	return (
 		error.code.startsWith("transport/") ||
 		error.code.startsWith("auth/") ||
-		PREFLIGHT_NO_ANSWER_CODES.has(error.code)
+		isPreflightNoAnswer(error)
 	);
 }
 

@@ -173,7 +173,7 @@ describe("execute preflight keeps a device non-answer's own code (#638)", () => 
 		}
 	});
 
-	test("the `/console/inspect` attribute check gets the same handling, under its own name", async () => {
+	test("the `/console/inspect` check gets the same handling, under its own name", async () => {
 		// `:parse` answers; the structured attribute probe that follows it gets
 		// REST's `Session closed`. That probe also runs before the command is
 		// sent, so it must not read as a dispatched command's lost reply.

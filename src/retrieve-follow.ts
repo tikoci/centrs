@@ -16,6 +16,10 @@ import {
 	type Warning,
 } from "./core/envelope.ts";
 import { inspectArgumentNames, pathTokens } from "./core/inspect.ts";
+import {
+	asPreflightNoAnswer,
+	INSPECT_CHECK,
+} from "./core/preflight-no-answer.ts";
 import { CentrsError } from "./errors.ts";
 import {
 	createProtocolAdapter,
@@ -245,14 +249,20 @@ async function validateFollow(
 	}
 	const inspection = prepared.inspection;
 	if (!inspection) throw new Error("validated follow has no inspection");
-	const followable =
-		!inspection.singleton &&
-		(
-			await inspectArgumentNames(backend, [
-				...pathTokens(resolved.path),
-				"print",
-			])
-		).includes("follow-only");
+	let followable = false;
+	try {
+		followable =
+			!inspection.singleton &&
+			(
+				await inspectArgumentNames(backend, [
+					...pathTokens(resolved.path),
+					"print",
+				])
+			).includes("follow-only");
+	} catch (error) {
+		// A check before the follow starts: nothing was sent yet (#639).
+		throw asPreflightNoAnswer(error, resolved.via.value, INSPECT_CHECK);
+	}
 	if (!followable) {
 		throw new CentrsError({
 			code: "validation/not-followable",

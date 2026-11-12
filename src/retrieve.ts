@@ -22,6 +22,10 @@ import {
 } from "./core/inspect.ts";
 import { assertRouterOsMenuPath } from "./core/menu-path.ts";
 import {
+	asPreflightNoAnswer,
+	INSPECT_CHECK,
+} from "./core/preflight-no-answer.ts";
+import {
 	compileQueryWords,
 	type ParsedQuery,
 	parseQueries,
@@ -518,6 +522,20 @@ export async function validateRetrieveRead(
 			validation: { enabled: false, source: "disabled" },
 		};
 	}
+	try {
+		return await inspectRetrieveRead(resolved, backend);
+	} catch (error) {
+		// Only inspect checks were sent: a dropped reply here means the read
+		// itself was not (#639).
+		throw asPreflightNoAnswer(error, resolved.via.value, INSPECT_CHECK);
+	}
+}
+
+/** The device half of {@link validateRetrieveRead}: `/console/inspect` checks only. */
+async function inspectRetrieveRead(
+	resolved: ResolvedRetrieveRequest,
+	backend: ProtocolAdapter,
+): Promise<RetrieveReadPlan & { validation: EnvelopeValidationMeta }> {
 	const inspection = await inspectRetrievePath(resolved, backend);
 	if (resolved.query && inspection.singleton) {
 		throw singletonQueryError(resolved, resolved.query);
