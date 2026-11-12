@@ -64,6 +64,11 @@ function mockFetchSequence(handlers: readonly FetchHandler[]) {
 }
 
 const json = (value: unknown) => new Response(JSON.stringify(value));
+/** RouterOS REST's answer to `/file/get .id=<absent pathname>` (CHR 7.25.1). */
+const notFound = () =>
+	new Response(JSON.stringify({ error: 404, message: "Not Found" }), {
+		status: 404,
+	});
 
 const TMP = mkdtempSync(join(tmpdir(), "centrs-transfer-"));
 function tmpFile(name: string, contents: string | Buffer): string {
@@ -340,6 +345,7 @@ describe("transfer upload (rest)", () => {
 		const local = tmpFile("up.txt", "hello-centrs");
 		const fetchMock = mockFetchSequence([
 			() => json([]), // findFile pre-add: not present
+			() => notFound(), // findFile by pathname: absent (#636)
 			() => json({ ret: "*5" }), // add → new id
 			() => json({}), // set contents
 			() =>
@@ -374,12 +380,13 @@ describe("transfer upload (rest)", () => {
 			const paths = fetchMock.calls.map((c) => new URL(c.url).pathname);
 			expect(paths).toEqual([
 				"/rest/file/print",
+				"/rest/file/get",
 				"/rest/file/add",
 				"/rest/file/set",
 				"/rest/file/print",
 			]);
 			// the set call carried the .id and contents
-			const setBody = JSON.parse(String(fetchMock.calls[2]?.init?.body));
+			const setBody = JSON.parse(String(fetchMock.calls[3]?.init?.body));
 			expect(setBody).toMatchObject({ ".id": "*5", contents: "hello-centrs" });
 		} finally {
 			fetchMock.restore();
@@ -390,6 +397,7 @@ describe("transfer upload (rest)", () => {
 		const local = tmpFile("config.rsc", "hello-centrs");
 		const fetchMock = mockFetchSequence([
 			() => json([]), // findFile pre-add: not present
+			() => notFound(), // findFile by pathname: absent (#636)
 			() => json({ ret: "*5" }), // add → new id
 			() => json({}), // set contents
 			() =>
@@ -407,7 +415,7 @@ describe("transfer upload (rest)", () => {
 				op: "upload",
 				remote: "config.rsc",
 			});
-			const addBody = JSON.parse(String(fetchMock.calls[1]?.init?.body));
+			const addBody = JSON.parse(String(fetchMock.calls[2]?.init?.body));
 			expect(addBody).toMatchObject({ name: "config.rsc", type: "file" });
 		} finally {
 			fetchMock.restore();
@@ -772,6 +780,191 @@ describe("sftp auth failure tips (#391)", () => {
 
 // ── orchestration: download small ────────────────────────────────────────────
 
+// #636: `/file print` omits the children of a container root, but a direct
+// `/file/get .id=<pathname>` answers for them (CHR 7.25.1 and 7.24.6).
+describe("transfer: files /file print does not list (#636)", () => {
+	const HIDDEN = "probe-root/tmp/probe.txt";
+	const bodyOf = (call: { init: RequestInit | undefined } | undefined) =>
+		JSON.parse(String(call?.init?.body));
+	const pathsOf = (calls: Array<{ url: string }>) =>
+		calls.map((c) => new URL(c.url).pathname);
+
+	test("upload --force overwrites a hidden file by pathname, then verifies its size", async () => {
+		const local = tmpFile("hidden-up.txt", "hello-centrs");
+		const fetchMock = mockFetchSequence([
+			() => json([]), // print: no row
+			() => json({ ret: "48" }), // get by pathname: exists, 48 B
+			() => json({}), // set contents
+			() => json([]), // verify print: still no row
+			() => json({ ret: "12" }), // verify get by pathname
+		]);
+		try {
+			const envelope = await runTransfer(
+				baseRequest({ verb: "upload", local, remote: HIDDEN, force: true }),
+			);
+			expect(envelope.data).toMatchObject({ bytes: 12, verified: "size" });
+			expect(pathsOf(fetchMock.calls)).toEqual([
+				"/rest/file/print",
+				"/rest/file/get",
+				"/rest/file/set",
+				"/rest/file/print",
+				"/rest/file/get",
+			]);
+			expect(bodyOf(fetchMock.calls[1])).toEqual({
+				".id": HIDDEN,
+				"value-name": "size",
+			});
+			expect(bodyOf(fetchMock.calls[2])).toMatchObject({
+				".id": HIDDEN,
+				contents: "hello-centrs",
+			});
+		} finally {
+			fetchMock.restore();
+		}
+	});
+
+	test("upload without --force refuses an existing hidden file", async () => {
+		const local = tmpFile("hidden-up2.txt", "hi");
+		const fetchMock = mockFetchSequence([
+			() => json([]),
+			() => json({ ret: "48" }),
+		]);
+		try {
+			let code = "";
+			try {
+				await runTransfer(
+					baseRequest({ verb: "upload", local, remote: HIDDEN }),
+				);
+			} catch (error) {
+				code = (error as CentrsError).code;
+			}
+			expect(code).toBe("usage/target-exists");
+			expect(fetchMock.calls).toHaveLength(2);
+		} finally {
+			fetchMock.restore();
+		}
+	});
+
+	test("download reads a hidden file by pathname and verifies its size", async () => {
+		const out = join(TMP, "hidden-down.txt");
+		const fetchMock = mockFetchSequence([
+			() => json([]),
+			() => json({ ret: "12" }),
+			() => json({ ret: "hello-centrs" }),
+		]);
+		try {
+			const envelope = await runTransfer(
+				baseRequest({ verb: "download", remote: HIDDEN, local: out }),
+			);
+			expect(envelope.data).toMatchObject({ bytes: 12, verified: "size" });
+			expect(readFileSync(out, "utf8")).toBe("hello-centrs");
+			expect(bodyOf(fetchMock.calls[2])).toMatchObject({
+				".id": HIDDEN,
+				"value-name": "contents",
+			});
+		} finally {
+			fetchMock.restore();
+		}
+	});
+
+	test("a download RouterOS reports no size for is not size-verified, and writes nothing", async () => {
+		const out = join(TMP, "hidden-no-size.txt");
+		const fetchMock = mockFetchSequence([
+			() => json([]),
+			() => json({ ret: "" }), // get by pathname: exists, no size
+			() => json({ ret: "hello-centrs" }),
+		]);
+		try {
+			let error: CentrsError | undefined;
+			try {
+				await runTransfer(
+					baseRequest({ verb: "download", remote: HIDDEN, local: out }),
+				);
+			} catch (caught) {
+				error = caught as CentrsError;
+			}
+			expect(error?.code).toBe("transport/incomplete-transfer");
+			expect(error?.summary).toContain("reports no size");
+			expect(existsSync(out)).toBe(false);
+		} finally {
+			fetchMock.restore();
+		}
+	});
+
+	test("remove addresses a hidden file by pathname", async () => {
+		const fetchMock = mockFetchSequence([
+			() => json([]),
+			() => json({ ret: "12" }),
+			() => json({}),
+		]);
+		try {
+			await runTransfer(baseRequest({ verb: "remove", remote: HIDDEN }));
+			expect(pathsOf(fetchMock.calls)[2]).toBe("/rest/file/remove");
+			expect(bodyOf(fetchMock.calls[2])).toEqual({ ".id": HIDDEN });
+		} finally {
+			fetchMock.restore();
+		}
+	});
+
+	test("an upload RouterOS cannot find afterwards is not reported as size-verified", async () => {
+		const local = tmpFile("vanish.txt", "hello-centrs");
+		const fetchMock = mockFetchSequence([
+			() => json([]),
+			() => notFound(),
+			() => json({ ret: "*5" }),
+			() => json({}),
+			() => json([]), // verify print: no row
+			() => notFound(), // verify get: absent
+		]);
+		try {
+			let error: CentrsError | undefined;
+			try {
+				await runTransfer(
+					baseRequest({ verb: "upload", local, remote: "vanish.txt" }),
+				);
+			} catch (caught) {
+				error = caught as CentrsError;
+			}
+			expect(error?.code).toBe("transport/incomplete-transfer");
+			expect(error?.summary).toContain("no file named vanish.txt");
+		} finally {
+			fetchMock.restore();
+		}
+	});
+
+	test("a pathname probe error that is not absence propagates", async () => {
+		const fetchMock = mockFetchSequence([
+			() => json([]),
+			() =>
+				new Response(
+					JSON.stringify({
+						error: 400,
+						message: "Bad Request",
+						detail: "not enough permissions (9)",
+					}),
+					{ status: 400 },
+				),
+		]);
+		try {
+			let code = "";
+			try {
+				await runTransfer(
+					baseRequest({
+						verb: "download",
+						remote: HIDDEN,
+						local: join(TMP, "perm"),
+					}),
+				);
+			} catch (error) {
+				code = (error as CentrsError).code;
+			}
+			expect(code).toBe("routeros/permission-denied");
+		} finally {
+			fetchMock.restore();
+		}
+	});
+});
+
 describe("transfer download (rest)", () => {
 	test("reads contents and writes the local file", async () => {
 		const out = join(TMP, "down.txt");
@@ -813,7 +1006,7 @@ describe("transfer download (rest)", () => {
 	});
 
 	test("a missing remote file is a routeros error", async () => {
-		const fetchMock = mockFetchSequence([() => json([])]);
+		const fetchMock = mockFetchSequence([() => json([]), () => notFound()]);
 		try {
 			let code = "";
 			try {
@@ -902,6 +1095,7 @@ describe("transfer binary contents over rest (#404)", () => {
 		const local = tmpFile("bin-up.bin", bytes);
 		const fetchMock = mockFetchSequence([
 			() => json([]),
+			() => notFound(),
 			() => json({ ret: "*9" }),
 			() => json({}),
 			() => fileRow("bin.bin", 4),
@@ -910,7 +1104,7 @@ describe("transfer binary contents over rest (#404)", () => {
 			await runTransfer(
 				baseRequest({ verb: "upload", local, remote: "bin.bin" }),
 			);
-			const body = Buffer.from(fetchMock.calls[2]?.init?.body as Uint8Array);
+			const body = Buffer.from(fetchMock.calls[3]?.init?.body as Uint8Array);
 			expect(body.includes(Buffer.from([0xff, 0x80]))).toBe(true);
 			expect(body.includes(Buffer.from([0xc3]))).toBe(false);
 		} finally {

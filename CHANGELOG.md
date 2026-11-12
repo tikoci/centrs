@@ -46,6 +46,18 @@ no section of its own.
   or 1 is refused as `routeros/ec-srp5-protocol` instead of being masked to its
   low bit (#584).
 
+### Fixed
+
+- `transfer` over rest/native works on files under a container's root
+  directory, which `/file print` does not list: a lookup with no listed row
+  now asks for the pathname directly, so `upload --force` overwrites instead
+  of failing "file already exists", and `download` and `remove` find the file
+  (#636). Grounded on CHR 7.25.1 and 7.24.6.
+- `transfer upload` and `download` no longer report `verified: "size"` when
+  RouterOS shows no size for the file; that is now
+  `transport/incomplete-transfer`, and a download writes nothing locally
+  (#636, #589).
+
 ### Maintenance
 
 - A new `components/` tree holds specs for parts of centrs that span
