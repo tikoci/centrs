@@ -160,9 +160,10 @@ Rules:
   `--port` replaces only the number and keeps the saved variant's TLS, except
   native's existing explicit 8728 (plain) / 8729 (TLS) rule. A port typed in
   the target URL fills the gap when no port flag or setting gives one; when
-  both are given, `--port` wins, because it travels with `--via` (#622). An
-  invalid value
-  warns `cdb/invalid-option` and counts as absent. `meta.settings.port` names
+  both are given, `--port` wins, because it travels with `--via` (#622). One
+  exception: native API ignores the port of a target that matched a CDB
+  record, because a record's `host:port` is often its WinBox port. An invalid
+  value warns `cdb/invalid-option` and counts as absent. `meta.settings.port` names
   the key that won (e.g. `record:3:www-ssl-port`).
 - Unknown keys → `cdb/unknown-option` warning. The call still succeeds.
 - Tokens are shell-word tokenized. Values with spaces require double quotes

@@ -265,15 +265,20 @@ that keeps growing is being used as an issue.
   retried, so recovery is re-running the operation. `--yes` and MCP's `confirm`
   cover the whole operation, not each step.
 - **Lean, commands that never return:** some commands drop or hold the
-  connection by design: `/system/device-mode/update` blocks until a hard power
-  cycle, `/system/reboot`, `/system/shutdown`, `package/update/install`,
-  `/system/reset-configuration`. Today every transport reports them as
-  `transport/timeout`, and an agent concludes the router is broken. A
-  provisioning step that runs one expects the drop, confirms the router went
-  down, then confirms it came back (`retrieve --wait`), instead of calling the
-  drop a failure. A lost response is still never treated as success on its
-  own. `/routerboard/upgrade` does not reboot; unbounded `/ping` and `/tool/*`
-  are a different case (no `count=` or `duration=`).
+  connection by design. `/system/device-mode/update` holds it until the change
+  is confirmed by a reset or mode button press or a power cycle; RouterOS
+  cancels the change if no confirmation arrives within its `activation-timeout`
+  (5 minutes by default), and a regular reboot also cancels it.
+  `/system/reboot`, `/system/package/update/install` and
+  `/system/reset-configuration` drop it and restart. Today every transport
+  reports them as `transport/timeout`, and an agent concludes the router is
+  broken. A provisioning step that runs one expects the drop, confirms the
+  router went down, then confirms it came back (`retrieve --wait`), instead of
+  calling the drop a failure. `/system/shutdown` is terminal: its step ends
+  once the router is confirmed down, and it never waits for a return. A lost
+  response is still never treated as success on its own.
+  `/system/routerboard/upgrade` does not reboot; unbounded `/ping` and
+  `/tool/*` are a different case (no `count=` or `duration=`).
 - **Ready when:** now. The step-validation rule is the first slice and amends
   the constitution.
 - **Absorbed:** #363.
