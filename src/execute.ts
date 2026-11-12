@@ -892,13 +892,7 @@ async function validateExecuteCommand(
 			resolved.canonical.verb,
 		]);
 	} catch (error) {
-		if (
-			error instanceof CentrsError &&
-			PREFLIGHT_NO_ANSWER_CODES.has(error.code)
-		) {
-			throw preflightNoAnswerError(error, resolved.via.value, INSPECT_CHECK);
-		}
-		throw error;
+		throw asPreflightNoAnswer(error, resolved.via.value, INSPECT_CHECK);
 	}
 	const requested = Object.keys(resolved.canonical.attributes);
 	const missing = requested.filter(
@@ -1085,7 +1079,7 @@ const PREFLIGHT_NO_ANSWER_CODES: ReadonlySet<string> = new Set([
 ]);
 
 /** A validation request sent before the command: its name and envelope source. */
-interface PreflightCheck {
+export interface PreflightCheck {
 	readonly name: string;
 	readonly validationSource: string;
 }
@@ -1095,7 +1089,7 @@ const PARSE_CHECK: PreflightCheck = {
 	validationSource: ":put [:parse ...]",
 };
 
-const INSPECT_CHECK: PreflightCheck = {
+export const INSPECT_CHECK: PreflightCheck = {
 	name: "`/console/inspect` attribute check",
 	validationSource: "/console/inspect request=child",
 };
@@ -1128,6 +1122,21 @@ function preflightNoAnswerError(
 		cause: error,
 		causeData: error.causeData,
 	});
+}
+
+/**
+ * `error` with preflight text when it is a no-answer from a check sent before
+ * the command (see {@link preflightNoAnswerError}); otherwise `error` itself.
+ */
+export function asPreflightNoAnswer(
+	error: unknown,
+	via: RouterOsProtocol,
+	check: PreflightCheck,
+): unknown {
+	return error instanceof CentrsError &&
+		PREFLIGHT_NO_ANSWER_CODES.has(error.code)
+		? preflightNoAnswerError(error, via, check)
+		: error;
 }
 
 /**
