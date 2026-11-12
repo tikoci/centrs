@@ -37,7 +37,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "auth/failed",
 		summary:
-			"The device rejected the batch SSH login (execute --via ssh, sftp transfer).",
+			"Batch SSH authentication failed (execute --via ssh, sftp transfer).",
 	},
 
 	// cdb/*

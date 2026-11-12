@@ -1,6 +1,6 @@
 # `auth/failed`
 
-The SSH login was rejected. This code comes from the batch SSH clients:
+Batch SSH authentication failed. This code comes from the batch SSH clients:
 `execute --via ssh` and sftp `transfer`. Logins over REST, the native API and
 MAC-Telnet fail as
 [`transport/auth-failed`](../transport/auth-failed.md).
@@ -12,6 +12,8 @@ MAC-Telnet fail as
   `ssh-key=` key), plus the keys in your OpenSSH configuration or agent.
 - The user's group lacks the `ssh` policy. RouterOS then refuses the login
   with `Permission denied (publickey)`.
+- The selected key file does not exist. OpenSSH prints `no such identity`,
+  and centrs reports `auth/failed` for that message whatever the device did.
 
 `context.sshKeySelected` says whether an explicit key was chosen; the cause
 data holds OpenSSH's own message.
