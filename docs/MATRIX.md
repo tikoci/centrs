@@ -374,7 +374,8 @@ that keeps growing is being used as an issue.
   are safe to allowlist. Pages publishes `llms.txt` and the generated CLI
   reference, the README shows real envelopes, and one worked example spans
   retrieve → export → transfer → `api --stream`. Many error pages are still
-  scaffold stubs, and tip `detailsUrl`s have no pages behind them yet (#659).
+  scaffold stubs, tracked by a shrinking list in `error-pages.test.ts`; a tip
+  carries a `detailsUrl` only when it has a page (#659).
   TIKOCI-wide instruction files are collected in `tikoci.github.io` and
   vendored here, each recording its source and revision.
 - **Ready when:** now.

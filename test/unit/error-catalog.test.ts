@@ -51,7 +51,8 @@ function scanLiveCodes(): Set<string> {
 		}
 		const text = readFileSync(join(SRC_DIR, rel), "utf8");
 		for (const match of text.matchAll(pattern)) {
-			if (match[1]) {
+			// `tip/*` codes are advice, catalogued in src/core/tip-catalog.ts.
+			if (match[1] && !match[1].startsWith("tip/")) {
 				codes.add(match[1]);
 			}
 		}

@@ -190,7 +190,8 @@ Notes:
   set, no CDB found, consider a default device). The "this is not a problem,
   just a pointer" signal is the whole reason tips are a separate channel rather
   than folded into warnings. A `Tip` has the same shape as a warning
-  (`{ code, message, fix? }`) with `tip/*` codes and a `details_url`.
+  (`{ code, message, fix? }`) with `tip/*` codes, and a `details_url` only
+  when the tip has a page (`docs/errors/README.md` → Tips).
 - CLI render must be lossless against the JSON envelope; `--format json` and
   `--format yaml` are aliases that select serialization, not different shapes.
   Text mode renders tips under a `Tips:` footer, distinct from warnings. This

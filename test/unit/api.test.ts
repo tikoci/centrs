@@ -804,7 +804,7 @@ describe("api validation metadata survives the error boundary (#354, PR #356 rev
 		const envelope = buildApiErrorEnvelopeFromResolved(
 			resolved,
 			new CentrsError({
-				code: "transport/unreachable",
+				code: "transport/connection-refused",
 				summary: "connection refused",
 			}),
 			{ validation: settled },
@@ -887,7 +887,10 @@ describe("api validation metadata survives the error boundary (#354, PR #356 rev
 		);
 		const envelope = buildApiErrorEnvelopeFromResolved(
 			resolved,
-			new CentrsError({ code: "transport/unreachable", summary: "nope" }),
+			new CentrsError({
+				code: "transport/connection-refused",
+				summary: "nope",
+			}),
 		);
 		expect(envelope.meta.validation?.enabled).toBe(false);
 		// No stage answered, so no flat summary claims one did (#535).

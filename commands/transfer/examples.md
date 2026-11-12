@@ -26,8 +26,7 @@ Conventions (provided by the harness):
 
 The first coded pass is `rest`/`native` only (no SSH dependency). `sftp`/`scp`/
 `fetch`/`ftp` examples assert their *current* contract (not-implemented / gated)
-and flip to real round-trips when their transport lands — exactly as
-`retrieve`'s `--query` examples assert `validation/not-implemented` today.
+and flip to real round-trips when their transport lands.
 
 ## REST round-trip (the CI proof)
 

@@ -20,10 +20,14 @@ one human page at `docs/errors/<code>.md`. When you add or rename a code:
 - Add (or update) its entry in `src/core/error-catalog.ts` with a canonical
   one-line summary of the fault class.
 - Scaffold the page with `bun run docs:errors` (it never overwrites existing
-  pages), then enrich `docs/errors/<code>.md` with the typical trigger and fix.
+  pages), then write it to the page contract in
+  [`docs/errors/README.md`](../../docs/errors/README.md#page-contract). A
+  scaffold left in place fails `test/unit/error-pages.test.ts`.
 - Reuse an existing code before minting a new one — each new code costs a
   catalog entry and a page.
 
 `test/unit/error-catalog.test.ts` and `test/unit/error-pages.test.ts` enforce
-this: a live `code:` literal with no catalog entry, or a catalog code with no
-page, fails the build. Do not weaken those guards to land a change.
+this: a live `code:` literal with no catalog entry, a catalog code with no
+page, a new stub page, or a broken relative link fails the build. A `tip/*`
+code is registered in `src/core/tip-catalog.ts` instead, and needs a page only
+when the contract says so (`test/unit/tip-catalog.test.ts`). Do not weaken those guards to land a change.

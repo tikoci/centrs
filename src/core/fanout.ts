@@ -100,7 +100,6 @@ export const NOT_SENT_TRANSPORT_CODES: readonly string[] = [
 	"transport/local-tool-missing",
 	"transport/provider-trust",
 	"transport/tls-certificate",
-	"transport/unreachable",
 ];
 
 /**

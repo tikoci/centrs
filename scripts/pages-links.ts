@@ -93,3 +93,31 @@ export function brokenLinks(
 	}
 	return broken;
 }
+
+const MARKDOWN_LINK =
+	/\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)|^\s*\[[^\]]+\]:\s*<?(\S+?)>?\s*$/gm;
+
+/**
+ * Relative links in the markdown of `docs/errors/<errorsRelPath>` that name no
+ * file in the repo. This is the source-side twin of {@link brokenLinks}: it
+ * needs no pandoc and no assembled site, so a unit test can run it on every
+ * PR (#659). Fragments are not checked.
+ */
+export function brokenSourceLinks(
+	markdown: string,
+	errorsRelPath: string,
+	repoRoot: string,
+): string[] {
+	const broken: string[] = [];
+	const sourceDir = posix.dirname(posix.join("docs/errors", errorsRelPath));
+	for (const match of markdown.matchAll(MARKDOWN_LINK)) {
+		const href = match[1] ?? match[2] ?? "";
+		if (SCHEME.test(href) || href.startsWith("#") || href.startsWith("/"))
+			continue;
+		const path = href.split("#")[0] ?? "";
+		if (path === "") continue;
+		if (!existsSync(join(repoRoot, posix.join(sourceDir, path))))
+			broken.push(href);
+	}
+	return broken;
+}
