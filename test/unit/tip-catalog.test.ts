@@ -61,4 +61,12 @@ describe("tip catalog (#659)", () => {
 			expect("detailsUrl" in tip).toBe(page);
 		}
 	});
+
+	test("a tip with a page links to <base><slug>/, without the tip/ prefix", () => {
+		const pages = new Set(["tip/no-devices"]);
+		expect(tipDetailsUrl("tip/no-devices", pages)).toBe(
+			"https://tikoci.dev/centrs/tips/no-devices/",
+		);
+		expect(tipDetailsUrl("tip/select-target", pages)).toBeUndefined();
+	});
 });

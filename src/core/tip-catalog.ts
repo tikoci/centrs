@@ -123,9 +123,16 @@ const tipsWithPages: ReadonlySet<string> = new Set(
 /** Base URL for tip pages. A tip's page is `<base><slug>/`, without `tip/`. */
 export const TIPS_BASE_URL = "https://tikoci.dev/centrs/tips/";
 
-/** The page URL for a tip code, or undefined when the tip has no page. */
-export function tipDetailsUrl(code: TipCode): string | undefined {
-	return tipsWithPages.has(code)
+/**
+ * The page URL for a tip code, or undefined when the tip has no page.
+ * `pages` defaults to the catalog's `page: true` entries; tests pass their own
+ * set to cover the URL shape while no tip has a page.
+ */
+export function tipDetailsUrl(
+	code: TipCode,
+	pages: ReadonlySet<string> = tipsWithPages,
+): string | undefined {
+	return pages.has(code)
 		? `${TIPS_BASE_URL}${code.slice("tip/".length)}/`
 		: undefined;
 }
