@@ -106,7 +106,10 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary:
 			"Another writer held the CDB lock past the wait timeout; nothing was written.",
 	},
-	{ code: "cdb/not-found", summary: "The CDB file could not be found." },
+	{
+		code: "cdb/not-found",
+		summary: "The CDB file does not exist, or could not be created.",
+	},
 	{
 		code: "cdb/not-found-target",
 		summary: "No CDB entry matched the requested target string.",
@@ -138,7 +141,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "cdb/target-not-registered",
 		summary:
-			"The target is not on the CDB allowlist. Register it with centrs_devices (op add) first.",
+			"The target is not a registered CDB device, and this surface only acts on registered devices. Register it with centrs_devices (op add) first.",
 	},
 	{
 		code: "cdb/unknown-field",
@@ -146,7 +149,8 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "cdb/unknown-option",
-		summary: "An unknown comment kv-soup option was encountered.",
+		summary:
+			"A device property centrs does not recognize; it is kept but has no effect.",
 	},
 	{
 		code: "cdb/write-not-permitted",
@@ -160,7 +164,10 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary:
 			"The MNDP listener could not enable UDP broadcast; discovery continued passively without sending refresh probes.",
 	},
-	{ code: "discover/failed", summary: "MNDP discovery failed." },
+	{
+		code: "discover/failed",
+		summary: "MNDP discovery failed with no more specific code.",
+	},
 
 	// identity/*
 	{
@@ -194,7 +201,8 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "input/invalid-command",
-		summary: "The request shape was invalid (bad or missing arguments).",
+		summary:
+			"The command line or request was malformed: an unknown command or flag, or a missing or invalid argument.",
 	},
 	{
 		code: "input/invalid-coordinate",
@@ -420,7 +428,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "routeros/api-fatal",
-		summary: "The RouterOS native API returned a fatal sentence.",
+		summary: "RouterOS ended the native-API session with a !fatal reply.",
 	},
 	{
 		code: "routeros/api-protocol",
@@ -429,7 +437,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "routeros/api-trap",
 		summary:
-			"The RouterOS native API returned a !trap with no more specific mapping.",
+			"RouterOS refused a native-API command with a message centrs has no specific code for.",
 	},
 	{
 		code: "routeros/btest-connection-count-single-stream",
@@ -464,11 +472,12 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "routeros/mac-telnet-error",
-		summary: "The device reported a MAC-Telnet error.",
+		summary: "The device sent a MAC-Telnet error packet and the session ended.",
 	},
 	{
 		code: "routeros/mac-telnet-not-ready",
-		summary: "Input was sent before the MAC-Telnet session was ready.",
+		summary:
+			"A MAC-Telnet session was used before it was open, or after it closed.",
 	},
 	{
 		code: "routeros/mac-telnet-protocol",
@@ -485,11 +494,12 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "routeros/protocol-not-implemented",
-		summary: "The requested protocol is planned but not implemented yet.",
+		summary: "This command does not run over the requested --via protocol yet.",
 	},
 	{
 		code: "routeros/request-failed",
-		summary: "A RouterOS REST request failed with no more specific mapping.",
+		summary:
+			"RouterOS refused a REST, SSH or MAC-Telnet request with a message centrs has no specific code for.",
 	},
 	{
 		code: "routeros/session-closed",
@@ -505,7 +515,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "routeros/unsupported-capability",
-		summary: "The chosen protocol does not support this command capability.",
+		summary: "The --via protocol cannot do what this command needs.",
 	},
 	{
 		code: "routeros/version-unsupported",
@@ -576,7 +586,8 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "target/unresolved",
-		summary: "No host could be resolved for the operation.",
+		summary:
+			"No connectable host: no target was given, or the selection named the credential-only __default__ record.",
 	},
 
 	// transport/*
@@ -765,7 +776,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "validation/option",
-		summary: "An unknown option value was supplied.",
+		summary: "An option value is outside what centrs accepts.",
 	},
 	{
 		code: "validation/package-missing",

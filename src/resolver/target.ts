@@ -103,9 +103,10 @@ export function resolveTarget(
 	if (!hostSetting || hostSetting.value.trim().length === 0) {
 		throw new CentrsError({
 			code: "target/unresolved",
-			summary: "No host could be resolved for `retrieve`.",
+			summary:
+				"No host could be resolved: no target, `--host` or `CENTRS_HOST`.",
 			remediation:
-				"Pass a target positional like `centrs retrieve 192.0.2.10 /system/resource --via rest-api` or set `--host` / `CENTRS_HOST`.",
+				"Pass a target (a CDB name or an address, such as `192.0.2.10`), or set `--host` / `CENTRS_HOST`.",
 			context: { targetInput: redactTargetInput(input.targetInput) },
 		});
 	}

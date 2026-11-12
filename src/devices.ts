@@ -1770,14 +1770,14 @@ function validateCommentKvUpdates(
 		if (strict) {
 			throw new CentrsError({
 				code: "cdb/unknown-option",
-				summary: `Unknown comment option "${key}" rejected under --strict.`,
+				summary: `"${key}" is not a centrs device property; rejected under --strict.`,
 				remediation: `Drop --strict to write it verbatim, or use an allowlisted key: ${commentKvAllowlist.join(", ")}.`,
 				context: { target, key },
 			});
 		}
 		warnings.push({
 			code: "cdb/unknown-option",
-			message: `Comment option "${key}" is not recognized; it is written verbatim but has no effect.`,
+			message: `"${key}" is not a centrs device property; it is saved verbatim but has no effect. To change a RouterOS setting, use \`centrs execute\`.`,
 			context: { target, key },
 		});
 	}
