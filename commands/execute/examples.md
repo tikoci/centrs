@@ -870,6 +870,10 @@ and CMR10–CMR18 run over **both** `--via native-api` and `--via rest-api` to
 the controller, with validation on. The same test first asserts the device
 behaviour the design depends on (CMR-D1–D9 in the test file).
 
+`CENTRS_CMR_VERSION` boots a later beta. Where RouterOS changed, the
+expectation below names its side of the split; each split is a `CMR_*_SINCE`
+constant in `test/integration/chr.ts` (#527).
+
 ### CMR0. A router without CMR
 
 ```bash
@@ -993,6 +997,9 @@ Validation passes on the client (`:parse` accepts it), then the client refuses
 it when it runs: the target is `cmr/policy-denied`, and `<user>` does not exist
 on the client afterwards.
 
+From 7.26beta4 CMR scripts may add a user: the target is `ok` and `<user>`
+exists.
+
 ### CMR12. A multi-line command
 
 ```bash
@@ -1011,6 +1018,9 @@ The target is `cmr/policy-denied`, and its `context.output` starts with
 `before` followed by the `not enough permissions (9)` line. The client's note
 is `<m>-before`: the statement before the refused one ran and stays, and the
 script stopped at the refused one. `<user>` does not exist.
+
+From 7.26beta4 nothing is refused: the target is `ok` with `data.ret`
+`before`, the note is `<m>-after`, and `<user>` exists.
 
 ### CMR14. `--cmr` pointed at a client
 
@@ -1035,6 +1045,11 @@ The target is `ok`, the client's note reads `<marker>`, and the envelope warns
 `cmr/caller-policy-not-enforced` with `context.missing` `["write", "reboot"]`:
 CMR ran the script with `read,write,test,reboot` (#456). The same write as the
 lab's admin login has no such warning.
+
+From 7.26beta3 RouterOS refuses `run-script` to a login without both `write`
+and `reboot`. The call throws `cmr/selection-incomplete` with
+`routeros/permission-denied` causes, nothing is dispatched, and the note is
+unchanged.
 
 ### CMR13. The dashboard behind a relative menu change
 
@@ -1074,6 +1089,13 @@ provisioned. Removing it by its `.id` warns the same way, read from the rule:
 centrs execute --quickchr $CTL --yes -- '/cmr/vlan/remove numbers=<id>'
 ```
 
+From 7.26beta4 RouterOS requires `port-labels`: the add is `ok: false` with
+`missing =port-labels=` (`routeros/api-trap` over native-api,
+`routeros/request-failed` over rest-api), still with the warning, and no rule
+is added. The same add with `port-labels=<marker>` is `ok` without the
+warning, and its removal reads the rule's `port-labels`:
+`cmr/selection-includes-controller`, not `cmr/rule-selects-every-device`.
+
 ### CMR18. `run-script` called directly by a login without `write` or `reboot`
 
 With CMR15's restricted login:
@@ -1086,6 +1108,10 @@ centrs execute 127.0.0.1 --port $API --username $READER --password $PW --yes -- 
 (`context.missing` `["write", "reboot"]`) and
 `cmr/client-script-not-validated`. The same command as the lab's admin login
 has neither the policy warning nor `cmr/selection-includes-controller`.
+
+From 7.26beta3 the restricted login's call is `ok: false`,
+`routeros/permission-denied` (`not enough permissions (9)`), with the same two
+warnings.
 
 ## Per-service CDB ports (#618)
 

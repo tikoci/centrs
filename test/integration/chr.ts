@@ -240,6 +240,59 @@ export const REST_API_WITHOUT_API_POLICY_SINCE = "7.26beta3";
 export const CMR_SINCE = "7.26beta1";
 
 /**
+ * A controller login without both `write` and `reboot` lost
+ * `/cmr/device/run-script` (#456, #527; CMR15, CMR18).
+ *   - old: it runs, and the client script runs with `read,write,test,reboot`
+ *   - new: refused, `not enough permissions (9)`: native-api
+ *     `routeros/permission-denied`, REST HTTP 500 → `routeros/permission-denied`.
+ *     `execute --cmr` then dispatches nothing and throws
+ *     `cmr/selection-incomplete` with `routeros/permission-denied` causes.
+ *
+ * Measured: old on 7.26beta1; new on 7.26beta3, 7.26beta4 and 7.26beta5.
+ * **7.26beta2 was never booted** (not on the download server), so the change
+ * is only bracketed to (7.26beta1, 7.26beta3]; this threshold names the first
+ * observed build with the new behavior. MikroTik's note on #456 places it in
+ * beta2.
+ */
+export const CMR_RUN_SCRIPT_NEEDS_WRITE_REBOOT_SINCE = "7.26beta3";
+
+/**
+ * `/cmr/client get local-id` inside a CMR script (CMR-D7, #527).
+ *   - old: masked as `*****`
+ *   - new: the full 128-hex value, the same as a host-side read
+ *
+ * Measured: old on 7.26beta1 and 7.26beta3; new on 7.26beta4 and 7.26beta5.
+ * 7.26beta3 and 7.26beta4 are adjacent builds, so this threshold sits exactly
+ * on the observed change.
+ */
+export const CMR_CLIENT_LOCAL_ID_UNMASKED_SINCE = "7.26beta4";
+
+/**
+ * A client-side `/user/add … group=read` from a CMR script (CMR11, CMR11b;
+ * #527).
+ *   - old: refused at run time, `not enough permissions (9)` → centrs
+ *     `cmr/policy-denied`; CMR scripts lacked `policy`
+ *   - new: it runs and the user is created
+ *
+ * Measured: old on 7.26beta1 and 7.26beta3; new on 7.26beta4 and 7.26beta5
+ * (adjacent builds, so exact). Which policies CMR scripts still lack on the
+ * new side was not measured.
+ */
+export const CMR_SCRIPT_USER_ADD_ALLOWED_SINCE = "7.26beta4";
+
+/**
+ * `/cmr/vlan/add` without `port-labels` (CMR17, #527).
+ *   - old: added; it would provision every port of every selected device
+ *   - new: refused, `missing =port-labels=` (native-api `routeros/api-trap`,
+ *     REST HTTP 400 `routeros/request-failed`); nothing is added
+ *
+ * Measured: old on 7.26beta1 and 7.26beta3; new on 7.26beta4 and 7.26beta5
+ * (adjacent builds, so exact). The 7.26beta4 changelog has "fix VLAN rules
+ * being applied to all ports when port-labels is not set".
+ */
+export const CMR_VLAN_PORT_LABELS_REQUIRED_SINCE = "7.26beta4";
+
+/**
  * How a `:parse` REJECTION reads, as an accepted set rather than one wording
  * (#296) — the `VALIDATION_REJECT_CODES` pattern applied to raw device text.
  *

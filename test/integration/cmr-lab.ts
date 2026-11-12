@@ -198,18 +198,41 @@ export async function startCmrLab(prefix: string): Promise<CmrLab> {
 		);
 		const quote = (value: string) =>
 			`"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("$", "\\$")}"`;
+		const clientRow = async () =>
+			(await devices()).find((row) => row["identity"] === client.identity);
+		const findClient = `[find identity=${quote(client.identity)}]`;
 		await controller.run(
-			`/cmr/device/pair [find identity=${quote(client.identity)}] username=${quote(client.username)} password=${quote(client.password)}`,
+			`/cmr/device/pair ${findClient} username=${quote(client.username)} password=${quote(client.password)}`,
 		);
+		// #527: since 7.26beta3 the credentialed pair can stop half-way. The
+		// client says `paired,connected` and the row `connected=true`, but the
+		// row keeps `state="pair: device:ok, cmr:ok"` (no `upgrade-rule`) and
+		// `run-script` never selects it. A bare `pair` finishes it (15/15 on
+		// beta3–beta5); on a fully paired client it answers `already paired`.
+		// 7.26beta1 clears `state` on the first pair, so it never gets here.
+		const halfPaired = "pair: device:ok, cmr:ok";
+		const settle = Date.now() + 10_000;
+		let state = (await clientRow())?.["state"] ?? "";
+		while (state !== "" && Date.now() < settle) {
+			await Bun.sleep(1_000);
+			state = (await clientRow())?.["state"] ?? "";
+		}
+		if (state === halfPaired) {
+			await controller.run(`/cmr/device/pair ${findClient}`);
+		}
+		// Paired means more than connected: the controller's row has no pending
+		// `state` left, so `run-script` can select it.
 		const waitConnected = async (timeoutMs = 120_000) => {
 			await until(
 				`${client.identity} paired and connected`,
 				async () => {
 					const status = (await client.read("/cmr/client"))[0]?.["status"];
-					const row = (await devices()).find(
-						(r) => r["identity"] === client.identity,
+					const row = await clientRow();
+					return (
+						status === "paired,connected" &&
+						row?.["connected"] === "true" &&
+						(row["state"] ?? "") === ""
 					);
-					return status === "paired,connected" && row?.["connected"] === "true";
 				},
 				timeoutMs,
 			);

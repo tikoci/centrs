@@ -28,7 +28,15 @@ import {
 	executeCmr,
 } from "../../src/execute-cmr.ts";
 import { createProtocolAdapter } from "../../src/protocols/index.ts";
-import { isChrIntegrationEnabled, recordIntegrationEvidence } from "./chr.ts";
+import {
+	CMR_CLIENT_LOCAL_ID_UNMASKED_SINCE,
+	CMR_RUN_SCRIPT_NEEDS_WRITE_REBOOT_SINCE,
+	CMR_SCRIPT_USER_ADD_ALLOWED_SINCE,
+	CMR_VLAN_PORT_LABELS_REQUIRED_SINCE,
+	isChrIntegrationEnabled,
+	recordIntegrationEvidence,
+	routerOsAtLeast,
+} from "./chr.ts";
 import { CMR_LAB_VERSION, type CmrLab, startCmrLab } from "./cmr-lab.ts";
 
 const describeFast = isChrIntegrationEnabled() ? describe : describe.skip;
@@ -92,6 +100,19 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 				expect(ctlRow?.[".id"]).toBeDefined();
 				expect(clientRow?.["ids"]).toMatch(/^[0-9A-F]+\/[0-9A-F]+$/);
 				const clientId = clientRow?.[".id"] ?? "";
+				// #527 version splits, declared in chr.ts.
+				const restrictedRefused = routerOsAtLeast(
+					controller.version,
+					CMR_RUN_SCRIPT_NEEDS_WRITE_REBOOT_SINCE,
+				);
+				const userAddAllowed = routerOsAtLeast(
+					client.version,
+					CMR_SCRIPT_USER_ADD_ALLOWED_SINCE,
+				);
+				const portLabelsRequired = routerOsAtLeast(
+					controller.version,
+					CMR_VLAN_PORT_LABELS_REQUIRED_SINCE,
+				);
 
 				// A controller login with the field site's group (#456): no write,
 				// no reboot, no sensitive, no policy.
@@ -184,19 +205,28 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 					],
 				).toStartWith("syntax error");
 
-				// CMR-D7. A client cannot check its own key, so binding stays a
-				// host-side read: `local-id` (whose first 64 hex are the device key
-				// in `ids`) is masked inside run-script, and `numbers=` refuses `ids`.
-				expect(
-					(await client.read("/cmr/client"))[0]?.["local-id"]?.slice(0, 64),
-				).toBe(clientRow?.["ids"]?.split("/")[0]);
+				// CMR-D7. Binding stays a host-side read: `numbers=` refuses `ids`.
+				// `local-id` (whose first 64 hex are the device key in `ids`) is
+				// masked inside run-script before CMR_CLIENT_LOCAL_ID_UNMASKED_SINCE
+				// (so a client could not check its own key) and printed in full
+				// from it (#527).
+				const localId =
+					(await client.read("/cmr/client"))[0]?.["local-id"] ?? "";
+				expect(localId.slice(0, 64)).toBe(
+					clientRow?.["ids"]?.split("/")[0] ?? "",
+				);
 				const d7 = await runScriptRest(lab, {
 					numbers: clientId,
 					script: ":put [/cmr/client get local-id]",
 				});
 				expect(lastRows(d7.body)[0]).toMatchObject({
 					status: "success",
-					output: "*****\r\n",
+					output: routerOsAtLeast(
+						client.version,
+						CMR_CLIENT_LOCAL_ID_UNMASKED_SINCE,
+					)
+						? `${localId}\r\n`
+						: "*****\r\n",
 				});
 				expect(
 					(
@@ -360,22 +390,30 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 
 					// CMR11. A command needing a policy CMR scripts lack passes `:parse`
 					// on the client, then is refused there at run time; nothing changes.
+					// From CMR_SCRIPT_USER_ADD_ALLOWED_SINCE CMR scripts may add a
+					// user, so it runs; the user is removed again for CMR11b.
 					const user = `centrs-cmr11-${via === "native-api" ? "n" : "r"}`;
+					const userExists = async () =>
+						(await client.read("/user")).some((u) => u["name"] === user);
 					const denied = await run({
 						labels: client.identity,
 						command: `/user/add name=${user} group=read password=centrs-cmr11-x`,
 						yes: true,
 					});
-					expect(codes(denied)).toEqual(["cmr/policy-denied"]);
+					expect(codes(denied)).toEqual([
+						userAddAllowed ? "ok" : "cmr/policy-denied",
+					]);
 					expect(denied.data.targets[0]?.meta.validation).toMatchObject({
 						result: "passed",
 					});
-					expect(
-						(await client.read("/user")).some((u) => u["name"] === user),
-					).toBe(false);
+					expect(await userExists()).toBe(userAddAllowed);
+					if (userAddAllowed) {
+						await client.run(`/user/remove [find name=${user}]`);
+					}
 
 					// CMR11b. After earlier output: the statements before the refused one
-					// ran and stay; the script stopped at it.
+					// ran and stay; the script stopped at it. Where the user add is
+					// allowed, every statement runs.
 					const mark = `centrs-cmr11b-${via === "native-api" ? "n" : "r"}`;
 					const partial = await run({
 						labels: client.identity,
@@ -387,16 +425,28 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 						].join("\n"),
 						yes: true,
 					});
-					expect(codes(partial)).toEqual(["cmr/policy-denied"]);
 					const partialTarget = partial.data.targets[0];
-					expect(
-						partialTarget?.ok === false &&
-							String(partialTarget.error.context?.["output"]),
-					).toMatch(/^before\r?\nnot enough permissions \(9\)/);
-					expect(await note(client)).toBe(`${mark}-before`);
-					expect(
-						(await client.read("/user")).some((u) => u["name"] === user),
-					).toBe(false);
+					if (userAddAllowed) {
+						expect(codes(partial)).toEqual(["ok"]);
+						expect(
+							partialTarget?.ok &&
+								(partialTarget.data as { ret: string }).ret.replaceAll(
+									"\r\n",
+									"\n",
+								),
+						).toBe("before\n");
+						expect(await note(client)).toBe(`${mark}-after`);
+						expect(await userExists()).toBe(true);
+						await client.run(`/user/remove [find name=${user}]`);
+					} else {
+						expect(codes(partial)).toEqual(["cmr/policy-denied"]);
+						expect(
+							partialTarget?.ok === false &&
+								String(partialTarget.error.context?.["output"]),
+						).toMatch(/^before\r?\nnot enough permissions \(9\)/);
+						expect(await note(client)).toBe(`${mark}-before`);
+						expect(await userExists()).toBe(false);
+					}
 
 					// CMR13. Plain execute on the controller: a relative-menu dashboard is
 					// refused from its `:parse` return and never sent; a string that only
@@ -468,10 +518,11 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 					expect(await note(client)).not.toBe(`centrs-cmr7-${via}`);
 
 					// CMR15. A login without write or reboot still writes through CMR
-					// (#456), so the result says the login is not the limit. MikroTik
-					// says 7.26beta2 refuses this for a `read` group: under
-					// CENTRS_CMR_VERSION=7.26beta2 this step should go red first.
+					// (#456), so the result says the login is not the limit. From
+					// CMR_RUN_SCRIPT_NEEDS_WRITE_REBOOT_SINCE RouterOS refuses its
+					// run-script: nothing is dispatched and the note is unchanged.
 					const marker15 = `centrs-cmr15-${via}`;
+					const note15 = await note(client);
 					const viaReader = await executeCmr({
 						targetInput: via === "rest-api" ? controller.restUrl : "127.0.0.1",
 						...(via === "native-api" ? { port: controller.ports.api } : {}),
@@ -482,18 +533,38 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 						command: `/system/note/set note="${marker15}"`,
 						yes: true,
 						stdinIsTty: false,
-					});
-					expect(codes(viaReader)).toEqual(["ok"]);
-					expect(await note(client)).toBe(marker15);
-					expect(
-						viaReader.warnings.find(
-							(w) => w.code === "cmr/caller-policy-not-enforced",
-						)?.context,
-					).toMatchObject({
-						username: restricted.user,
-						group: restricted.group,
-						missing: ["write", "reboot"],
-					});
+					}).then(
+						(envelope) => ({ envelope, error: undefined }),
+						(error: { code?: string; context?: Record<string, unknown> }) => ({
+							envelope: undefined,
+							error,
+						}),
+					);
+					if (restrictedRefused) {
+						expect(viaReader.error?.code).toBe("cmr/selection-incomplete");
+						expect(viaReader.error?.context).toMatchObject({
+							labels: client.identity,
+							causes: [
+								"routeros/permission-denied",
+								"routeros/permission-denied",
+							],
+						});
+						expect(await note(client)).toBe(note15);
+					} else {
+						expect(viaReader.error).toBeUndefined();
+						const envelope = viaReader.envelope as ExecuteCmrEnvelope;
+						expect(codes(envelope)).toEqual(["ok"]);
+						expect(await note(client)).toBe(marker15);
+						expect(
+							envelope.warnings.find(
+								(w) => w.code === "cmr/caller-policy-not-enforced",
+							)?.context,
+						).toMatchObject({
+							username: restricted.user,
+							group: restricted.group,
+							missing: ["write", "reboot"],
+						});
+					}
 					// The full admin login gets no such warning.
 					const asAdmin = await run({
 						labels: client.identity,
@@ -556,20 +627,48 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 
 					// CMR17. A VLAN rule with no labels and no port-labels warns; added
 					// disabled, so nothing is provisioned. Its removal reads the rule.
+					// From CMR_VLAN_PORT_LABELS_REQUIRED_SINCE RouterOS refuses the add
+					// (the warning still stands, it is centrs's), so the removal half
+					// uses a rule with only `port-labels`: reading the rule, the removal
+					// does not warn every device.
 					const marker17 = `centrs-cmr17-${via}`;
+					const vlanRule = () =>
+						controller
+							.read("/cmr/vlan")
+							.then((rules) => rules.find((r) => r["comment"] === marker17));
 					const rule = await executeEnvelope({
 						quickchr: controller.name,
 						via,
 						command: `/cmr/vlan/add vlan-ids=4001 disabled=yes comment=${marker17}`,
 						yes: true,
 					});
-					expect(rule.ok).toBe(true);
 					expect(rule.warnings.map((w) => w.code)).toContain(
 						"cmr/rule-selects-every-device",
 					);
-					const ruleId = (await controller.read("/cmr/vlan")).find(
-						(r) => r["comment"] === marker17,
-					)?.[".id"];
+					if (portLabelsRequired) {
+						expect(!rule.ok && rule.error.code).toBe(
+							via === "native-api"
+								? "routeros/api-trap"
+								: "routeros/request-failed",
+						);
+						expect(!rule.ok && rule.error.context?.["detail"]).toBe(
+							"missing =port-labels=",
+						);
+						expect(await vlanRule()).toBeUndefined();
+						const narrowed = await executeEnvelope({
+							quickchr: controller.name,
+							via,
+							command: `/cmr/vlan/add vlan-ids=4001 port-labels=${marker17} disabled=yes comment=${marker17}`,
+							yes: true,
+						});
+						expect(narrowed.ok).toBe(true);
+						expect(narrowed.warnings.map((w) => w.code)).not.toContain(
+							"cmr/rule-selects-every-device",
+						);
+					} else {
+						expect(rule.ok).toBe(true);
+					}
+					const ruleId = (await vlanRule())?.[".id"];
 					expect(ruleId).toBeDefined();
 					const removed = await executeEnvelope({
 						quickchr: controller.name,
@@ -578,9 +677,13 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 						yes: true,
 					});
 					expect(removed.ok).toBe(true);
-					expect(removed.warnings.map((w) => w.code)).toContain(
-						"cmr/rule-selects-every-device",
-					);
+					const removedCodes = removed.warnings.map((w) => w.code);
+					if (portLabelsRequired) {
+						expect(removedCodes).not.toContain("cmr/rule-selects-every-device");
+						expect(removedCodes).toContain("cmr/selection-includes-controller");
+					} else {
+						expect(removedCodes).toContain("cmr/rule-selects-every-device");
+					}
 					expect(
 						(await controller.read("/cmr/vlan")).some(
 							(r) => r["comment"] === marker17,
@@ -589,6 +692,8 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 
 					// CMR18. `run-script` called directly by the restricted login (#456,
 					// #453): it runs, and the result says the login is not the limit.
+					// From CMR_RUN_SCRIPT_NEEDS_WRITE_REBOOT_SINCE RouterOS refuses it;
+					// centrs's warnings are the same either way.
 					const runScript18 = `/cmr/device/run-script labels=${client.identity} script=":put centrs-cmr18"`;
 					const direct = await executeEnvelope({
 						targetInput: via === "rest-api" ? controller.restUrl : "127.0.0.1",
@@ -600,7 +705,16 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 						yes: true,
 						stdinIsTty: false,
 					});
-					expect(direct.ok).toBe(true);
+					if (restrictedRefused) {
+						expect(!direct.ok && direct.error.code).toBe(
+							"routeros/permission-denied",
+						);
+						expect(!direct.ok && direct.error.context?.["detail"]).toBe(
+							"not enough permissions (9)",
+						);
+					} else {
+						expect(direct.ok).toBe(true);
+					}
 					expect(
 						direct.warnings.find(
 							(w) => w.code === "cmr/caller-policy-not-enforced",
