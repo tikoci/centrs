@@ -497,6 +497,18 @@ describe("native-api session command flow", () => {
 		await expect(promise).rejects.toMatchObject({ code: "routeros/api-fatal" });
 	});
 
+	test("!fatal keeps RouterOS's bare-word reason (CHR 7.25.1 /quit)", async () => {
+		const transport = new FakeTransport();
+		const promise = transport.apiSession.talk({ command: "/a/print" });
+		transport.reply(["!fatal", "session terminated on request"]);
+		await expect(promise).rejects.toMatchObject({
+			code: "routeros/api-fatal",
+			context: { reason: "session terminated on request" },
+		});
+		const error = await promise.catch((e: unknown) => e);
+		expect((error as Error).message).toContain("session terminated on request");
+	});
+
 	test("transport close rejects pending commands", async () => {
 		const transport = new FakeTransport();
 		const promise = transport.apiSession.talk({ command: "/a/print" });
