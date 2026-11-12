@@ -4,19 +4,19 @@ import {
 	centrsVersion,
 	describeCentrs,
 	getProtocolPlan,
+	implementedSurfaces,
 	plannedDeviceSources,
 	plannedProtocols,
-	plannedSurfaces,
 	projectSummary,
 	protocolsWithCapability,
 } from "../../src/index.ts";
 
 describe("centrs project baseline", () => {
-	test("exports the planned public surface", () => {
+	test("exports the public surface", () => {
 		expect(centrsVersion).toBe(packageMetadata.version);
 		expect(projectSummary.name).toBe("centrs");
 		expect(describeCentrs()).toContain("RouterOS interaction hub");
-		expect(plannedSurfaces).toContain("cli");
+		expect(implementedSurfaces).toContain("cli");
 		expect(plannedProtocols).toContain("rest-api");
 		expect(plannedDeviceSources).toContain("winbox-cdb");
 	});

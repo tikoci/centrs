@@ -1,7 +1,7 @@
 /**
  * Protocol adapter registry.
  *
- * Typed seam that adapters plug into so CLI, MCP, TUI, and proxy frontends
+ * Typed seam that adapters plug into so the CLI, MCP and any later frontend
  * can discover adapters, capabilities, and `via` identifiers from one source.
  *
  * Status per protocol is the implementation reality (`implemented` flag).

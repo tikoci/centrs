@@ -1,7 +1,7 @@
 # centrs
 
 `centrs` is the tikoci RouterOS interaction hub: a Bun/TypeScript library and
-CLI (with an MCP server; TUI and HTTP proxy frontends planned) for talking to
+CLI, with an MCP server, for talking to
 MikroTik RouterOS devices through a regularized, validated interface.
 
 Stable releases are published on npm under `latest`. To try the offline
@@ -15,7 +15,7 @@ Use `bunx @tikoci/centrs@latest --help` to inspect the release CLI, and
 `bunx @tikoci/centrs@latest --version` (`-V`; `--json` for an envelope) to print
 the exact version for scripts and field reports. The dist-tag follows standard
 SemVer semantics: a plain version (`0.1.10`) publishes to `latest` and carries
-`next` forward with it, while a `next` build (`0.1.11-next.23`) publishes to
+`next` forward with it, while a `next` build (`0.2.0-next.30`) publishes to
 `next` only and never moves `latest`. A `next` build is described by the
 next version's `## X.Y.Z — next` section of [`CHANGELOG.md`](CHANGELOG.md).
 So `@next` is the leading edge and can equal `@latest` between cuts —
@@ -40,18 +40,17 @@ product; without them this would just be a worse `curl`.
 > Check current dist-tags with
 > `npm view @tikoci/centrs dist-tags --json`. The library, device registry, and
 > first MCP server phases are CHR-verified; the CLI is wired (`coded`);
-> encrypted-CDB reads and writes are supported, and the TUI/proxy frontends
-> are planned.
+> encrypted-CDB reads and writes are supported.
 > `docs/MATRIX.md` is the single source of truth for what works today — treat
 > anything not green there as not-yet-shipped.
-> The [0.1.10 known issues](CHANGELOG.md#known-issues) cover MAC-Telnet output
-> loss (#575) and the MCP authorization race during concurrent CDB edits (#604).
+> The [known issues](CHANGELOG.md#known-issues) cover MAC-Telnet output loss
+> (#575) and the MCP authorization race during concurrent CDB edits (#604).
 
 ## What it talks to, and how
 
 - **Frontends:** TypeScript API, CLI, MCP server (Phase 1 + first Phase 2 CDB
-  mutation `CHR-passed` — see `commands/mcp/`), TUI and HTTP proxy/daemon
-  (future).
+  mutation `CHR-passed` — see `commands/mcp/`). No HTTP or remote surface
+  exists yet.
 - **Protocols:** REST API and native API for reads and writes; SSH / MAC-Telnet
   for execution and interactive terminals; SFTP for file transfer; MNDP for
   discovery; bandwidth test for peer measurement. RoMON and WinBox Terminal
@@ -233,6 +232,10 @@ code and authority docs live.
   and nits (the command×protocol grid plus offline analysis and frontend
   surfaces); the only status surface.
 - **`commands/<name>/`** — per-command README and executable examples.
+- **`components/<name>/`** — specs for parts that span commands (CMR today);
+  `components/AGENTS.md` says when one is made.
+- **`docs/errors/`** — one page per error code, published at
+  `https://tikoci.dev/centrs/errors/<code>/`.
 - **`src/`** — Bun/TypeScript source.
 - **`test/`** — unit and CHR-backed integration tests.
 

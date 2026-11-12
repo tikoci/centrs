@@ -15,7 +15,7 @@ Known limitation [#575](https://github.com/tikoci/centrs/issues/575): MAC-Telnet
 can silently drop `:put` output for single-line sends with a trailing newline,
 and multiline output can include console echo artifacts. Use REST, native API,
 or SSH when reliable captured output is required. This pre-existing defect
-remains open in 0.1.10.
+remains open.
 
 ## Intent
 

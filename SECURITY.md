@@ -8,7 +8,7 @@ Please include the affected files or workflow, reproduction details, and impact.
 
 ## Scope
 
-`centrs` mediates RouterOS device access, credentials, and local discovery data through its library, CLI, and stdio MCP server. File transfer is available through the library and CLI. The explicitly invoked bandwidth-test server binds loopback by default (`--bind` can expose it) and requires authentication by default. TUI and HTTP proxy surfaces are planned; the MCP server has no network listener. Security-sensitive areas include credential import/storage, RouterOS write execution, local network discovery, file transfer, and network listeners.
+`centrs` mediates RouterOS device access, credentials, and local discovery data through its library, CLI, and stdio MCP server. File transfer is available through the library and CLI. The explicitly invoked bandwidth-test server binds loopback by default (`--bind` can expose it) and requires authentication by default. No HTTP or remote surface exists yet; the MCP server has no network listener. Since 0.2.0 the Docker image runs as the base image's non-root `bun` user (user ID 1000), not root (#614). Security-sensitive areas include credential import/storage, RouterOS write execution, local network discovery, file transfer, and network listeners.
 
 ## Credential handling
 
@@ -53,7 +53,7 @@ read separate CDB snapshots. A concurrent edit or removal can change the
 target or credentials after authorization, or allow a removed target to fall
 through to an ad-hoc connection using fallback credentials. Avoid concurrent
 CDB edits during MCP device calls. The mutation lock does not close this race.
-This pre-existing defect remains open in 0.1.10; see the
+This pre-existing defect remains open; see the
 [release known issues](CHANGELOG.md#known-issues).
 
 ## Code scanning

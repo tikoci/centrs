@@ -68,10 +68,13 @@ Codes are slash-namespaced `family/slug`. The families and where they originate:
 - `wait/*` — readiness/condition deadlines and cancellation (`retrieveWait`).
 
 The hand-enriched pages (richer trigger strings and remediation) currently are
-the `routeros/*` set produced by `src/core/routeros-errors.ts` and the
-`target/*` MAC-resolution pages and `wait/*` deadline/cancellation pages;
-the rest are generated stubs to be enriched as
-each code is grounded.
+the `routeros/*` set produced by `src/core/routeros-errors.ts`, the
+`target/*` MAC-resolution pages, the `wait/*` deadline/cancellation pages, and
+the common connection faults (`transport/connection-refused`, `network`,
+`timeout`, `dns`, `tls-certificate`, `host-key-mismatch`, `connection-closed`,
+`incomplete-transfer`, and `auth/failed`); the rest are generated stubs to be
+enriched as each code is grounded (#659). The Pages build lists every code on the
+catalog index and rewrites these pages' relative links for the site.
 
 ## RouterOS-fault mapping (`routeros/*`)
 

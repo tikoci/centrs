@@ -140,8 +140,7 @@ READMEs. Cell states are the same as the grid's.
 | ts-api | frontend | `CHR-passed` | `src/index.ts`: the root TypeScript library surface; everything else adapts it. |
 | cli | frontend | `coded` | `src/cli/`: every command in `cliCommands` (`src/cli.ts`) is wired: `retrieve`/`execute`/`api`/`transfer`/`terminal`/`explain`/`devices`/`discover`/`btest`/`mcp`/`settings`, plus the `upload`/`download` shortcuts. |
 | mcp | frontend | `CHR-passed` | `commands/mcp/README.md` and `test/integration/mcp.test.ts`: the scoped-verb stdio server, its CDB-as-allowlist safety model and the `mcp=rw` + `confirm:true` write gate (examples 1–10). |
-| tui | frontend | `not-started` | `src/tui.ts` stub. |
-| proxy | frontend | `not-started` | `src/webproxy.ts` stub. |
+| remote (web / proxy) | frontend | `not-started` | No code. Its shape follows consumer work ([routeros-muse, app-t3code](CONSTITUTION.md#consumers)); a TUI is further out. |
 | btest / server | peer measurement | `CHR-passed` | `test/integration/btest.test.ts`; `commands/btest/README.md`. |
 | btest / client | peer measurement | `CHR-passed` | `test/integration/btest-client.test.ts`; `commands/btest/README.md`. |
 
@@ -173,10 +172,10 @@ holds for [consumer repos](CONSTITUTION.md#consumers): a bug they file is fixed
 like any bug, and a feature they need is noted on its parked theme until the
 maintainer adds it here.
 
-1. **CI cleanup** (in progress): docs-only changes run lint only, unit runs on
-   every OS, and the CHR channel sweep moves to a nightly run with a
-   main-health gate on PRs. Then #612 PR 2 (cross-file CHR reuse), designed for
-   the nightly.
+1. **CI cleanup** (in progress): docs-only CI, unit on every OS, the nightly
+   CHR channel sweep and the main-health gate landed in #631, and snapshot CHR
+   reuse within a file in #612 PR 1. Left: #612 PR 2 (cross-file CHR reuse),
+   designed for the nightly, and a hermetic integration tier (#654).
 2. **Transport selection**, the first work on `0.2.0-next`. native-api becomes
    the default for `retrieve`, `api` and `execute`. Automatic selection falls
    back to the next available transport and reports each hop; a pinned `--via`
@@ -338,7 +337,8 @@ that keeps growing is being used as an issue.
   docs. MCP Apps (an interactive tool result rendered in the chat, a generic
   MCP extension) is a candidate rendering for tables and topology; T3 Code
   shows them for Codex only (tikoci/app-t3code#29).
-- **Ready when:** now. MCP work starts from #605's `isError` fix.
+- **Ready when:** now. #605's `isError` fix landed; its `structuredContent`,
+  `outputSchema` and result-size budget are the next MCP slice.
 - **Absorbed:** #95, #129, #148, #360, #528, #593, #606.
 
 ### Transfer methods
@@ -360,8 +360,7 @@ that keeps growing is being used as an issue.
 - **Lean:** versions and npm tags align across TIKOCI repos. Snapshot CHR
   reuse within a file landed in #612; cross-file reuse (#612 PR 2) is next and
   is designed for the nightly. Docs-only CI, cross-platform unit, the nightly
-  sweep and the main-health gate are the current track's first step; once
-  merged they are described in
+  sweep and the main-health gate landed (#631) and are described in
   `.github/instructions/ci-test-tiers-and-release-versioning.instructions.md`.
 - **Ready when:** now; the current track schedules it as step 1.
 - **Absorbed:** #97, #142.
@@ -370,12 +369,14 @@ that keeps growing is being used as an issue.
 
 - **Question:** how an agent or developer learns centrs without reading the
   source.
-- **Lean:** the `routeros-centrs` and `routeros-quickchr-cli` skills are the
-  agent entry point; they should name the command prefixes that are safe to
-  allowlist. Pages publishes `llms.txt` and the generated CLI reference, the
-  README shows real envelopes, and one worked example spans retrieve → export →
-  transfer → `api --stream`. TIKOCI-wide instruction files are collected in
-  `tikoci.github.io` and vendored here, each recording its source and revision.
+- **Lean:** the `routeros-tikoci-centrs` and `routeros-tikoci-quickchr-cli`
+  skills are the agent entry point; they should name the command prefixes that
+  are safe to allowlist. Pages publishes `llms.txt` and the generated CLI
+  reference, the README shows real envelopes, and one worked example spans
+  retrieve → export → transfer → `api --stream`. Many error pages are still
+  scaffold stubs, and tip `detailsUrl`s have no pages behind them yet (#659).
+  TIKOCI-wide instruction files are collected in `tikoci.github.io` and
+  vendored here, each recording its source and revision.
 - **Ready when:** now.
 - **Absorbed:** #122, #140, #150, #151.
 

@@ -115,6 +115,12 @@ const MENTIONS: Record<string, string> = {
 		"read by release.yaml only; release-plan.test.ts uses an inline changelog",
 	"test/unit/error-pages.test.ts → README.md": "docs/errors/README.md",
 	"scripts/build-pages-site.ts → README.md": "docs/errors/README.md, for Pages",
+	"scripts/pages-links.ts → README.md":
+		"docs/errors/README.md's site path; reads no file",
+	"test/unit/pages-links.test.ts → README.md":
+		"link strings in fixtures; reads no file",
+	"test/unit/pages-links.test.ts → docs/CONSTITUTION.md":
+		"link strings in fixtures; reads no file",
 	...Object.fromEntries(
 		[
 			"explain-bracket-equals",

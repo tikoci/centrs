@@ -630,7 +630,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "transport/incomplete-transfer",
 		summary:
-			"A file transfer settled at fewer bytes than expected (verify mismatch).",
+			"A file transfer could not be verified: its size did not match, or RouterOS showed none.",
 	},
 	{
 		code: "transport/insecure-trust",
