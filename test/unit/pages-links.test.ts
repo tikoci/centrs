@@ -73,4 +73,17 @@ describe("Pages link rewriting (#464)", () => {
 			"../missing/",
 		]);
 	});
+
+	test("brokenLinks reports a rewritten repo link whose file does not exist", () => {
+		const repo = mkdtempSync(join(tmpdir(), "centrs-repo-"));
+		mkdirSync(join(repo, "docs"), { recursive: true });
+		writeFileSync(join(repo, "docs", "CONSTITUTION.md"), "");
+		const html = rewriteHtmlLinks(
+			'<a href="../../CONSTITUTION.md#done">ok</a><a href="../../NO-SUCH-FILE.md">typo</a>',
+			"transport/network.md",
+		);
+		expect(brokenLinks(html, "errors/transport/network/", repo, repo)).toEqual([
+			`${REPO_BLOB_BASE}docs/NO-SUCH-FILE.md`,
+		]);
+	});
 });

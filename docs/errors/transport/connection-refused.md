@@ -15,7 +15,9 @@ rejects it. No command reached RouterOS.
 - A port forward or local tunnel (for example a quickchr VM) points at the
   wrong guest port.
 
-`context.host`, `context.port` and `context.via` name what was dialed.
+REST and SSH/SFTP refusals name what was dialed in `context.host`,
+`context.port` and `context.via`; a native API refusal names the endpoint in
+its summary.
 
 ## Fix
 
@@ -24,5 +26,5 @@ rejects it. No command reached RouterOS.
 - Pin the port that is open: `--port`, or a per-service CDB key such as
   `api-port=` or `www-ssl-port=`.
 - Try another transport: `--via native-api`, `--via rest-api` or `--via ssh`.
-- `centrs <command> … --verbose` shows which setting chose the host, port and
-  transport (`meta.settings`).
+- `centrs <command> … --format json` shows which setting chose the host, port
+  and transport, in `meta.settings`.

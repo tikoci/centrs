@@ -148,7 +148,7 @@ await writeFile(
 );
 
 const broken = written.flatMap(({ siteDir, html }) =>
-	brokenLinks(html, siteDir, outDir).map((href) => `${siteDir}: ${href}`),
+	brokenLinks(html, siteDir, outDir, ROOT).map((href) => `${siteDir}: ${href}`),
 );
 if (broken.length > 0) {
 	console.error(`Broken links in the assembled site:\n${broken.join("\n")}`);

@@ -6,11 +6,13 @@
  * `errors/<code>/index.html`, so those links 404. {@link rewriteHref} maps a
  * link to another error page onto that page's site URL, and any other repo file
  * onto its GitHub blob URL. {@link brokenLinks} is the build's own check: a
- * relative href that names no file in the assembled tree fails the build.
+ * relative href that names no file in the assembled tree fails the build, and
+ * so does a GitHub blob URL for this repo whose file does not exist
+ * (`repoRoot` given), so a typo is not published as a 404.
  */
 
 import { existsSync, statSync } from "node:fs";
-import { posix } from "node:path";
+import { join, posix } from "node:path";
 
 export const REPO_BLOB_BASE = "https://github.com/tikoci/centrs/blob/main/";
 
@@ -67,10 +69,17 @@ export function brokenLinks(
 	html: string,
 	siteDir: string,
 	outDir: string,
+	repoRoot?: string,
 ): string[] {
 	const broken: string[] = [];
 	for (const [, raw] of html.matchAll(HREF)) {
 		const href = (raw ?? "").replaceAll("&amp;", "&");
+		if (href.startsWith(REPO_BLOB_BASE)) {
+			const repoPath = href.slice(REPO_BLOB_BASE.length).split("#")[0] ?? "";
+			if (repoRoot !== undefined && !existsSync(join(repoRoot, repoPath)))
+				broken.push(href);
+			continue;
+		}
 		if (SCHEME.test(href) || href.startsWith("#") || href.startsWith("/"))
 			continue;
 		const path = href.split("#")[0] ?? "";
