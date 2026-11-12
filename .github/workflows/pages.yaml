@@ -18,6 +18,9 @@ on:
       - "package.json"
       - "typedoc.json"
       - "README.md"
+      # typedoc reads the TS config, and the lockfile pins typedoc/TypeScript.
+      - "tsconfig.json"
+      - "bun.lock"
       - "scripts/build-pages-site.ts"
       - "scripts/pages-links.ts"
       - "scripts/gen-error-pages.ts"
