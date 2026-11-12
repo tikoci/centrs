@@ -23,6 +23,9 @@
  *      by the device (it offers a 16-byte salt but refuses the proof), surfaced
  *      as `transport/auth-failed`. This validates the auth-failure detection
  *      (END_AUTH ≠ success) on the real wire.
+ *   3. Unknown users — refused as `transport/auth-failed`. Under
+ *      `/user aaa use-radius=yes` the device sends a 33-byte PASSSALT (the
+ *      server key, no salt) for a non-local or empty username (#559).
  *
  * Out of scope here (it is the `terminal`/`execute`-over-mac-telnet *command*
  * layer, Phase 1): full interactive-console emulation — the RouterOS console
@@ -75,7 +78,12 @@ async function waitFor(
 interface SessionHandle {
 	session: MacTelnetSession;
 	output: Uint8Array[];
-	state: { ready: boolean; closed: boolean; closeCode?: string };
+	state: {
+		ready: boolean;
+		closed: boolean;
+		closeCode?: string;
+		closeContext?: Record<string, unknown>;
+	};
 }
 
 /** Wire a MacTelnetSession to the L2 bridge and track its state. */
@@ -83,6 +91,7 @@ function attach(
 	bridge: Awaited<ReturnType<typeof startMacTelnetL2Bridge>>,
 	dst: ReturnType<typeof parseMac>,
 	offerMtwei: boolean,
+	username = MT_USER,
 ): SessionHandle {
 	const output: Uint8Array[] = [];
 	const state: SessionHandle["state"] = { ready: false, closed: false };
@@ -94,7 +103,7 @@ function attach(
 		sink,
 		sourceMac: HOST_MAC,
 		destinationMac: dst,
-		username: MT_USER,
+		username,
 		password: MT_PASSWORD,
 		offerMtwei,
 		onReady: () => {
@@ -104,6 +113,7 @@ function attach(
 		onClose: (error) => {
 			state.closed = true;
 			state.closeCode = error?.code;
+			state.closeContext = error?.context;
 		},
 	});
 	bridge.onPacket((payload) => session.handlePacket(new Uint8Array(payload)));
@@ -111,7 +121,7 @@ function attach(
 }
 
 describeFast("mac-telnet against CHR (socket-connect L2)", () => {
-	test("MTWEI login reaches the console end to end; MD5 is refused", async () => {
+	test("MTWEI login reaches the console end to end; MD5 and unknown users are refused", async () => {
 		const bridge = await startMacTelnetL2Bridge();
 
 		let chr: Awaited<ReturnType<typeof startIntegrationChr>>["chr"] | undefined;
@@ -193,6 +203,50 @@ describeFast("mac-telnet against CHR (socket-connect L2)", () => {
 			expect(await waitFor(() => md5.state.closed, 15_000)).toBe(true);
 			expect(md5.state.ready).toBe(false);
 			expect(md5.state.closeCode).toBe("transport/auth-failed");
+
+			// ── 3. Unknown user, with and without RADIUS logins (#559) ──────────
+			// Without RADIUS the device sends a normal 49-byte salt and refuses the
+			// proof. With `/user aaa use-radius=yes` it has no local password to
+			// salt, so PASSSALT is the 33-byte server key alone: a credentials
+			// problem, not an unsupported auth method. A local user still logs in.
+			const NO_USER = "centrs-no-such-user";
+			await Bun.sleep(300);
+			const plain = attach(bridge, dst, true, NO_USER);
+			plain.session.start();
+			expect(await waitFor(() => plain.state.closed, 15_000)).toBe(true);
+			expect(plain.state.ready).toBe(false);
+			expect(plain.state.closeCode).toBe("transport/auth-failed");
+			expect(plain.state.closeContext?.["saltLength"]).toBeUndefined();
+
+			// 192.0.2.1 (TEST-NET-1) never answers; the local user below proves
+			// the RADIUS setting alone does not break MAC-Telnet logins.
+			await chr.exec(
+				"/radius/add service=login address=192.0.2.1 secret=centrs-probe",
+			);
+			await chr.exec("/user/aaa/set use-radius=yes");
+			for (const username of [NO_USER, ""]) {
+				await Bun.sleep(300);
+				const radius = attach(bridge, dst, true, username);
+				radius.session.start();
+				expect(await waitFor(() => radius.state.closed, 20_000)).toBe(true);
+				expect(radius.state.ready, `user "${username}"`).toBe(false);
+				expect(radius.state.closeCode, `user "${username}"`).toBe(
+					"transport/auth-failed",
+				);
+				expect(
+					radius.state.closeContext?.["saltLength"],
+					`user "${username}"`,
+				).toBe(33);
+			}
+			await Bun.sleep(300);
+			const local = attach(bridge, dst, true);
+			local.session.start();
+			expect(
+				await waitFor(() => local.state.ready || local.state.closed, 20_000),
+			).toBe(true);
+			expect(local.state.ready, "local user under use-radius=yes").toBe(true);
+			local.session.end();
+			await waitFor(() => local.state.closed, 3_000);
 
 			const resource = asRecord(await chr.rest("/system/resource"));
 			console.log(

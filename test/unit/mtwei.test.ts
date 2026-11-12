@@ -59,6 +59,26 @@ describe("mtwei point encoding", () => {
 	test("decode rejects a wrong-length key", () => {
 		expect(() => decodePoint(new Uint8Array(32))).toThrow();
 	});
+
+	test("decode accepts both valid parities and rejects any other parity byte (#584)", () => {
+		for (const seed of [7, 9, 11, 13]) {
+			const { publicKey } = mtweiKeygen(new Uint8Array(32).fill(seed));
+			// Both parities name a valid point for the same X: the point and its
+			// negation.
+			for (const parity of [0, 1]) {
+				const key = Uint8Array.from(publicKey);
+				key[32] = parity;
+				const point = decodePoint(key);
+				expect(isOnCurve(point)).toBe(true);
+				expect(Number((point?.y ?? 0n) & 1n)).toBe(parity);
+			}
+			for (const parity of [2, 3, 0x80, 0xff]) {
+				const key = Uint8Array.from(publicKey);
+				key[32] = parity;
+				expect(() => decodePoint(key)).toThrow(/parity byte must be 0 or 1/);
+			}
+		}
+	});
 });
 
 describe("mtwei identity hash", () => {

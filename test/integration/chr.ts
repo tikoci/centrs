@@ -110,6 +110,15 @@ interface StartOptions {
 	 * quickchr only creates it when this is explicitly `true` at first boot.
 	 */
 	secureLogin?: boolean;
+	/**
+	 * Device-mode flags quickchr applies at boot (it power-cycles the VM to
+	 * confirm them). A container test needs `{ mode: "advanced", enable:
+	 * ["container"] }`; `/system/device-mode/update` on a running CHR blocks
+	 * until a power cycle instead (#363).
+	 */
+	deviceMode?: { mode?: string; enable?: string[]; disable?: string[] };
+	/** Boot disk size, e.g. `"512M"`, for tests that extract container images. */
+	bootSize?: string;
 }
 
 const routerOsChannels = [

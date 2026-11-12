@@ -60,14 +60,28 @@ const SERVER_INSTRUCTIONS = [
 	"  it to resolve any envelope `error.code`.",
 	"",
 	"Every tool returns the standard centrs envelope { ok, data?|error, warnings,",
-	"meta } as JSON text. On failure, read `error.code` and `error.remediation`.",
+	"meta } as JSON text. A failed envelope (ok:false) also sets the MCP result's",
+	"isError. On failure, read `error.code` and `error.remediation`.",
 ].join("\n");
 
+/**
+ * Wrap an envelope as an MCP tool result. A failed envelope (`ok: false`) sets
+ * `isError`, so a host that follows the MCP spec shows the call as failed
+ * without parsing the JSON (#605). A group read's outer `ok` keeps its
+ * orchestration meaning: members that failed inside a completed fan-out do not
+ * set it.
+ */
 function jsonContent(value: unknown): {
 	content: { type: "text"; text: string }[];
+	isError?: true;
 } {
+	const failed =
+		typeof value === "object" &&
+		value !== null &&
+		(value as { ok?: unknown }).ok === false;
 	return {
 		content: [{ type: "text", text: JSON.stringify(value, null, 2) }],
+		...(failed ? { isError: true as const } : {}),
 	};
 }
 

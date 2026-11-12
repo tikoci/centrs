@@ -1092,6 +1092,22 @@ export class MacTelnetSession {
 				this.mtweiKeypair.publicKey,
 				validator,
 			);
+		} else if (this.mtweiKeypair && salt.length === MTWEI_PUBKEY_LEN) {
+			// The server public key with no 16-byte salt. RouterOS sends this when
+			// `/user aaa use-radius=yes` and the username (or an empty one) has no
+			// local login: there is no local password to build an MTWEI validator
+			// from. Without RADIUS the same unknown user gets a normal 49-byte salt
+			// and a "login failed" reply. Measured on CHR 7.25.1 (#559).
+			this.fail(
+				new CentrsError({
+					code: "transport/auth-failed",
+					summary: `MAC-Telnet login failed: the device has no local login for user "${this.options.username}".`,
+					remediation:
+						"MAC-Telnet (MTWEI) needs a user in the device's local /user list. This device uses RADIUS for logins, and a user that exists only on the RADIUS server cannot log in over MAC-Telnet; use a local user, or another transport.",
+					context: { saltLength: salt.length },
+				}),
+			);
+			return;
 		} else {
 			this.fail(
 				new CentrsError({
