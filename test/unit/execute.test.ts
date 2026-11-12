@@ -3,6 +3,7 @@ import {
 	type EnvelopeValidationStage,
 	notReachedReason,
 } from "../../src/core/envelope.ts";
+import { mapRouterOsError } from "../../src/core/routeros-errors.ts";
 import { CentrsError, type CentrsErrorCode } from "../../src/errors.ts";
 import {
 	buildExecuteErrorEnvelopeFromResolved,
@@ -122,6 +123,76 @@ describe("execute preflight does not mask transport failures", () => {
 			expect(envelope.error.code.startsWith("transport/")).toBe(true);
 			expect(envelope.error.code).not.toBe("validation/syntax");
 		}
+	});
+});
+
+describe("execute preflight keeps a device non-answer's own code (#638)", () => {
+	/** A backend whose `:put [:parse …]` call throws one mapped device error. */
+	function parseThrowing(raw: string, transport: "rest-api" | "native-api") {
+		return {
+			execute: async () => {
+				throw mapRouterOsError(raw, { transport });
+			},
+		} as unknown as ProtocolAdapter;
+	}
+
+	test("REST `Session closed` stays routeros/session-closed", async () => {
+		await expect(
+			validateRouterOsScript(
+				"/ip/address/print",
+				parseThrowing("Session closed", "rest-api"),
+				"rest-api",
+			),
+		).rejects.toMatchObject({ code: "routeros/session-closed" });
+	});
+
+	test("native-API `action timed out` keeps its trap code", async () => {
+		await expect(
+			validateRouterOsScript(
+				"/ip/address/print",
+				parseThrowing("action timed out (13)", "native-api"),
+				"native-api",
+			),
+		).rejects.toMatchObject({ code: "routeros/api-trap" });
+	});
+
+	test("a RouterOS rejection that is a parse answer is still validation/syntax", async () => {
+		await expect(
+			validateRouterOsScript(
+				"/ip/address/print",
+				parseThrowing("expected end of command (line 1 column 5)", "rest-api"),
+				"rest-api",
+			),
+		).rejects.toMatchObject({ code: "validation/syntax" });
+	});
+
+	test("the envelope reports the device stage as not reached, with no verdict", async () => {
+		const resolved = await resolveExecuteRequest(
+			{
+				targetInput: "127.0.0.1",
+				command: "/ip/address/print",
+				via: "rest-api",
+			},
+			HERMETIC_ENV,
+		);
+		const envelope = buildExecuteErrorEnvelopeFromResolved(
+			resolved,
+			mapRouterOsError("Session closed", { transport: "rest-api" }),
+			undefined,
+			{ offlineVerdict: "pass" },
+		);
+		expect(envelope.ok).toBe(false);
+		if (!envelope.ok) {
+			expect(envelope.error.code).toBe("routeros/session-closed");
+		}
+		expect(envelope.meta.validation?.result).toBeUndefined();
+		const device = envelope.meta.validation?.stages?.find(
+			(s) => s.stage === "device",
+		);
+		expect(device).toMatchObject({
+			result: "skipped",
+			reason: notReachedReason("routeros/session-closed"),
+		});
 	});
 });
 

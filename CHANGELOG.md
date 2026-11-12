@@ -21,12 +21,46 @@ no section of its own.
   still fails as `routeros/protocol-not-implemented`. The fix text for a
   protocol that cannot retrieve no longer suggests `snmp`, and the retrieve
   docs no longer describe a planned SNMP form.
+- `devices set --strict` now allows deleting an unknown comment key
+  (`key=`), present or already absent, and no longer warns about it. Adding
+  or changing an unknown key under `--strict` is still refused (#623).
 - The Docker image runs as the base image's non-root `bun` user (user ID 1000)
   instead of root. **Container users:** the default config directory moves
   from `/root/.config/tikoci/` to `/home/bun/.config/tikoci/`. Mount your CDB
   and `centrs.env` there, readable by user ID 1000. To keep the CDB elsewhere,
   set `CENTRS_CDB_FILE` or pass `--cdb-file`; `XDG_CONFIG_HOME` moves only
   `centrs.env` (#614).
+
+### Fixed
+
+- `execute`: when RouterOS does not answer the `:parse` preflight (REST
+  `Session closed`, or a native-API `action timed out` trap), the error keeps
+  its own code and the device stage reads `not reached`. It used to be
+  relabeled `validation/syntax`, telling the caller to fix a command that was
+  fine (#638).
+- MAC-Telnet: when a device using RADIUS logins (`/user aaa use-radius=yes`)
+  answers MTWEI with a 33-byte PASSSALT (server key, no salt) because the
+  username has no local login, the login fails as `transport/auth-failed` with
+  a remediation that names the cause. It used to be reported as
+  `routeros/mac-telnet-unsupported-auth`, "unsupported salt length (33)",
+  which pointed at the device and RouterOS version (#559). Grounded on CHR
+  7.25.1 and 7.24.6.
+- EC-SRP5 (MAC-Telnet and btest): a peer public key whose parity byte is not 0
+  or 1 is refused as `routeros/ec-srp5-protocol` instead of being masked to its
+  low bit (#584).
+- `transfer` over rest/native works on files under a container's root
+  directory, which `/file print` does not list: a lookup with no listed row
+  now asks for the pathname directly, so `upload --force` overwrites instead
+  of failing "file already exists", and `download` and `remove` find the file
+  (#636). Grounded on CHR 7.25.1 and 7.24.6.
+- `transfer upload` and `download` no longer report `verified: "size"` when
+  RouterOS shows no size for the file; that is now
+  `transport/incomplete-transfer`, and a download writes nothing locally
+  (#636, #589).
+- MCP: a tool result whose envelope has `ok: false` now sets `isError`, so a
+  host that follows the MCP spec shows the failure as a failure (#605).
+  `structuredContent`, an `outputSchema` and a default result-size budget are
+  still open on #605.
 
 ### Maintenance
 

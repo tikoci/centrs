@@ -409,6 +409,52 @@ describe("devices mutation", () => {
 		}
 	});
 
+	test("set --strict removes an unknown key and keeps the other tokens (#623)", async () => {
+		const { path, cleanup } = await tempCdb([adminRecord()]);
+		try {
+			await setDevice({
+				cdb: await reload(path),
+				target: "192.0.2.5",
+				updates: [
+					{ key: "future", value: "maybe" },
+					{ key: "timeout", value: "30s" },
+				],
+			});
+			const removed = await setDevice({
+				cdb: await reload(path),
+				target: "192.0.2.5",
+				updates: [{ key: "future", value: null }],
+				strict: true,
+			});
+			expect(
+				removed.warnings.some((w) => w.code === "cdb/unknown-option"),
+			).toBe(false);
+			const comment = showDevice({
+				cdb: await reload(path),
+				target: "192.0.2.5",
+			}).data.entry.comment;
+			expect(comment).not.toContain("future");
+			expect(comment).toContain("timeout=30s");
+
+			// Already absent: still allowed, still no warning.
+			const again = await setDevice({
+				cdb: await reload(path),
+				target: "192.0.2.5",
+				updates: [{ key: "future", value: null }],
+				strict: true,
+			});
+			expect(again.warnings.some((w) => w.code === "cdb/unknown-option")).toBe(
+				false,
+			);
+			expect(
+				showDevice({ cdb: await reload(path), target: "192.0.2.5" }).data.entry
+					.comment,
+			).toContain("timeout=30s");
+		} finally {
+			await cleanup();
+		}
+	});
+
 	test("removes an entry and writes a backup", async () => {
 		const { path, cleanup } = await tempCdb([adminRecord()]);
 		try {

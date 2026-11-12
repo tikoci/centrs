@@ -1727,7 +1727,7 @@ function validateGeoPairing(
  * CDB fields are reserved and throw `cdb/reserved-key` (use the matching flag);
  * tokens outside the recognized override + lookup + geo keys throw
  * `cdb/unknown-option` under `strict`, else append a `cdb/unknown-option`
- * warning. Recognized keys (allowlist overrides, `identity`/`mac`/`ip`
+ * warning. Removing an unknown key (`value: null`) is always allowed. Recognized keys (allowlist overrides, `identity`/`mac`/`ip`
  * lookups, `lat`/`lon`/`altitude`/`altitude-type` geo facts) pass silently.
  * Geo values are further validated (range/enum) and checked for `lat`/`lon`
  * pairing via `src/resolver/geo.ts`; returns the updates with `altitude-type`
@@ -1757,8 +1757,14 @@ function validateCommentKvUpdates(
 		GEO_SET.has(update.key) ? normalizeGeoUpdate(update) : update,
 	);
 
-	for (const key of updates.map((update) => update.key)) {
+	for (const { key, value } of updates) {
 		if (ALLOWLIST_SET.has(key) || LOOKUP_SET.has(key) || GEO_SET.has(key)) {
+			continue;
+		}
+		// Removing an unknown key (`key=` → `value: null`) only cleans the
+		// comment up, so `--strict` allows it and no warning is due (#623).
+		// Only adding or changing an unknown key is refused.
+		if (value === null) {
 			continue;
 		}
 		if (strict) {
