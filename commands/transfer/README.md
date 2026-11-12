@@ -363,8 +363,9 @@ refusal is `auth/failed`: a user whose group lacks `write` logs in and gets
 **Error codes reuse existing namespaces — `transfer` adds no namespace of its
 own.** Everything specific to transfer fits `usage/*` (`usage/target-exists`),
 `transport/*` (`transport/unsupported-operation` for the REST 60 KB write cap,
-`transport/incomplete-transfer` for a verified shortfall, `transport/unreachable`
-for fetch inbound-reachability), `routeros/*`, `auth/*`, and `validation/*`. A new
+`transport/incomplete-transfer` for a verified shortfall), `routeros/*`,
+`auth/*`, and `validation/*`. The `fetch` method's inbound-reachability failure
+has no code yet; it gets one, with its page, when `fetch` is built. A new
 code is only justified where the *semantics* are genuinely file-transfer-specific
 and not already expressible in those namespaces.
 

@@ -121,7 +121,10 @@ it depends on the version, platform or transport. A tip with a page is flagged
 `page: true` in [`src/core/tip-catalog.ts`](../../src/core/tip-catalog.ts), its
 page is `docs/tips/<slug>.md`, and only then does it carry a `detailsUrl`
 (`https://tikoci.dev/centrs/tips/<slug>/`, without the `tip/` segment).
-`test/unit/tip-catalog.test.ts` keeps the flag and the file in step.
+`test/unit/tip-catalog.test.ts` keeps the flag and the file in step. The
+Pages build does not publish `docs/tips/` yet: the change that sets the first
+`page: true` also teaches `scripts/build-pages-site.ts` to build
+`tips/<slug>/` with the same link rewriting and checks, or the URL 404s.
 
 ## RouterOS-fault mapping (`routeros/*`)
 

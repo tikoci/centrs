@@ -240,18 +240,11 @@ Errors are typed values, not thrown strings. Every error has:
   carries one (console `:parse` rejections do). `column` is RouterOS's
   authoritative 1-based **byte** offset — the console is not Unicode-aware — so
   it is carried verbatim, never re-derived into a character index.
-- `redactable_fields?` — names of fields the bug-report renderer must redact.
 
 Credentials and private key material are always redactable. Private key paths are
 configuration values and may appear in `meta.settings`; redact them only when an
 error also carries sensitive key material or a caller explicitly marks the path
 as sensitive.
-
-The bug-report renderer is invoked **inline** via `--bug-report` on any command —
-there is no separate `bug-report` verb. It re-renders the just-produced envelope
-with `redactable_fields` stripped and each error's `details_url` kept, so a
-shareable report needs no extra capture step (the envelope is already rich enough
-to be the report).
 
 Two error sources must be visually distinguishable:
 
@@ -614,8 +607,8 @@ stdio-only and grows no listener of its own.
 
 - One settings vocabulary across API/CLI/MCP and any later surface.
 - Friendly, structured errors are part of the API contract — not optional polish.
-- Help text, source reporting, redaction, and bug-report envelopes are
-  shared-core, not per-frontend.
+- Help text, source reporting and redaction are shared-core, not
+  per-frontend.
 - Integration tests prefer real CHR via `quickchr` over elaborate mocks when
   behavior depends on RouterOS.
 - Generated docs are preferred when the source of truth is code, CLI metadata,
