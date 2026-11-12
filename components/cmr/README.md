@@ -3,7 +3,8 @@
 Status: `CHR-passed` on 7.26beta1, through the `execute` rest-api and
 native-api cells; its examples are CMR0–CMR18 in
 [`commands/execute/examples.md`](../../commands/execute/examples.md#cmr-clients-through-a-controller-450).
-Later betas are not covered yet (see [Builds](#builds)). Matches
+Later betas pass the same suite with their version splits (see
+[Builds](#builds)). Matches
 `docs/MATRIX.md` → Components.
 
 Code:
@@ -46,13 +47,17 @@ before 7.26beta1 and `cmr/not-a-controller` after.
 | Build | What is known |
 | ----- | ------------- |
 | 7.26beta1 | Lab baseline: CMR1–CMR7 and CMR10–CMR18 pass over rest-api and native-api, CMR8–CMR9 over native-api. A login without `write` or `reboot` still writes through `run-script` (#456, CMR15). |
-| 7.26beta3 | A restricted login's `run-script` is refused: `not enough permissions (9)` over native-api, a dropped connection over REST. An admin `run-script numbers=<client>` returned `no devices selected` (#527). |
-| 7.26beta5 | The lab fails at CMR-D1. The client is paired and connected on both sides (`/cmr/client` status `paired,connected`; the controller's row has `state="pair: device:ok, cmr:ok"`). With `pairing-requirement=none` it paired itself about a second after it was enabled, before the lab's `pair` command. Yet an admin `run-script` selects only the controller: `labels=all` returns the controller's rows alone, and `labels=<client identity>` or `numbers=<client .id>` is `no devices selected`, over REST and the console (2026-11-07; details on #527). |
+| 7.26beta3 | The credentialed `pair` can stop half-way: the client is `paired,connected`, but the controller's row keeps `state="pair: device:ok, cmr:ok"` and `run-script` never selects it. A bare `/cmr/device/pair` finishes it; the lab does that (#527). A login without both `write` and `reboot` is refused by `run-script` (`not enough permissions (9)`), so CMR15 and CMR18 are refusals. Not booted: 7.26beta2. |
+| 7.26beta4 | Inside a CMR script, `local-id` is no longer masked (CMR-D7) and a client-side `/user/add` runs (CMR11, CMR11b). `/cmr/vlan/add` requires `port-labels` (CMR17). |
+| 7.26beta5 | Same as 7.26beta4. |
+
+Each split is a constant in `test/integration/chr.ts` (`CMR_*_SINCE`), and
+`execute-cmr.test.ts` asserts the side the running build is on. The suite
+passes on 7.26beta1, 7.26beta3, 7.26beta4 and 7.26beta5 (2026-11-11).
 
 The lab boots `CMR_SINCE` (7.26beta1). `CENTRS_CMR_VERSION` boots another
 build. The lab should follow the development channel, so a beta that changes
-CMR turns the suite red. That switch waits until the suite passes on the
-current beta (#527), because a red nightly blocks merges.
+CMR turns the suite red; that switch is the maintainer's call (#527).
 
 For each build checked, add a row above. rosetta's changelog search
 (`category: cmr`) and a `/cmr` command diff between builds show what a beta
