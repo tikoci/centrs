@@ -3,6 +3,7 @@ import { CentrsError } from "../../src/errors.ts";
 import {
 	cleanConsoleOutput,
 	encodeSshScript,
+	readExecStderr,
 	SshExecClient,
 	type SshExecResult,
 	sshCommonOptions,
@@ -224,7 +225,7 @@ describe("SshExecClient: remote exit status (#576)", () => {
 		expect(error.code).toBe("routeros/command-failed");
 		expect(error.summary).toContain("exit 1: something RouterOS said");
 		expect(error.remediation).toContain(
-			"the statements before it have already run",
+			"the statements (and loop iterations) before it have already run",
 		);
 		expect(error.context?.["stderr"]).toBe(KNOWN_HOSTS);
 	});
@@ -238,6 +239,34 @@ describe("SshExecClient: remote exit status (#576)", () => {
 			.exec("/file/add name=review-single.txt type=file; :error boom")
 			.catch((e) => e)) as CentrsError;
 		expect(error.context?.["partialRunPossible"]).toBe(true);
+	});
+
+	test("a loop that fails on a later iteration is a partial run", async () => {
+		// The first iteration adds the entry; the second fails on the
+		// duplicate (CHR 7.25.1, 7.24.6), so one statement still left a write.
+		const error = (await client({
+			exitCode: 1,
+			stdout:
+				"failure: already have such entry (/ip/firewall/address-list/add; line 1)\r\n",
+			stderr: KNOWN_HOSTS,
+		})
+			.exec(
+				":foreach i in={1;2} do={ /ip/firewall/address-list/add list=review-loop address=192.0.2.200 }",
+			)
+			.catch((e) => e)) as CentrsError;
+		expect(error.context?.["partialRunPossible"]).toBe(true);
+	});
+
+	test("a single statement that fails is not a partial run", async () => {
+		const error = (await client({
+			exitCode: 1,
+			stdout:
+				"failure: already have such entry (/ip/firewall/address-list/add; line 1)\r\n",
+			stderr: KNOWN_HOSTS,
+		})
+			.exec("/ip/firewall/address-list/add list=l address=192.0.2.200")
+			.catch((e) => e)) as CentrsError;
+		expect(error.context?.["partialRunPossible"]).toBeUndefined();
 	});
 
 	test("a CR-encoded script (as the adapter sends it) counts its lines", async () => {
@@ -349,17 +378,38 @@ describe("SshExecClient: timeout keeps what it saw (#592)", () => {
 		timedOut: true,
 	};
 
-	test("a silent timeout after an earlier exec answered is an execution timeout", async () => {
-		// The `:parse` check answered, then the command ran past the budget.
-		const c = sequence(
-			{ exitCode: 0, stdout: "(evl …)\r\n", stderr: "" },
-			silentTimeout,
-		);
-		await c.exec(':put [:parse ":delay 15s"]');
-		const error = (await c.exec(":delay 15s").catch((e) => e)) as CentrsError;
+	const AUTHENTICATED =
+		'Authenticated to 127.0.0.1 ([127.0.0.1]:9272) using "publickey".';
+
+	test("a silent timeout after this invocation logged in is an execution timeout", async () => {
+		const error = (await sequence({
+			...silentTimeout,
+			stderr: `${KNOWN_HOSTS}\r\n${AUTHENTICATED}\r\nKilled by signal 15.\r\n`,
+		})
+			.exec(":delay 15s")
+			.catch((e) => e)) as CentrsError;
 		expect(error.code).toBe("transport/timeout");
 		expect(error.summary).toContain("may still be running on the router");
 		expect(error.context?.["sessionReached"]).toBe(true);
+		expect(String(error.causeData)).not.toContain("Authenticated to");
+	});
+
+	test("an earlier exec that answered does not prove the next handshake did", async () => {
+		// Each exec is a fresh ssh process and login: the `:parse` check
+		// succeeded, then the command's own handshake stalled.
+		const c = sequence(
+			{
+				exitCode: 0,
+				stdout: "(evl …)\r\n",
+				stderr: `${AUTHENTICATED}\r\n`,
+			},
+			silentTimeout,
+		);
+		await c.exec(':put [:parse ":put hello"]');
+		const error = (await c.exec(":put hello").catch((e) => e)) as CentrsError;
+		expect(error.code).toBe("transport/timeout");
+		expect(error.summary).not.toContain("may still be running");
+		expect(error.context?.["sessionReached"]).toBe(false);
 	});
 
 	test("a silent timeout on the first exec does not claim the command is running", async () => {
@@ -378,6 +428,11 @@ describe("SshExecClient: timeout keeps what it saw (#592)", () => {
 		expect(error.context?.["partialOutput"]).toBeUndefined();
 	});
 
+	test("argv asks OpenSSH for its login evidence", () => {
+		const argv = sequence(silentTimeout).argv(":put 1");
+		expect(argv.join(" ")).toContain("-o LogLevel=VERBOSE --");
+	});
+
 	test("OpenSSH's own connect failure wins over the budget kill", async () => {
 		const error = (await sequence({
 			...silentTimeout,
@@ -393,6 +448,22 @@ describe("SshExecClient: timeout keeps what it saw (#592)", () => {
 // Over SSH exec, LF ends RouterOS's prompt (each line runs on its own) and CR is
 // a line break inside it, so a script is sent with CR line breaks to run as one
 // unit (CHR 7.25.1 and 7.24.6, #576).
+describe("readExecStderr", () => {
+	test("drops verbose progress lines and reports a completed login", () => {
+		expect(
+			readExecStderr(
+				`${KNOWN_HOSTS}\r\nAuthenticated to 127.0.0.1 ([127.0.0.1]:9272) using "publickey".\r\nTransferred: sent 3624, received 2320 bytes, in 0.0 seconds\r\nBytes per second: sent 1471029.3, received 941718.6\r\n`,
+			),
+		).toEqual({ authenticated: true, stderr: `${KNOWN_HOSTS}\n` });
+		expect(
+			readExecStderr("ssh: connect to host x port 22: Connection refused"),
+		).toEqual({
+			authenticated: false,
+			stderr: "ssh: connect to host x port 22: Connection refused",
+		});
+	});
+});
+
 describe("encodeSshScript (#576)", () => {
 	test("LF and CRLF line breaks become CR; a trailing break is dropped", () => {
 		expect(encodeSshScript("/ip/firewall/address-list\nprint\n")).toBe(
@@ -438,6 +509,14 @@ describe("encodeSshScript (#576)", () => {
 		expect(encodeSshScript(':put "a # b"\n:put c')).toBe(
 			':put "a # b"\r:put c',
 		);
+	});
+
+	test("a CRLF comment inside a continued statement keeps one break per line", () => {
+		// The mask blanks the comment's CR; the break is read from the original.
+		expect(encodeSshScript(':put \\\r\n# comment\r\n"after"')).toBe(
+			':put \\\r# comment\r"after"',
+		);
+		expect(encodeSshScript("# a\r\n# b\r\n:put 1")).toBe("# a\r# b\r:put 1");
 	});
 
 	test("a raw line break inside a quoted string is refused", () => {

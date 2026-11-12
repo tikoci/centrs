@@ -418,7 +418,12 @@ table recognizes keeps its specific code instead (for example
 `bad command name …` is `routeros/unknown-path` with its position), also when
 it follows earlier output: `:put before` then a duplicate
 `/ip/firewall/address-list/add` reads `failure: already have such entry` from
-the output's last line, and `context.output` keeps both lines. A raw line
+the output's last line, and `context.output` keeps both lines. A loop counts
+too: `:foreach i in={1;2} do={ /ip/firewall/address-list/add … }` adds the
+entry on its first iteration and fails on the second, so it is
+`partialRunPossible` with `transport/write-outcome-unknown`. Line breaks are
+read from the script as written, so a CRLF comment inside a continued
+statement (`:put \` CRLF `# comment` CRLF `"after"`) still prints `after`. A raw line
 break inside a quoted string cannot be sent this way and is refused before
 anything is sent (`transport/capability-unsupported`); write it as `\n` inside
 the string.
@@ -435,10 +440,14 @@ within 3s; the command may still be running on the router", and
 `partialOutput: "begin"`, `outputComplete: false`. The remediation names `--timeout` and
 `CENTRS_TIMEOUT`. Killing the local `ssh` does not stop the script on the
 router: on CHR 7.25.1 and 7.24.6 a script's write landed about 10 s after the
-cutoff (#592). The session counts as reached when the `:parse` check answered
-on it or the command printed output. A timeout with neither, such as an
-unreachable host, does not claim the command is running: its summary says the
-connection or login may not have completed, and `sessionReached` is `false`.
+cutoff (#592). Each exec is a fresh `ssh` login, so the session counts as
+reached only on evidence from this invocation: OpenSSH logged
+`Authenticated to …` (centrs runs it with `LogLevel=VERBOSE`), or the command
+printed output. A silent `:delay 6s` cut at 3s is therefore still an execution
+timeout. A timeout with neither, such as an unreachable host or a handshake
+that stalls after the `:parse` check answered, does not claim the command is
+running: its summary says the connection or login may not have completed, and
+`sessionReached` is `false`.
 
 ## Offline gate (stage 1)
 

@@ -73,16 +73,16 @@ no section of its own.
   as the router's answer (its diagnostic on stdout keeps a specific code such
   as `routeros/unknown-path`, also when it follows earlier output, else
   `routeros/command-failed`, with exit code and full output in `context`), not `transport/network` with the diagnostic
-  dropped. A write that fails partway gets `transport/write-outcome-unknown`
-  (#576).
+  dropped. A write that fails partway, including a loop that fails on a later
+  iteration, gets `transport/write-outcome-unknown` (#576).
 - `execute --via ssh` runs a multi-line script as one unit. RouterOS ends the
   SSH exec prompt at every LF, so each line ran on its own: menu context and
   `:local` values were lost between lines, and a later line could exit 0 after
   an earlier one failed. centrs now sends the script's line breaks as CR, a
   line break inside the prompt. A raw line break inside a quoted string is
   refused before sending (#576).
-- `execute --via ssh`: a timeout after the session reached RouterOS (an
-  earlier `:parse` check answered, or the command printed output) is now an
+- `execute --via ssh`: a timeout after the session reached RouterOS (OpenSSH
+  logged this invocation's login, or the command printed output) is now an
   execution timeout that names the budget, keeps the output printed before the
   cutoff (`context.partialOutput`), says the command may still be running on
   the router, and points to `--timeout` and `CENTRS_TIMEOUT`. A timeout with

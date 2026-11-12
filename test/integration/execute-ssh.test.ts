@@ -16,6 +16,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
+import { type AddressInfo, connect, createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCli } from "../../src/cli.ts";
@@ -64,6 +65,37 @@ async function keygen(path: string): Promise<void> {
 			`ssh-keygen failed to mint the execute/ssh test key: ${await new Response(proc.stderr).text()}`,
 		);
 	}
+}
+
+/**
+ * A loopback TCP proxy to the CHR's SSH port. The first `forwardFirst`
+ * connections are piped through; later ones are accepted and never forwarded,
+ * so their SSH handshake stalls. `forwardFirst` defaults to every connection.
+ */
+async function startStallProxy(upstreamPort: number) {
+	const state = { forwardFirst: Number.POSITIVE_INFINITY, seen: 0 };
+	const sockets: Socket[] = [];
+	const server = createServer((client) => {
+		sockets.push(client);
+		client.on("error", () => {});
+		state.seen++;
+		if (state.seen > state.forwardFirst) return;
+		const upstream = connect(upstreamPort, "127.0.0.1");
+		sockets.push(upstream);
+		upstream.on("error", () => client.destroy());
+		client.pipe(upstream).pipe(client);
+	});
+	await new Promise<void>((resolve) =>
+		server.listen(0, "127.0.0.1", () => resolve()),
+	);
+	return {
+		state,
+		port: (server.address() as AddressInfo).port,
+		close() {
+			for (const socket of sockets) socket.destroy();
+			server.close();
+		},
+	};
 }
 
 describeFast("execute over ssh (per-command ssh host)", () => {
@@ -262,6 +294,41 @@ describeFast("execute over ssh (per-command ssh host)", () => {
 				"already have such entry",
 			);
 
+			// A loop's one statement can apply on an earlier iteration than the
+			// one that fails: the first adds the entry, the second fails on the
+			// duplicate, so the write's outcome is unknown.
+			const loop = await executeEnvelope({
+				...base,
+				command:
+					":foreach i in={1;2} do={ /ip/firewall/address-list/add list=centrs-s6 address=192.0.2.200 }",
+				yes: true,
+			});
+			expect(loop.ok).toBe(false);
+			if (loop.ok) return;
+			expect(loop.error.context).toMatchObject({
+				via: "ssh",
+				exitCode: 1,
+				partialRunPossible: true,
+			});
+			expect(loop.warnings.map((w) => w.code)).toContain(
+				"transport/write-outcome-unknown",
+			);
+			const loopList = asRecordArray(
+				await chr.rest("/ip/firewall/address-list"),
+			);
+			expect(loopList.some((a) => a["address"] === "192.0.2.200")).toBe(true);
+
+			// A CRLF comment inside a continued statement: one CR per line break,
+			// so the continuation reaches `"after"`.
+			const crlf = await executeEnvelope({
+				...base,
+				command: ':put \\\r\n# comment\r\n"after"',
+				yes: true,
+			});
+			expect(crlf.ok, crlf.ok ? "" : JSON.stringify(crlf.error)).toBe(true);
+			if (!crlf.ok) return;
+			expect(retOf(crlf.data)).toBe("after");
+
 			// S7 — the budget runs out mid-script: an execution timeout that names
 			// the budget and keeps the output printed before the cutoff (#592).
 			const cut = await executeEnvelope({
@@ -280,6 +347,52 @@ describeFast("execute over ssh (per-command ssh host)", () => {
 				partialOutput: "begin",
 				outputComplete: false,
 			});
+
+			// S7 — a silent command is still an execution timeout: OpenSSH logged
+			// this invocation's login (`LogLevel=VERBOSE`), so it reached RouterOS.
+			const silent = await executeEnvelope({
+				...base,
+				command: ":delay 6s",
+				timeout: "3s",
+				yes: true,
+			});
+			expect(silent.ok).toBe(false);
+			if (silent.ok) return;
+			expect(silent.error.code).toBe("transport/timeout");
+			expect(silent.error.summary).toContain("may still be running");
+			expect(silent.error.context).toMatchObject({ sessionReached: true });
+
+			// S7 — the `:parse` check answers, then the command's own handshake
+			// stalls: each exec is a fresh login, so the earlier answer does not
+			// make this a running command.
+			const proxy = await startStallProxy(chr.sshPort);
+			try {
+				const viaProxy = { ...base, port: proxy.port };
+				const control = await executeEnvelope({
+					...viaProxy,
+					command: ":put hello",
+				});
+				expect(
+					control.ok,
+					control.ok ? "" : JSON.stringify(control.error),
+				).toBe(true);
+				const connections = proxy.state.seen;
+				expect(connections).toBeGreaterThanOrEqual(2);
+				proxy.state.seen = 0;
+				proxy.state.forwardFirst = connections - 1;
+				const stalled = await executeEnvelope({
+					...viaProxy,
+					command: ":put hello",
+					timeout: "1500ms",
+				});
+				expect(stalled.ok).toBe(false);
+				if (stalled.ok) return;
+				expect(stalled.error.code).toBe("transport/timeout");
+				expect(stalled.error.summary).not.toContain("may still be running");
+				expect(stalled.error.context?.["sessionReached"]).not.toBe(true);
+			} finally {
+				proxy.close();
+			}
 
 			const res = asRecord(await chr.rest("/system/resource"));
 			await recordIntegrationEvidence({

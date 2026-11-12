@@ -653,12 +653,35 @@ const MAX_DISPATCH_STATEMENT_DEPTH = 16;
  * refused enclosing statement, which also counts one. Past the depth cap the
  * inner text counts its top-level siblings only. Unbalanced input counts what
  * precedes the break and never throws.
+ *
+ * With `loopsRepeat`, a loop's body (`:for`, `:foreach`, `:while`,
+ * `:do … while=`) counts twice, because it may run more than once: a later
+ * iteration can fail after an earlier one applied its write. SSH's remote
+ * exit uses it (#576): `:foreach i in={1;2} do={ /ip/firewall/address-list/add
+ * … }` adds the entry, then fails on the duplicate (CHR 7.25.1, 7.24.6). A
+ * refusal (#549) refuses the first iteration too, so that caller leaves it off.
  */
-export function countExecutableStatements(text: string): number {
-	return countExecutableStatementsWithin(text, 0);
+export function countExecutableStatements(
+	text: string,
+	options: { loopsRepeat?: boolean } = {},
+): number {
+	return countExecutableStatementsWithin(text, 0, options.loopsRepeat ?? false);
 }
 
-function countExecutableStatementsWithin(text: string, depth: number): number {
+/** A loop head at the start of a statement (comments masked). */
+function isLoopStatement(segmentText: string): boolean {
+	const masked = maskComments(segmentText);
+	return (
+		/^\s*:(?:for|foreach|while)\b/i.test(masked) ||
+		(/^\s*:do\b/i.test(masked) && /\bwhile\s*=/i.test(masked))
+	);
+}
+
+function countExecutableStatementsWithin(
+	text: string,
+	depth: number,
+	loopsRepeat: boolean,
+): number {
 	const { segments, ascii } = segmentStatements(text);
 	if (depth >= MAX_DISPATCH_STATEMENT_DEPTH) return segments.length;
 	let count = 0;
@@ -668,8 +691,13 @@ function countExecutableStatementsWithin(text: string, depth: number): number {
 		// offsets, which are string indexes only for pure-ASCII input.
 		if (ascii && segment.menuOnly && /^\s*\{/.test(text.slice(segment.end)))
 			continue;
-		const inner = countExecutedBlockStatements(segment.text, depth);
-		count += inner > 0 ? inner : 1;
+		const inner = countExecutedBlockStatements(
+			segment.text,
+			depth,
+			loopsRepeat,
+		);
+		const runs = loopsRepeat && inner > 0 && isLoopStatement(segment.text);
+		count += inner > 0 ? inner * (runs ? 2 : 1) : 1;
 	}
 	return count;
 }
@@ -678,6 +706,7 @@ function countExecutableStatementsWithin(text: string, depth: number): number {
 function countExecutedBlockStatements(
 	segmentText: string,
 	depth: number,
+	loopsRepeat: boolean,
 ): number {
 	const masked = maskComments(segmentText);
 	const storedDoHead = /^:(?:global|local|set)\b/i.test(masked);
@@ -710,6 +739,7 @@ function countExecutedBlockStatements(
 					total += countExecutableStatementsWithin(
 						segmentText.slice(substitution.start + 1, i),
 						depth + 1,
+						loopsRepeat,
 					);
 					substitution = null;
 				}
@@ -728,6 +758,7 @@ function countExecutedBlockStatements(
 				const count = countExecutableStatementsWithin(
 					segmentText.slice(i + 1, end),
 					depth + 1,
+					loopsRepeat,
 				);
 				if (
 					scope === "else" &&
