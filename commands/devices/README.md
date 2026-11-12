@@ -443,7 +443,8 @@ is no `update`.
   it errors `cdb/not-found-target`. Writing
   a first-class field name as a `k=v` positional (e.g. `user=x`) stays refused
   with `cdb/reserved-key` — the flag is the only path. Unknown comment keys warn
-  (`cdb/unknown-option`), or error under `--strict`.
+  (`cdb/unknown-option`), or error under `--strict`. Deleting an unknown key
+  (`key=`) is always allowed, including under `--strict`.
 - `remove` (aliases `rm`, `delete`) removes one matched entry. The positional
   target and optional `--match` select the record; group-wide deletion is not
   implemented.

@@ -962,6 +962,77 @@ describe("centrs devices (read-only)", () => {
 		expect(await listBackups(cdbPath)).toEqual([]);
 	});
 
+	test("example 74 set --strict deletes an unknown key but refuses adding one", async () => {
+		const cdbPath = await copyCdbFixture("example-74-strict-delete-unknown");
+		const seed = await runWithCapture([
+			"devices",
+			"set",
+			"192.0.2.5",
+			"future=maybe",
+			"note=keep",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(seed.exitCode).toBe(0);
+
+		const comment = async (): Promise<string> => {
+			const show = await runWithCapture([
+				"devices",
+				"show",
+				"192.0.2.5",
+				"--cdb-file",
+				cdbPath,
+				"--json",
+			]);
+			return (
+				JSON.parse(show.stdout) as { data: { entry: { comment: string } } }
+			).data.entry.comment;
+		};
+
+		for (const pass of ["present", "already absent"]) {
+			const removed = await runWithCapture([
+				"devices",
+				"set",
+				"192.0.2.5",
+				"future=",
+				"--strict",
+				"--cdb-file",
+				cdbPath,
+				"--json",
+			]);
+			expect(removed.exitCode, pass).toBe(0);
+			const envelope = JSON.parse(removed.stdout) as {
+				ok: boolean;
+				warnings?: { code: string }[];
+			};
+			expect(envelope.ok, pass).toBe(true);
+			expect(
+				(envelope.warnings ?? []).some((w) => w.code === "cdb/unknown-option"),
+				pass,
+			).toBe(false);
+			expect(await comment(), pass).not.toContain("future");
+			expect(await comment(), pass).toContain("note=keep");
+		}
+
+		const before = await readFile(cdbPath);
+		const added = await runWithCapture([
+			"devices",
+			"set",
+			"192.0.2.5",
+			"future=again",
+			"--strict",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(added.exitCode).toBe(1);
+		expect(
+			(JSON.parse(added.stderr) as { error: { code: string } }).error.code,
+		).toBe("cdb/unknown-option");
+		expect(await readFile(cdbPath)).toEqual(before);
+	});
+
 	test("example 21 set quoted value with spaces round-trips as one token", async () => {
 		const cdbPath = await copyCdbFixture("example-21-quoted");
 		const result = await runWithCapture([
