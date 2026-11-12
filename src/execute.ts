@@ -885,10 +885,21 @@ async function validateExecuteCommand(
 		};
 	}
 
-	const availableAttributes = await inspectArgumentNames(backend, [
-		...pathTokens(resolved.canonical.path),
-		resolved.canonical.verb,
-	]);
+	let availableAttributes: string[];
+	try {
+		availableAttributes = await inspectArgumentNames(backend, [
+			...pathTokens(resolved.canonical.path),
+			resolved.canonical.verb,
+		]);
+	} catch (error) {
+		if (
+			error instanceof CentrsError &&
+			PREFLIGHT_NO_ANSWER_CODES.has(error.code)
+		) {
+			throw preflightNoAnswerError(error, resolved.via.value, INSPECT_CHECK);
+		}
+		throw error;
+	}
 	const requested = Object.keys(resolved.canonical.attributes);
 	const missing = requested.filter(
 		(attribute) => !availableAttributes.includes(attribute),
@@ -1014,7 +1025,7 @@ export async function validateRouterOsScript(
 			error instanceof CentrsError &&
 			PREFLIGHT_NO_ANSWER_CODES.has(error.code)
 		) {
-			throw preflightNoAnswerError(error, via);
+			throw preflightNoAnswerError(error, via, PARSE_CHECK);
 		}
 		if (error instanceof CentrsError && isPreflightTransportError(error)) {
 			throw error;
@@ -1073,14 +1084,31 @@ const PREFLIGHT_NO_ANSWER_CODES: ReadonlySet<string> = new Set([
 	"routeros/session-closed",
 ]);
 
+/** A validation request sent before the command: its name and envelope source. */
+interface PreflightCheck {
+	readonly name: string;
+	readonly validationSource: string;
+}
+
+const PARSE_CHECK: PreflightCheck = {
+	name: "`:parse` check",
+	validationSource: ":put [:parse ...]",
+};
+
+const INSPECT_CHECK: PreflightCheck = {
+	name: "`/console/inspect` attribute check",
+	validationSource: "/console/inspect request=child",
+};
+
 /**
  * The same code, with text for the preflight: the generic text for these codes
  * is about a dispatched command whose reply was lost ("may still be running"),
- * but here only the `:parse` check was sent, so nothing ran.
+ * but here only a validation check was sent, so nothing ran.
  */
 function preflightNoAnswerError(
 	error: CentrsError,
 	via: RouterOsProtocol,
+	check: PreflightCheck,
 ): CentrsError {
 	const what =
 		error.code === "routeros/session-closed"
@@ -1088,13 +1116,12 @@ function preflightNoAnswerError(
 			: "dropped the reply (action timed out)";
 	return new CentrsError({
 		code: error.code,
-		summary: `RouterOS ${what} during the \`:parse\` check, so the command was not sent.`,
-		remediation:
-			"Nothing ran: centrs sends the command only after its `:parse` check is answered. The router was busy or slow to answer. Run the command again once it answers; `centrs retrieve <target> /system/resource` shows its load.",
+		summary: `RouterOS ${what} during the ${check.name}, so the command was not sent.`,
+		remediation: `Nothing ran: centrs sends the command only after its ${check.name} is answered. The router was busy or slow to answer. Run the command again once it answers; \`centrs retrieve <target> /system/resource\` shows its load.`,
 		context: {
 			...error.context,
 			via,
-			validationSource: ":put [:parse ...]",
+			validationSource: check.validationSource,
 			commandSent: false,
 		},
 		...(error.position ? { position: error.position } : {}),

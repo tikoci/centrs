@@ -99,9 +99,10 @@ no section of its own.
   extend the limit, and how to run long work in the background. REST
   `Session closed` now says the same about a sent command, and keeps its own
   60-second cap. A write that ends with either after it was sent carries
-  `transport/write-outcome-unknown`. When either comes from the `:parse`
-  preflight, the error instead says the command was not sent
-  (`context.commandSent: false`) (#639).
+  `transport/write-outcome-unknown`. When either comes from a validation
+  check before the command is sent (`:parse`, or `/console/inspect` for a
+  structured command), the error instead names that check and says the
+  command was not sent (`context.commandSent: false`) (#639).
 
 ### Maintenance
 

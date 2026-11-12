@@ -243,8 +243,9 @@ through `/execute as-string`, so neither limit applies; only centrs
 `--timeout` bounds it (`transport/timeout`, #592). No SSH reply limit has
 been measured. A write that ends this way, or with
 `routeros/session-closed` after it was sent, carries
-`transport/write-outcome-unknown`. When either code comes from the `:parse`
-check instead, nothing was sent: the error says so (`context.commandSent:
+`transport/write-outcome-unknown`. When either code comes from a validation
+check instead (`:parse`, or `/console/inspect` for a structured command),
+nothing was sent: the error says so (`context.commandSent:
 false`) and the device stage reads `not reached`.
 
 For long work, start it in the background and poll: `:execute {…}` without
