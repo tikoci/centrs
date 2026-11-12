@@ -26,6 +26,12 @@ no section of its own.
 - `devices set --strict` now allows deleting an unknown comment key
   (`key=`), present or already absent, and no longer warns about it. Adding
   or changing an unknown key under `--strict` is still refused (#623).
+- The Docker image runs as the base image's non-root `bun` user (user ID 1000)
+  instead of root. **Container users:** the default config directory moves
+  from `/root/.config/tikoci/` to `/home/bun/.config/tikoci/`. Mount your CDB
+  and `centrs.env` there, readable by user ID 1000. To keep the CDB elsewhere,
+  set `CENTRS_CDB_FILE` or pass `--cdb-file`; `XDG_CONFIG_HOME` moves only
+  `centrs.env` (#614).
 
 ### Fixed
 
