@@ -262,6 +262,53 @@ describe("buildProtocolApiRequest", () => {
 describe("api meta.validation on a gate that never answered (GH#435)", () => {
 	const auth = { username: "admin", password: "" };
 
+	test("a `/console/inspect` check RouterOS dropped says the operation was not sent (#639)", async () => {
+		// Inspect gets REST's `Session closed`; the write itself must never be
+		// sent, and the error must not read as a dispatched write's lost reply.
+		const seen: string[] = [];
+		const server = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch(req) {
+				const path = new URL(req.url).pathname;
+				seen.push(`${req.method} ${path}`);
+				if (path === "/rest/console/inspect") {
+					return Response.json({ detail: "Session closed" }, { status: 400 });
+				}
+				return Response.json({});
+			},
+		});
+		try {
+			const envelope = await apiEnvelope(
+				{
+					...auth,
+					endpoint: "ip/address",
+					method: "PUT",
+					fields: { address: "192.0.2.1/32", interface: "ether1" },
+					yes: true,
+					targetInput: `http://127.0.0.1:${server.port}`,
+				},
+				HERMETIC_ENV,
+			);
+			expect(envelope.ok).toBe(false);
+			if (envelope.ok) return;
+			expect(envelope.error.code).toBe("routeros/session-closed");
+			expect(envelope.error.summary).toContain("`/console/inspect`");
+			expect(envelope.error.summary).toContain("the command was not sent");
+			expect(envelope.error.remediation).not.toContain("may still be running");
+			expect(envelope.error.context).toMatchObject({
+				commandSent: false,
+				validationSource: "/console/inspect request=child",
+			});
+			expect(envelope.warnings.map((w) => w.code)).not.toContain(
+				"transport/write-outcome-unknown",
+			);
+			expect(seen.every((r) => r.endsWith("/rest/console/inspect"))).toBe(true);
+		} finally {
+			server.stop(true);
+		}
+	});
+
 	test("a structured request: offline skipped by shape, device not reached", async () => {
 		const envelope = await apiEnvelope(
 			{

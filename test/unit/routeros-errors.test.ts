@@ -68,7 +68,27 @@ describe("mapRouterOsError grounded vocabulary", () => {
 	test("maps 'Session closed' to routeros/session-closed with 60-second fix", () => {
 		const error = mapRouterOsError("Session closed");
 		expect(error.code).toBe("routeros/session-closed");
-		expect(error.remediation).toMatch(/60-second/);
+		expect(error.remediation).toMatch(/60 seconds/);
+		// #639: a sent command may have run; the REST cap stays its own limit.
+		expect(error.remediation).toMatch(/may still be running/);
+		expect(error.remediation).toMatch(/`--timeout` cannot extend/);
+		expect(error.remediation).toMatch(/--wait \d+[a-z]+ --until/);
+	});
+
+	test("maps native 'action timed out (13)' to routeros/action-timed-out (#639)", () => {
+		const error = mapRouterOsError("action timed out (13)", {
+			transport: "native-api",
+		});
+		expect(error.code).toBe("routeros/action-timed-out");
+		expect(ctx(error).detail).toBe("action timed out (13)");
+		expect(error.summary).toMatch(/may still be running/);
+		// A per-command limit, not a native-API one, and nothing centrs-side
+		// extends it: no `--via native-api` workaround, no "router may be busy".
+		expect(error.remediation).toMatch(/`--timeout` does not extend it/);
+		expect(error.remediation).toMatch(/\/container\/shell timeout=<seconds>/);
+		// `--wait` takes a deadline; bare, it would read `--until` as one (#445).
+		expect(error.remediation).toMatch(/--wait \d+[a-z]+ --until/);
+		expect(error.remediation).not.toMatch(/--via|native API|may be busy/i);
 	});
 
 	test("maps generic 'failure: <msg>' to routeros/command-failed", () => {
@@ -110,6 +130,7 @@ describe("mapRouterOsError grounded vocabulary", () => {
 			"unknown parameter foo",
 			"invalid value for argument address",
 			"Session closed",
+			"action timed out (13)",
 			"failure: cannot add already have such entry",
 		]) {
 			const rest = mapRouterOsError(raw, {

@@ -146,14 +146,74 @@ describe("execute preflight keeps a device non-answer's own code (#638)", () => 
 		).rejects.toMatchObject({ code: "routeros/session-closed" });
 	});
 
-	test("native-API `action timed out` keeps its trap code", async () => {
+	test("native-API `action timed out` keeps routeros/action-timed-out (#639)", async () => {
 		await expect(
 			validateRouterOsScript(
 				"/ip/address/print",
 				parseThrowing("action timed out (13)", "native-api"),
 				"native-api",
 			),
-		).rejects.toMatchObject({ code: "routeros/api-trap" });
+		).rejects.toMatchObject({ code: "routeros/action-timed-out" });
+	});
+
+	test("the preflight text says the command was not sent, not that it may still run", async () => {
+		for (const [raw, transport] of [
+			["Session closed", "rest-api"],
+			["action timed out (13)", "native-api"],
+		] as const) {
+			const error = (await validateRouterOsScript(
+				"/ip/address/print",
+				parseThrowing(raw, transport),
+				transport,
+			).catch((e) => e)) as CentrsError;
+			expect(error.summary, raw).toContain("the command was not sent");
+			expect(error.remediation, raw).toContain("Nothing ran");
+			expect(error.remediation, raw).not.toContain("may still be running");
+			expect(error.context, raw).toMatchObject({ commandSent: false });
+		}
+	});
+
+	test("the `/console/inspect` check gets the same handling, under its own name", async () => {
+		// `:parse` answers; the structured attribute probe that follows it gets
+		// REST's `Session closed`. That probe also runs before the command is
+		// sent, so it must not read as a dispatched command's lost reply.
+		const server = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch(req) {
+				if (new URL(req.url).pathname === "/rest/console/inspect") {
+					return Response.json({ detail: "Session closed" }, { status: 400 });
+				}
+				return Response.json({ ret: "(evl /ip/address/print)" });
+			},
+		});
+		try {
+			const envelope = await executeEnvelope(
+				{
+					targetInput: "127.0.0.1",
+					port: server.port,
+					username: "admin",
+					password: "",
+					via: "rest-api",
+					command: "/ip/address/print",
+					timeout: "2s",
+				},
+				HERMETIC_ENV,
+			);
+			expect(envelope.ok).toBe(false);
+			if (envelope.ok) return;
+			expect(envelope.error.code).toBe("routeros/session-closed");
+			expect(envelope.error.summary).toContain("`/console/inspect`");
+			expect(envelope.error.summary).not.toContain(":parse");
+			expect(envelope.error.summary).toContain("the command was not sent");
+			expect(envelope.error.remediation).not.toContain("may still be running");
+			expect(envelope.error.context).toMatchObject({
+				commandSent: false,
+				validationSource: "/console/inspect request=child",
+			});
+		} finally {
+			server.stop(true);
+		}
 	});
 
 	test("a RouterOS rejection that is a parse answer is still validation/syntax", async () => {

@@ -32,6 +32,12 @@ import {
 } from "./core/execute-command.ts";
 import { sentWriteWarnings } from "./core/fanout.ts";
 import { inspectArgumentNames, pathTokens } from "./core/inspect.ts";
+import {
+	asPreflightNoAnswer,
+	INSPECT_CHECK,
+	isPreflightNoAnswer,
+	PARSE_CHECK,
+} from "./core/preflight-no-answer.ts";
 import { mapRouterOsResultError } from "./core/routeros-errors.ts";
 import { routerOsStringLiteral } from "./core/routeros-string.ts";
 import { toYaml } from "./core/yaml.ts";
@@ -885,10 +891,15 @@ async function validateExecuteCommand(
 		};
 	}
 
-	const availableAttributes = await inspectArgumentNames(backend, [
-		...pathTokens(resolved.canonical.path),
-		resolved.canonical.verb,
-	]);
+	let availableAttributes: string[];
+	try {
+		availableAttributes = await inspectArgumentNames(backend, [
+			...pathTokens(resolved.canonical.path),
+			resolved.canonical.verb,
+		]);
+	} catch (error) {
+		throw asPreflightNoAnswer(error, resolved.via.value, INSPECT_CHECK);
+	}
 	const requested = Object.keys(resolved.canonical.attributes);
 	const missing = requested.filter(
 		(attribute) => !availableAttributes.includes(attribute),
@@ -1010,6 +1021,9 @@ export async function validateRouterOsScript(
 		// sees the real `transport/*` cause instead of a misleading
 		// `validation/syntax`. Only genuine RouterOS parse rejections (mapped to
 		// `routeros/*`) are relabeled as a syntax failure below.
+		if (isPreflightNoAnswer(error)) {
+			throw asPreflightNoAnswer(error, via, PARSE_CHECK);
+		}
 		if (error instanceof CentrsError && isPreflightTransportError(error)) {
 			throw error;
 		}
@@ -1056,35 +1070,16 @@ function assertNotStructuredDashboard(
 }
 
 /**
- * RouterOS errors that mean the device did not answer the `:parse` request at
- * all, rather than rejecting the command: REST's `Session closed` (60-second
- * session cap, or a router still busy with earlier requests, #638) and the
- * native-API `action timed out` trap (#639). The gate gave no verdict, so the
- * error keeps its own code and the device stage reads `not reached`.
- */
-const PREFLIGHT_NO_ANSWER_CODES: ReadonlySet<string> = new Set([
-	"routeros/session-closed",
-]);
-const PREFLIGHT_NO_ANSWER_DETAIL = /\baction timed out\b/i;
-
-/**
  * True when a `:parse` preflight error is not a parse answer: a transport,
  * auth or connection failure, or a device that did not answer (see
- * {@link PREFLIGHT_NO_ANSWER_CODES}). These must not be relabeled as
+ * {@link isPreflightNoAnswer}). These must not be relabeled as
  * `validation/syntax`.
  */
 function isPreflightTransportError(error: CentrsError): boolean {
-	if (error.code.startsWith("transport/") || error.code.startsWith("auth/")) {
-		return true;
-	}
-	if (PREFLIGHT_NO_ANSWER_CODES.has(error.code)) {
-		return true;
-	}
-	const detail = error.context?.["detail"];
 	return (
-		error.code.startsWith("routeros/") &&
-		typeof detail === "string" &&
-		PREFLIGHT_NO_ANSWER_DETAIL.test(detail)
+		error.code.startsWith("transport/") ||
+		error.code.startsWith("auth/") ||
+		isPreflightNoAnswer(error)
 	);
 }
 

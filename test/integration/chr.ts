@@ -193,6 +193,22 @@ export const VALIDATION_REJECT_CODES: readonly string[] = [
 export const TOBOOL_STRING_COERCED_SINCE = "7.22";
 
 /**
+ * When native-API `/execute as-string` traps `action timed out (13)` for a
+ * script that runs past ~60 s (#639).
+ *   - new: when the script FINISHES (`:delay 65s` → trap at ~65 s)
+ *   - old: at a fixed ~60 s, while the script keeps running
+ * Either way the script runs to the end; only the reply is lost.
+ *
+ * Measured on booted CHRs: old on 7.24.6; new on 7.25 and 7.25.1. The 7.25
+ * betas and RCs were never booted, so the change is only bracketed to
+ * `(7.24.6, 7.25]`; this names the first build of the 7.25 line, as
+ * `PROPLIST_HIGHLIGHT_SPLIT_SINCE` does. The 7.25 changelog's
+ * `:execute as-string` entries (first listed in 7.25beta3) are the likely
+ * cause, unconfirmed.
+ */
+export const EXECUTE_AS_STRING_TRAPS_AT_SCRIPT_END_SINCE = "7.25beta1";
+
+/**
  * Where the highlighter starts the error run for
  * `/interface/print .proplist={name;comment}` (#296).
  *   - new: first `error` byte is the `{` (offset 27)

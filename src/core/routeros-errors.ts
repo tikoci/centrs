@@ -212,7 +212,25 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		build: () => ({
 			summary: "RouterOS closed the session before the request completed.",
 			remediation:
-				"RouterOS enforces a 60-second hard timeout on REST sessions; reduce the scope of the request or choose a path that completes within that ceiling.",
+				"RouterOS ends a REST request after 60 seconds, or sooner when it is still busy with earlier requests, and `--timeout` cannot extend that. A command that was already sent may still be running or may have finished, so check the router's state before running it again. Keep each REST call under 60 seconds: start long work in the background (`:execute {…}` without `as-string` runs it as a `/system/script/job`) and poll for its result (`centrs retrieve … --wait 2m --until …`).",
+		}),
+	},
+	{
+		code: "routeros/action-timed-out",
+		description:
+			"RouterOS dropped the reply of a command with its own reply limit (native-API `action timed out (13)`).",
+		// Grounded on CHR 7.24.6, 7.25 and 7.25.1 (#639): the native API traps
+		// with `action timed out (13)` when `/execute as-string` finishes a
+		// script that ran longer than about 60 s (7.24.6: at a fixed 60 s while
+		// the script keeps running), and `/container/shell` traps at about 60 s
+		// while its command keeps running. These are per-command limits;
+		// structured native-API commands collect replies until `!done`.
+		test: /\baction timed out\b/i,
+		build: () => ({
+			summary:
+				"RouterOS dropped the reply for this command (action timed out): the command may still be running, or may have finished.",
+			remediation:
+				"This RouterOS command has its own reply limit of about 60 seconds (a script run through `/execute as-string`, `/container/shell`); centrs `--timeout` does not extend it. Check the router's state before running the command again. For long work, start it in the background (`:execute {…}` without `as-string` runs it as a `/system/script/job`) and poll for its result (`centrs retrieve … --wait 2m --until …`), or bound it with the command's own timeout where it has one (`/container/shell timeout=<seconds>`, bare seconds).",
 		}),
 	},
 	{

@@ -47,6 +47,10 @@ import {
 } from "./core/inspect.ts";
 import { assertRouterOsMenuPath } from "./core/menu-path.ts";
 import {
+	asPreflightNoAnswer,
+	INSPECT_CHECK,
+} from "./core/preflight-no-answer.ts";
+import {
 	compileQueryWords,
 	type ParsedQuery,
 	parseQueries,
@@ -1406,6 +1410,20 @@ async function validateApiRequest(
 		};
 	}
 
+	try {
+		return await validateStructuredApiRequest(resolved, backend);
+	} catch (error) {
+		// Only inspect requests were sent: a dropped reply here means the
+		// operation itself was not (#639).
+		throw asPreflightNoAnswer(error, resolved.via.value, INSPECT_CHECK);
+	}
+}
+
+/** `/console/inspect` checks of a structured request's path and attributes. */
+async function validateStructuredApiRequest(
+	resolved: ResolvedApiRequest,
+	backend: ProtocolAdapter,
+): Promise<ApiValidationResult> {
 	const tokens = pathTokens(resolved.path);
 	const tips: Tip[] = [];
 

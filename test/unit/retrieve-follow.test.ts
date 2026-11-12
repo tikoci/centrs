@@ -682,6 +682,25 @@ describe("retrieveFollow refusals", () => {
 		expect(router.commands()).not.toContain("/ip/address/listen");
 	});
 
+	test("a follow-only check RouterOS dropped says the follow was not started (#639)", async () => {
+		const router = fakeRouter({
+			inspectTrap: { path: "ip,address,print", message: "action timed out" },
+		});
+		const out = await follow(request(router));
+		expect(out).toHaveLength(1);
+		const [envelope] = out;
+		expect(envelope?.ok).toBe(false);
+		if (envelope && !envelope.ok) {
+			expect(envelope.error.code).toBe("routeros/action-timed-out");
+			expect(envelope.error.summary).toContain("`/console/inspect` check");
+			expect(envelope.error.summary).toContain("the command was not sent");
+			expect(envelope.error.summary).not.toContain("may still be running");
+			expect(envelope.error.context).toMatchObject({ commandSent: false });
+		}
+		expect(router.commands()).not.toContain("/ip/address/listen");
+		expect(router.commands()).not.toContain("/ip/address/print");
+	});
+
 	test("via rest-api fails transport/capability-unsupported", async () => {
 		const out = await follow({
 			targetInput: "127.0.0.1",
