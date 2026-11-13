@@ -8,8 +8,10 @@ setting, not an outcome: `ok` and `error` say whether the transfer worked.
 
 `transfer` with `--insecure`, `CENTRS_INSECURE`, `insecure` in
 `centrs.env`, or the `insecure` device property set *(code)*. The message
-names `--insecure` whichever source set it. A provider that already trusts the peer, such as a quickchr VM,
-reports [`transport/provider-trust`](provider-trust.md) instead.
+always says `--insecure`, whatever set it; in the `--json` output,
+`meta.settings.insecure` names the source. A provider that already trusts
+the peer, such as a quickchr VM, reports
+[`transport/provider-trust`](provider-trust.md) instead.
 
 ## Why it matters
 

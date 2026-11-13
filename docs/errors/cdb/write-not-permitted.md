@@ -16,15 +16,23 @@ does not read `mcp`.
 
 ## Fix
 
-A person, not the agent, opts the device in from the CLI:
+Opt the device in, then retry the MCP call with `confirm: true`:
 
 ```sh
 centrs devices set <router> mcp=rw
 ```
 
-Then retry the MCP call with `confirm: true`. `confirm` alone is not enough:
-the device's policy decides, and `mcp=rw` is a deliberate choice to let an
-agent change that router.
+`confirm` alone is not enough: the device's policy decides, and `mcp=rw` is a
+deliberate choice to let an agent change that router.
+
+## Limits
+
+centrs does not require that a person makes that choice. The MCP
+`centrs_devices` tool can set the property too: `op: "set"` with an `updates`
+entry `mcp=rw` and `confirm: true` *(code)*. Both steps are tool calls, so an
+agent that may confirm its own calls can opt a device in and then write to it.
+If only a person should grant writes, have your MCP client ask you before
+every `centrs_devices` call that changes a record.
 
 ## Related
 
