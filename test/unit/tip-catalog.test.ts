@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Glob } from "bun";
+import { brokenSourceLinks } from "../../scripts/pages-links.ts";
 import { buildTip } from "../../src/core/envelope.ts";
 import {
 	TIPS_BASE_URL,
@@ -49,6 +50,17 @@ describe("tip catalog (#659)", () => {
 			}
 		}
 		expect(unflagged.sort()).toEqual([]);
+	});
+
+	test("relative links in tip pages resolve to repo files", async () => {
+		const broken: string[] = [];
+		for await (const rel of new Glob("**/*.md").scan(TIPS_DIR)) {
+			const relPath = rel.replaceAll("\\", "/");
+			const text = await Bun.file(join(TIPS_DIR, rel)).text();
+			for (const href of brokenSourceLinks(text, relPath, ROOT, "tips"))
+				broken.push(`${relPath}: ${href}`);
+		}
+		expect(broken).toEqual([]);
 	});
 
 	test("buildTip carries a detailsUrl only for a tip with a page", () => {

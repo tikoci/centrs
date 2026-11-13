@@ -1225,7 +1225,7 @@ function resolveDeviceShowTargetMeta(
 	if (commentVia !== undefined && via !== commentVia) {
 		warnings.push({
 			code: "cdb/override-applied",
-			message: `Comment option "via=${commentVia}" was overridden by ${sources["via"]?.kind ?? "a higher-precedence source"}.`,
+			message: `Device property "via=${commentVia}" was overridden by ${sources["via"]?.kind ?? "a higher-precedence source"}.`,
 			context: {
 				target: entry.target,
 				key: "via",
@@ -1287,7 +1287,7 @@ function parseProtocolOption(
 	}
 	warnings.push({
 		code: "cdb/invalid-option",
-		message: `Comment option "${key}=${value}" is invalid (unknown protocol); it is ignored.`,
+		message: `Device property "${key}=${value}" is invalid (unknown protocol); it is ignored.`,
 		context: { key, value, recordIndex },
 	});
 	return undefined;
@@ -1747,8 +1747,8 @@ function validateCommentKvUpdates(
 	if (reserved.length > 0) {
 		throw new CentrsError({
 			code: "cdb/reserved-key",
-			summary: `Comment kv-soup cannot carry first-class CDB field(s): ${reserved.join(", ")}.`,
-			remediation: `Set ${reserved.join(", ")} with the matching --flag; the comment kv-soup is for ${commentKvAllowlist.join(", ")} plus identity/mac/ip/${commentKvGeoKeys.join("/")}.`,
+			summary: `Cannot set ${reserved.join(", ")} as key=value: ${reserved.length === 1 ? "it is a record field with its own flag" : "they are record fields with their own flags"}.`,
+			remediation: `Set ${reserved.join(", ")} with the matching flag (--user, --password-stdin, --group, --profile, --session). key=value is for device properties: ${commentKvAllowlist.join(", ")}, plus identity/mac/ip/${commentKvGeoKeys.join("/")}.`,
 			context: { target, reservedKeys: reserved },
 		});
 	}

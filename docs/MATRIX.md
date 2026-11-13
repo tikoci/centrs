@@ -378,9 +378,12 @@ that keeps growing is being used as an issue.
   skills are the agent entry point; they should name the command prefixes that
   are safe to allowlist. Pages publishes `llms.txt` and the generated CLI
   reference, the README shows real envelopes, and one worked example spans
-  retrieve → export → transfer → `api --stream`. Many error pages are still
-  scaffold stubs, tracked by a shrinking list in `error-pages.test.ts`; a tip
-  carries a `detailsUrl` only when it has a page (#659).
+  retrieve → export → transfer → `api --stream`. Every error code has a
+  written page, and `error-pages.test.ts` fails on a scaffold stub. A tip
+  carries a `detailsUrl` only when its page is published (`tip/no-devices`,
+  `tip/credentials-missing`); `pages-site.test.ts` assembles the site to
+  prove it. The older error pages still need a re-pass against the page
+  contract (#659 phase 4).
   TIKOCI-wide instruction files are collected in `tikoci.github.io` and
   vendored here, each recording its source and revision.
 - **Ready when:** now.

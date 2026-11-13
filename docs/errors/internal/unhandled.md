@@ -1,9 +1,20 @@
 # `internal/unhandled`
 
-An unexpected internal error occurred (this is a centrs bug).
+A command failed with an error centrs has no code for. The message is in `summary`, and `cause` holds the original error when there is one.
 
-## Fix
+## What may have run
 
-See [`docs/CONSTITUTION.md`](../../CONSTITUTION.md) for the centrs error
-contract. This stub will be expanded with the typical trigger and remediation
-for `internal/unhandled`.
+That depends on where it failed. If the command could have changed the
+router, check its state before you run it again.
+
+## Report it
+
+This is a centrs bug. Open an issue with:
+
+- the command, with passwords (`--password`, `--cdb-password`) and other
+  secrets removed;
+- the `--json` envelope, including `cause` when it has one;
+- the text output with `--verbose`, when the command takes it;
+- `centrs --version`, and how centrs was installed.
+
+There is no `--bug-report` flag.

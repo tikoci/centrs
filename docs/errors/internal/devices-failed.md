@@ -1,9 +1,20 @@
 # `internal/devices-failed`
 
-The devices command failed with an unexpected internal error.
+A `devices` command failed with an error centrs has no code for. The message is in `summary`.
 
-## Fix
+## What may have run
 
-See [`docs/CONSTITUTION.md`](../../CONSTITUTION.md) for the centrs error
-contract. This stub will be expanded with the typical trigger and remediation
-for `internal/devices-failed`.
+That depends on where it failed. If the command could have changed the
+router, check its state before you run it again.
+
+## Report it
+
+This is a centrs bug. Open an issue with:
+
+- the command, with passwords (`--password`, `--cdb-password`) and other
+  secrets removed;
+- the `--json` envelope, including `cause` when it has one;
+- the text output with `--verbose`, when the command takes it;
+- `centrs --version`, and how centrs was installed.
+
+There is no `--bug-report` flag.

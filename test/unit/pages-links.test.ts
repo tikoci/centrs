@@ -8,6 +8,7 @@ import {
 	REPO_BLOB_BASE,
 	rewriteHref,
 	rewriteHtmlLinks,
+	siteDirFor,
 } from "../../scripts/pages-links.ts";
 
 describe("Pages link rewriting (#464)", () => {
@@ -31,6 +32,22 @@ describe("Pages link rewriting (#464)", () => {
 			"routeros/unknown-path/",
 		);
 		expect(rewriteHref("../README.md", "routeros/a.md")).toBe("../../");
+	});
+
+	test("tip pages are served from tips/<slug>/ and link to error pages (#659)", () => {
+		expect(siteDirFor("no-devices.md", "tips")).toBe("tips/no-devices/");
+		expect(
+			rewriteHref("../errors/cdb/not-found.md", "no-devices.md", "tips"),
+		).toBe("../../errors/cdb/not-found/");
+		expect(
+			rewriteHref("credentials-missing.md#fix", "no-devices.md", "tips"),
+		).toBe("../credentials-missing/#fix");
+		expect(
+			rewriteHref("../../commands/devices/README.md", "no-devices.md", "tips"),
+		).toBe(`${REPO_BLOB_BASE}commands/devices/README.md`);
+		expect(rewriteHref("../../tips/no-devices.md", "cdb/not-found.md")).toBe(
+			"../../../tips/no-devices/",
+		);
 	});
 
 	test("any other repo file goes to GitHub", () => {

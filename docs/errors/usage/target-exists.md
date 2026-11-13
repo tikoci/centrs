@@ -1,9 +1,22 @@
 # `usage/target-exists`
 
-The destination already exists and would be overwritten; pass --force to replace it.
+The destination file or directory already exists on the router, and centrs
+does not overwrite without `--force`. Nothing was changed.
+
+## Emitted by
+
+`transfer upload`, `copy` and `mkdir` *(code)*.
+
+## Context
+
+- `remote`: the existing path.
 
 ## Fix
 
-See [`docs/CONSTITUTION.md`](../../CONSTITUTION.md) for the centrs error
-contract. This stub will be expanded with the typical trigger and remediation
-for `usage/target-exists`.
+- To replace it, pass `--force`.
+- Otherwise choose another name. `centrs transfer list <router>` shows the
+  router's files.
+
+## Related
+
+- [`input/local-file-not-found`](../input/local-file-not-found.md)

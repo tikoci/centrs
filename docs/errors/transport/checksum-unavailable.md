@@ -1,9 +1,13 @@
 # `transport/checksum-unavailable`
 
-No file digest is available over the transport, so integrity was verified by size instead.
+A warning: `--verify checksum` was asked for, but RouterOS gives no file
+digest that `transfer` can read, so it compared sizes instead. The transfer
+ran.
 
 ## Fix
 
-See [`docs/CONSTITUTION.md`](../../CONSTITUTION.md) for the centrs error
-contract. This stub will be expanded with the typical trigger and remediation
-for `transport/checksum-unavailable`.
+- Use the default, `--verify size`, and the warning goes away.
+- To compare contents, download the file and hash it locally.
+
+The [`transfer` README](../../../commands/transfer/README.md) explains what
+each method can verify.
