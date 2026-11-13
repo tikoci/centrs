@@ -82,23 +82,26 @@ with no fix. Keep pages short. This shape is a baseline for authors and
 reviewers, not a form to fill; leave a section out when it has nothing to say,
 and depart from it when a code needs to.
 
-1. **H1** — `` # `<code>` ``, exactly (the test checks it). 2. **Lead** (one
-or two sentences, required) — what failed, and whether anything ran or changed
-on the device. It must agree with the catalog summary, which MCP resources
-serve on its own. 3. **Emitted by** (required when more than one command or
-transport raises it) — which commands and `--via` transports. This tells a
-reader whether switching transport can help. 4. **Context** — what each
-`context.*` key means. 5. **Typical triggers** — each one says where it comes
-from: *(code)* read from the emission site, *(CHR 7.x)* reproduced on a
-device, *(field)* seen in a real session, or *(unverified)*. An unverified
-trigger is allowed and is better than silence; it is never written as fact. 6.
-**Fix** — ordered, concrete `centrs` and RouterOS commands. 7. **Limits** —
-RouterOS versions, platforms or transports where no fix exists. 8. **If this
-looks wrong** — the centrs bug it most likely is (a missing mapping, a wrong
-suggestion, a stale install) and what to put in an issue: the command, the
-`--json` envelope, `centrs --version`, and an ask to remove passwords and
-other secrets from both first. There is no `--bug-report` flag. 9. **Related**
-— sibling codes, as relative `.md` links.
+1. **H1** — `` # `<code>` ``, exactly (the test checks it).
+2. **Lead** (one or two sentences, required) — what failed, and whether
+   anything ran or changed on the device. It must agree with the catalog
+   summary, which MCP resources serve on its own.
+3. **Emitted by** (required when more than one command or transport raises
+   it) — which commands and `--via` transports. This tells a reader whether
+   switching transport can help.
+4. **Context** — what each `context.*` key means.
+5. **Typical triggers** — each one says where it comes from: *(code)* read from
+   the emission site, *(CHR 7.x)* reproduced on a device, *(field)* seen in a
+   real session, or *(unverified)*. An unverified trigger is allowed and is
+   better than silence; it is never written as fact.
+6. **Fix** — ordered, concrete `centrs` and RouterOS commands.
+7. **Limits** — RouterOS versions, platforms or transports where no fix exists.
+8. **If this looks wrong** — the centrs bug it most likely is (a missing
+   mapping, a wrong suggestion, a stale install) and what to put in an issue:
+   the command, the `--json` envelope, `centrs --version`, and an ask to
+   remove passwords and other secrets from both first. There is no
+   `--bug-report` flag.
+9. **Related** — sibling codes, as relative `.md` links.
 
 RouterOS-side claims follow
 [`routeros-grounding.instructions.md`](../../.github/instructions/routeros-grounding.instructions.md).
