@@ -334,7 +334,6 @@ function sentenceTag(words: readonly Uint8Array[]): string | undefined {
 	return undefined;
 }
 
-/** Read an attribute by name (variable key avoids index-signature pitfalls). */
 /**
  * The reason a `!fatal` gives. RouterOS 7.25.1 sends it as a bare word after
  * the reply word (`!fatal` `session terminated on request` on `/quit`), not as
@@ -349,6 +348,7 @@ export function fatalReason(reply: ApiReply): string | undefined {
 	return bare.length > 0 ? bare.join(" ") : undefined;
 }
 
+/** Read an attribute by name (variable key avoids index-signature pitfalls). */
 export function readAttribute(
 	reply: ApiReply,
 	name: string,

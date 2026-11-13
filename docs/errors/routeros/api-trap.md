@@ -17,6 +17,7 @@ transport does not help: RouterOS gives the same message on each.
 - `detail`: RouterOS's message, verbatim. The `cause` holds it too.
 - `command`: the API command that trapped, such as `/user/add`.
 - `message`: the `!trap` `=message=` attribute.
+- `category`: the `!trap` `=category=` attribute, when RouterOS sends one.
 
 ## Typical triggers
 

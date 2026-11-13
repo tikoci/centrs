@@ -1771,7 +1771,7 @@ function validateCommentKvUpdates(
 			throw new CentrsError({
 				code: "cdb/unknown-option",
 				summary: `"${key}" is not a centrs device property; rejected under --strict.`,
-				remediation: `Drop --strict to write it verbatim, or use an allowlisted key: ${commentKvAllowlist.join(", ")}.`,
+				remediation: `Drop --strict to write it verbatim, or use a device property: ${[...commentKvAllowlist, ...commentKvLookupKeys, ...commentKvGeoKeys].join(", ")}.`,
 				context: { target, key },
 			});
 		}

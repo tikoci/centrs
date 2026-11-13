@@ -444,6 +444,13 @@ done or declined. A nit that needs more explanation is an issue.
 - `/system/script/run number=nosuch` fails as `routeros/unknown-path` on both
   transports (REST 404, native `no such item`), but the path exists and only
   the item is missing (CHR 7.25.1, #659).
+- Integration tests that spawn the CLI without a scratch `HOME` read the
+  developer's default CDB; an encrypted one fails them as
+  `cdb/password-required`, even for a literal URL target (#659). Give every
+  CLI-spawning test a throwaway `HOME`, as `api-stream-cancel.test.ts` does.
+- The MAC-Telnet L2 integration files hang now and then on macOS, a different
+  one per full run, and pass on a rerun (#659). They passed with no hang on
+  Linux (2026-11-12).
 - `.github/instructions/`: trim Copilot-era verbosity when the TIKOCI-wide
   files are collected in `tikoci.github.io`.
 - `test/integration/api-stream-command.test.ts` fails intermittently in the
