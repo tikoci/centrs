@@ -1,7 +1,7 @@
 # `cdb/created`
 
 A warning: there was no CDB at the default path, so centrs created an empty
-one there. The command went on with no saved devices.
+one there and read it as a CDB with no saved devices.
 
 Only the default path, `~/.config/tikoci/winbox.cdb`, is created this way. A
 missing file named by `--cdb-file` or `CENTRS_CDB_FILE` is an error instead,

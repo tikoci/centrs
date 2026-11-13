@@ -1,8 +1,8 @@
 # `transport/checksum-unavailable`
 
 A warning: `--verify checksum` was asked for, but RouterOS gives no file
-digest that `transfer` can read, so it compared sizes instead. The transfer
-ran.
+digest that `transfer` can read, so it compares sizes instead. `ok` and
+`error` say whether the transfer and its check passed.
 
 ## Fix
 

@@ -1,7 +1,8 @@
 # `transport/insecure-trust`
 
-A warning: `--insecure` is set, so TLS certificates and SSH host keys are
-not verified for this transfer. The transfer ran.
+A warning: `--insecure` is set, so this transfer does not verify TLS
+certificates or SSH host keys when it connects. The warning reports that
+setting, not an outcome: `ok` and `error` say whether the transfer worked.
 
 ## Emitted by
 

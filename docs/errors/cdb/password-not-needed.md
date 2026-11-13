@@ -1,7 +1,7 @@
 # `cdb/password-not-needed`
 
 A warning: a CDB password was given, but the CDB is not encrypted, so the
-password was ignored. The command ran.
+password was ignored. `ok` and `error` say how the command itself went.
 
 ## Typical triggers
 

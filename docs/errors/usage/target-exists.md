@@ -14,7 +14,7 @@ does not overwrite without `--force`. Nothing was changed.
 ## Fix
 
 - To replace it, pass `--force`.
-- Otherwise choose another name. `centrs transfer list <router>` shows the
+- Otherwise choose another name. `centrs transfer <router> list` shows the
   router's files.
 
 ## Related

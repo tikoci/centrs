@@ -23,10 +23,12 @@ Choose one, from the narrowest to the broadest:
 ## By transport
 
 - **SFTP transfers** (`transfer --via sftp`) log in with an SSH key, never a
-  password. Save the key path with `devices set <router> ssh-key=<path>`.
+  password (see the [`transfer` README](../../commands/transfer/README.md)).
+  Save the key path with `devices set <router> ssh-key=<path>`.
 - **MAC-Telnet** needs a user and a password like the IP transports. A user
   whose only login is RADIUS fails as
-  [`transport/auth-failed`](../errors/transport/auth-failed.md).
+  [`transport/auth-failed`](../errors/transport/auth-failed.md) (CHR 7.25.1,
+  see [`routeros/mac-telnet-error`](../errors/routeros/mac-telnet-error.md)).
 
 ## Related
 

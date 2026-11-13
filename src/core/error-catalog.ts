@@ -299,7 +299,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "internal/native-api-length",
 		summary:
-			"A native-API word length could not be encoded, so the word was not sent (a centrs bug).",
+			"A native-API word length could not be encoded, so the command with that word was not sent (a centrs bug).",
 	},
 	{
 		code: "internal/settings-failed",

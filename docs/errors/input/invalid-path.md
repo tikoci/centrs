@@ -23,13 +23,15 @@ quote. Nothing was sent.
   address a row; pass `.id` as a field, `-f .id=*1`, when the command takes
   one *(code)*.
 - An endpoint with no menu segment, such as `/` *(code)*.
-- A file name with a double quote or a newline over SFTP *(code)*. RouterOS
-  file names do not use them.
+- A file name with a double quote or a newline over SFTP. centrs's SFTP
+  client cannot quote them *(code)*; whether RouterOS allows such a name has
+  not been checked *(unverified)*.
 
 ## Fix
 
 Follow `remediation`. Find row ids with a GET of the menu:
-`centrs api <router> ip/address`.
+`centrs api <router> ip/address`. For an SFTP path, use a name without
+double quotes or newlines.
 
 ## Related
 
