@@ -21,8 +21,10 @@ Nothing was written, and no router was contacted.
 ## Fix
 
 - Check the path in `context.cdbFile`.
-- Restore the CDB from a backup. `devices` writes one next to the CDB
-  (`<cdb>.bak.<timestamp>`) before each change.
+- Restore the CDB from a backup, if there is one. Before most changes,
+  `devices` writes one next to the CDB (`<cdb>.bak.<timestamp>`) and keeps the
+  newest two. There is none for a CDB centrs has never written, and
+  `devices encrypt --no-backup` writes none.
 - If WinBox opens the file and centrs does not, open an issue with
   `context.parseKind`, `parseOffset`, `parseStructure` and `centrs --version`.
   Do not attach the CDB: it holds credentials.

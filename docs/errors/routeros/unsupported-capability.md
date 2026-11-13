@@ -5,8 +5,11 @@ before connecting. Nothing was sent.
 
 ## Emitted by
 
-- `retrieve` with any `--via` but `rest-api` or `native-api`: `ssh`,
-  `mac-telnet`, `mndp`, `romon`, `winbox-terminal` or `btest` *(code)*.
+- `retrieve` with `--via ssh`, `mac-telnet`, `mndp`, `romon` or
+  `winbox-terminal` *(code)*. `retrieve --via snmp` fails as
+  [`routeros/protocol-not-implemented`](protocol-not-implemented.md) instead,
+  and `retrieve --via btest` as
+  [`settings/invalid-via`](../settings/invalid-via.md).
 - `execute` with `--via snmp`, `mndp` or `btest` *(code)*.
 
 ## Context

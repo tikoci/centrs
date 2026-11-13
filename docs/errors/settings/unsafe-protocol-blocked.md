@@ -18,9 +18,15 @@ ftp transfer is not built yet. With the opt-in set, the same command fails as
 
 ## Fix
 
-Use an encrypted or local method: `--via sftp` for large files, or
-`--via rest` or `--via native` for small ones. Without `--via`, `transfer`
-picks a method by size and direction.
+Use another method: `--via sftp` for large files, or `--via rest` or
+`--via native` for small ones. Without `--via`, `transfer` picks a method by
+size and direction.
+
+Only `sftp` is encrypted by default. With a bare host, `rest` uses plain HTTP
+(port 80) and `native` plain TCP (port 8728), so they send the password and
+the file in clear text too. They use TLS only with an `https://` target,
+`--port 8729` for `native`, or a saved `www-ssl-port` or `api-ssl-port`
+device property.
 
 ## Related
 

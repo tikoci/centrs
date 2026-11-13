@@ -35,7 +35,8 @@ still applies.
   MCP also needs the device's `mcp=rw` property; without it the call fails as
   [`cdb/write-not-permitted`](../cdb/write-not-permitted.md).
 - If centrs took a read for a write, that is a centrs bug in its read-verb
-  list. Open an issue with the command and `centrs --version`.
+  list. Open an issue with the command and `centrs --version`, with
+  passwords and other secrets removed from the command.
 
 ## Related
 

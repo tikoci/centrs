@@ -43,6 +43,8 @@ This code is a gap in centrs's mapping (`src/core/routeros-errors.ts`), not a
 RouterOS fault class. When a message recurs, open an issue with the command,
 the `--json` envelope (it carries `context.detail` and `cause`), the RouterOS
 version and `centrs --version`, so the message can get its own code.
+Remove passwords
+(`--password`, `--cdb-password`) and other secrets from both first.
 
 ## Related
 

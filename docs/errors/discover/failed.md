@@ -26,7 +26,8 @@ failure stay in the CDB, and the error does not list them.
 ## If this looks wrong
 
 Every recurring cause should have its own code. Open an issue with the
-command, the `--json` envelope and `centrs --version`.
+command, the `--json` envelope and `centrs --version`. Remove passwords
+(`--password`, `--cdb-password`) and other secrets from both first.
 
 ## Related
 

@@ -87,12 +87,13 @@ describeFast("native API against CHR", () => {
 	test("keeps RouterOS's !fatal reason on /quit (bare word, #659)", async () => {
 		const started = await startIntegrationChr({}, { reuse: true });
 		const chr = started.chr;
-		expect(await chr.waitForBoot(180_000)).toBe(true);
-		const auth = splitQuickChrAuth(
-			readEnv(started.env, "QUICKCHR_AUTH") ?? "admin:",
-		);
 
+		// The boot check sits inside the try so a failed boot still releases the lease.
 		try {
+			expect(await chr.waitForBoot(180_000)).toBe(true);
+			const auth = splitQuickChrAuth(
+				readEnv(started.env, "QUICKCHR_AUTH") ?? "admin:",
+			);
 			const { session } = await withBootReadyRetry(() =>
 				connectNativeApi({
 					host: "127.0.0.1",

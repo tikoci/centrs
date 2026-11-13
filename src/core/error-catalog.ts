@@ -150,7 +150,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "cdb/unknown-option",
 		summary:
-			"A device property centrs does not recognize; it is kept but has no effect.",
+			"A device's key=value is not a centrs device property. centrs keeps it, but it has no effect; with --strict, devices add and set refuse it.",
 	},
 	{
 		code: "cdb/write-not-permitted",
@@ -481,7 +481,8 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "routeros/mac-telnet-protocol",
-		summary: "A MAC-Telnet packet could not be decoded.",
+		summary:
+			"A MAC-Telnet datagram for this session could not be decoded, and centrs closed the session.",
 	},
 	{
 		code: "routeros/mac-telnet-unsupported-auth",
@@ -587,7 +588,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "target/unresolved",
 		summary:
-			"No connectable host: no target was given, or the selection named the credential-only __default__ record.",
+			"No connectable host for this target: no target was given, --host or CENTRS_HOST was empty, or the selection named the credential-only __default__ record.",
 	},
 
 	// transport/*

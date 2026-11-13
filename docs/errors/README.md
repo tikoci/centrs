@@ -98,7 +98,8 @@ and depart from it when a code needs to.
 7. **Limits** — RouterOS versions, platforms or transports where no fix exists.
 8. **If this looks wrong** — the centrs bug it most likely is (a missing
    mapping, a wrong suggestion, a stale install) and what to put in an issue:
-   the command, the `--json` envelope, `centrs --version`. There is no
+   the command, the `--json` envelope, `centrs --version`, and an ask to
+   remove passwords and other secrets from both first. There is no
    `--bug-report` flag.
 9. **Related** — sibling codes, as relative `.md` links.
 

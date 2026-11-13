@@ -1,7 +1,7 @@
 # `routeros/mac-telnet-protocol`
 
-centrs received a MAC-Telnet datagram it could not decode, and closed the
-session. If the session was already running a command, that command may or
+centrs received a MAC-Telnet datagram for this session that it could not
+decode, and closed the session. If the session was already running a command, that command may or
 may not have run.
 
 ## Emitted by
@@ -10,17 +10,20 @@ may not have run.
 
 ## Typical triggers
 
-- A datagram shorter than the 22-byte MAC-Telnet header *(code)*.
 - A control block whose declared length runs past the end of the datagram
-  *(code)*.
+  *(code)*: a truncated or corrupt datagram, or something on UDP port 20561
+  that is not a RouterOS MAC-Telnet server.
 
-Both mean a truncated or corrupt datagram, or something on UDP port 20561
-that is not a RouterOS MAC-Telnet server.
+Not every bad datagram ends the session. One shorter than the 22-byte
+MAC-Telnet header, or one for another session, is dropped, and the session
+goes on *(code)*.
 
 ## Fix
 
-- Run the command again: MAC-Telnet is UDP, and one bad datagram ends the
-  session.
+- Before you repeat a write, over MAC-Telnet or any other transport, check
+  the device's state: the command may already have run.
+- Then run the command again: MAC-Telnet is UDP, and one corrupt datagram can
+  end the session.
 - Check that the target MAC address is the RouterOS device you mean, and that
   nothing else on the segment answers MAC-Telnet.
 - If it repeats, use an IP transport (`--via ssh`, `--via native-api`).
@@ -29,8 +32,9 @@ that is not a RouterOS MAC-Telnet server.
 
 If the device is a normal RouterOS router, this is a centrs decoder bug.
 Open an issue with the command, the `--json` envelope, the RouterOS version
-and `centrs --version`. A packet capture of UDP 20561 helps; strip anything
-sensitive from it first.
+and `centrs --version`. Remove passwords
+(`--password`, `--cdb-password`) and other secrets from both first. A packet capture of UDP 20561
+helps; strip anything sensitive from it first.
 
 ## Related
 

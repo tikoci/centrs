@@ -24,7 +24,9 @@ which one you meant. Nothing was changed, and no router was contacted.
 - In a fan-out, `--match` is refused. Run that target on its own with
   `--match`, or select it with `--group` or `--where`.
 - Over MCP, which has no `--match`, pass one candidate's address from
-  `context.matches[].target`.
+  `context.matches[].target`. This works only when the candidates have
+  different addresses. When they share one, as in the same-address case above,
+  remove the duplicate with the CLI first, then retry over MCP.
 - To remove the duplicate for good: `centrs devices remove <router> --match …`.
 
 ## Related

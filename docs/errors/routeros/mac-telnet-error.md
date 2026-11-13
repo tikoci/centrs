@@ -24,13 +24,16 @@ user with no local login, fail as
 - Check that MAC-Telnet is allowed on the interface you reach the device on:
   `/tool/mac-server print` shows its `allowed-interface-list` (`all` on a
   fresh CHR 7.25.1).
-- Try again, or use an IP transport (`--via ssh`, `--via native-api`).
+- Before you repeat a write, over MAC-Telnet or any other transport, check
+  the device's state: the command may already have run.
+- Then try again, or use an IP transport (`--via ssh`, `--via native-api`).
 
 ## If this looks wrong
 
 Open an issue with the command, the `--json` envelope (its `summary` holds
-the device's text), the RouterOS version and `centrs --version`. A device
-string that recurs should get its own code.
+the device's text), the RouterOS version and `centrs --version`. Remove passwords
+(`--password`, `--cdb-password`) and other secrets from both first.
+A device string that recurs should get its own code.
 
 ## Related
 
