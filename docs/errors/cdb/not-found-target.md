@@ -7,14 +7,16 @@ router was contacted.
 
 - `devices show`, `set` and `remove` *(code)*.
 - `retrieve`, `execute`, `api`, `transfer` and `terminal`, only when the CDB
-  is explicit (`--cdb-file`, `CENTRS_CDB_FILE` or a CDB password) and
-  `<router>` looks like a name rather than an address *(code)*. A name cannot
-  be told apart from a typo, so centrs fails closed.
+  is explicit (`--cdb-file`, `CENTRS_CDB_FILE` or a CDB password), the CDB
+  has no `__default__` record, and `<router>` looks like a name rather than
+  an address *(code)*. A name cannot be told apart from a typo, so centrs
+  fails closed.
 
 Elsewhere a miss is not an error: an address (IPv4, IPv6, URL or MAC) is
-dialed as a literal host, a `__default__` record supplies its credentials,
-and with the implicit default CDB any unmatched `<router>` is dialed as
-given.
+dialed as a literal host, and with the implicit default CDB any unmatched
+`<router>` is dialed as given. A `__default__` record turns off this typo
+check, even in an explicit CDB: an unmatched name is dialed as a literal
+host with the `__default__` credentials *(code)*.
 
 ## Context
 

@@ -559,7 +559,7 @@ export class NativeApiSession {
 					? `The RouterOS API service at ${this.endpoint} closed the session: ${reason}`
 					: `The RouterOS API service at ${this.endpoint} reported a fatal error.`,
 				remediation:
-					"RouterOS ended this API session; the reason is RouterOS's own. Reconnect and retry; if it repeats, check the device log (`/log print`).",
+					"RouterOS ended this API session; the reason is RouterOS's own. A command already sent may have run: check the device's state before repeating a write. Then reconnect; if it repeats, check the device log (`/log print`).",
 				context: {
 					attributes: reply.attributes,
 					...(reason ? { reason } : {}),

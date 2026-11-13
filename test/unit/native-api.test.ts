@@ -509,6 +509,23 @@ describe("native-api session command flow", () => {
 		expect((error as Error).message).toContain("session terminated on request");
 	});
 
+	test("!fatal remediation says to check state before repeating a write", async () => {
+		// A sent write fails with the session; its outcome is unknown, so a
+		// bare "retry" could apply a non-idempotent add twice (#663 review).
+		const transport = new FakeTransport();
+		const promise = transport.apiSession.talk({
+			command: "/ip/address/add",
+			attributes: { address: "192.0.2.1/24", interface: "ether1" },
+		});
+		transport.reply(["!fatal", "session terminated on request"]);
+		const error = (await promise.catch((e: unknown) => e)) as {
+			remediation?: string;
+		};
+		expect(error.remediation).toContain(
+			"check the device's state before repeating a write",
+		);
+	});
+
 	test("transport close rejects pending commands", async () => {
 		const transport = new FakeTransport();
 		const promise = transport.apiSession.talk({ command: "/a/print" });

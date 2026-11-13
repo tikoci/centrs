@@ -1,8 +1,9 @@
 # `discover/failed`
 
 `discover` failed for a reason with no more specific code. The summary holds
-the underlying message. No CDB change was made unless the summary says
-otherwise.
+the underlying message. Without `--save`, the CDB was not touched. With
+`--save`, each neighbor is saved on its own, so neighbors saved before the
+failure stay in the CDB, and the error does not list them.
 
 ## Typical triggers
 
@@ -16,7 +17,9 @@ otherwise.
 
 - Run `centrs discover` again; the listen window is short (`--timeout`,
   15 seconds by default).
-- With `--save`, check `--cdb-file` and `--cdb-password`.
+- With `--save`, check `--cdb-file` and `--cdb-password`, and run
+  `centrs devices list` to see which neighbors were saved before the failure.
+  Running `discover --save` again skips the ones already saved.
 - In an agent sandbox, see
   [`mndp/listen-failed`](../mndp/listen-failed.md).
 
