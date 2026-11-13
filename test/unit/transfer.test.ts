@@ -23,6 +23,11 @@ import {
 } from "../../src/index.ts";
 import { SftpClient } from "../../src/protocols/sftp.ts";
 import type { CdbResolution } from "../../src/resolver/index.ts";
+import {
+	type FileBackend,
+	type FileRow,
+	runResolvedTransfer,
+} from "../../src/transfer.ts";
 import { HERMETIC_ENV } from "./hermetic-env.ts";
 
 // ── fetch mock (drives the REST adapter end-to-end, no CHR) ──────────────────
@@ -1300,6 +1305,59 @@ describe("transfer list", () => {
 		} finally {
 			fetchMock.restore();
 		}
+	});
+});
+
+describe("--verify checksum fallback warning (#664)", () => {
+	function backendWith(row: FileRow, bytes: Buffer): FileBackend {
+		return {
+			listFiles: async () => [],
+			findFile: async () => row,
+			writeFile: async () => {},
+			readFile: async () => bytes,
+			removeFile: async () => {},
+			makeDir: async () => {},
+			copyFile: async () => {},
+			close: async () => {},
+		};
+	}
+
+	async function checksumWarning(
+		via: string,
+		row: FileRow,
+	): Promise<string | undefined> {
+		const resolved = await resolveTransferRequest(
+			baseRequest({
+				verb: "download",
+				via,
+				remote: "a.txt",
+				local: join(TMP, `checksum-${via}.txt`),
+				verify: "checksum",
+			}),
+			HERMETIC_ENV,
+		);
+		const envelope = await runResolvedTransfer(
+			resolved,
+			backendWith(row, Buffer.from("abc")),
+		);
+		return envelope.warnings?.find(
+			(warning) => warning.code === "transport/checksum-unavailable",
+		)?.message;
+	}
+
+	test("rest says it compared sizes", async () => {
+		expect(
+			await checksumWarning("rest", { id: "*1", name: "a.txt", size: 3 }),
+		).toContain("comparing sizes instead");
+	});
+
+	test("sftp, which reports no size, says nothing was compared", async () => {
+		const message = await checksumWarning("sftp", {
+			id: "a.txt",
+			name: "a.txt",
+		});
+		expect(message).toContain("nothing was compared");
+		expect(message).not.toContain("comparing sizes");
 	});
 });
 

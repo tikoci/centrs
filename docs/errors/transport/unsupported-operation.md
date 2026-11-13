@@ -1,6 +1,8 @@
 # `transport/unsupported-operation`
 
-The transfer method cannot do this operation. Nothing was sent.
+The transfer method cannot do this operation. Nothing was written or copied.
+An oversized upload fails before any network call; a `copy` over SFTP may
+first look up the source and, without `--force`, the destination.
 
 ## Emitted by
 

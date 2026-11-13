@@ -1,8 +1,9 @@
 # `transport/checksum-unavailable`
 
 A warning: `--verify checksum` was asked for, but RouterOS gives no file
-digest that `transfer` can read, so it runs the default `--verify size` check
-instead. `ok` and `error` say whether the transfer and its check passed.
+digest that `transfer` can read. Over REST or the native API it compares
+sizes instead; over SFTP it compares nothing. `ok` and `error` say whether the
+transfer, and any check that ran, passed.
 
 ## What was checked
 

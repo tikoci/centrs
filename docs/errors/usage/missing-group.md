@@ -9,9 +9,11 @@ Library callers of `retrieveGroup` with an empty `group` *(code)*. On the CLI,
 
 ## Fix
 
-Pass the name of a device group, such as `group: "prod"`.
-`centrs devices groups` lists them. To read one device, pass `target`
-instead of `group`.
+- To read a group, call `retrieveGroup` with a non-empty `group`, such as
+  `group: "prod"`. `centrs devices groups` lists the names.
+- To read one device, call `retrieve` instead, with `targetInput`:
+  `retrieve({ targetInput: "router1", path: "/system/resource" })`.
+  `retrieveGroup` always needs a group, even when `targetInput` is set.
 
 ## Related
 

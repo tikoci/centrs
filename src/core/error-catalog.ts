@@ -225,7 +225,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "input/invalid-path",
 		summary:
-			"An api endpoint or file path cannot be sent as given (row id, empty path, or a character SFTP cannot quote). Nothing was sent.",
+			"An api endpoint or file path cannot be sent as given (row id, empty path, or a character SFTP cannot quote). That path was not sent; a transfer may have read other paths first.",
 	},
 	{
 		code: "input/invalid-query",
@@ -633,7 +633,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "transport/checksum-unavailable",
 		summary:
-			"RouterOS gives no file digest, so --verify checksum ran the default size check instead (warning).",
+			"RouterOS gives no file digest for --verify checksum: REST/native compared sizes instead, and SFTP compared nothing (warning).",
 	},
 	{
 		code: "transport/connection-closed",
@@ -696,7 +696,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "transport/unsupported-operation",
 		summary:
-			"The transfer method cannot do this operation (copy over sftp, or an upload over 60 KB over rest/native). Nothing was sent.",
+			"The transfer method cannot do this operation (copy over sftp, or an upload over 60 KB over rest/native). Nothing was written; a copy may have looked up its files first.",
 	},
 	{
 		code: "transport/write-outcome-unknown",
