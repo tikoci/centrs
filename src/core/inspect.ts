@@ -181,9 +181,10 @@ export async function inspectCompletions(
 /**
  * {@link inspectChildren} that swallows a "path not found" trap to an empty
  * list, so the caller can classify the absence itself (REST returns an empty
- * child list; native traps). Only the two grounded not-found codes are
- * swallowed — `routeros/unknown-path` (the classified form) and the legacy
- * `routeros/api-trap` catch-all; every other error propagates. Use this for the
+ * child list; native traps). Only the grounded not-found codes are
+ * swallowed — `routeros/unknown-path` and `routeros/no-such-item` (the
+ * classified forms) and the legacy `routeros/api-trap` catch-all; every other
+ * error propagates. Use this for the
  * existence probe, not for attribute/value discovery (where a trap is a real
  * failure).
  */
@@ -197,7 +198,8 @@ export async function inspectChildrenOrEmpty(
 		if (
 			error instanceof CentrsError &&
 			(error.code === "routeros/api-trap" ||
-				error.code === "routeros/unknown-path")
+				error.code === "routeros/unknown-path" ||
+				error.code === "routeros/no-such-item")
 		) {
 			return [];
 		}

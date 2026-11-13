@@ -275,7 +275,7 @@ describe("api --stream command lifecycle (#399)", () => {
 		expect(result.exitCode).toBe(1);
 		expect(result.lines.at(-1)).toMatchObject({
 			ok: false,
-			error: { code: "routeros/unknown-path" },
+			error: { code: "routeros/no-such-item" },
 		});
 	});
 	test("a later duration abort cannot hide an unsolicited interruption", async () => {

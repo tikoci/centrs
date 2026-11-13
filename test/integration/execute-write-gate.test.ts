@@ -154,11 +154,7 @@ describeFast("bare menu path reads against CHR (W6)", () => {
 			const auth = splitQuickChrAuth(
 				readEnv(started.env, "QUICKCHR_AUTH") ?? "admin:",
 			);
-			// Same RouterOS refusal on both transports, mapped per adapter.
-			const expectedCode = {
-				"rest-api": "routeros/request-failed",
-				"native-api": "routeros/api-trap",
-			} as const;
+			// Same RouterOS refusal on both transports, one code (#659).
 			for (const via of ["rest-api", "native-api"] as const) {
 				const base = {
 					targetInput: via === "rest-api" ? chr.restUrl : "127.0.0.1",
@@ -175,7 +171,7 @@ describeFast("bare menu path reads against CHR (W6)", () => {
 				);
 				expect(nav.ok).toBe(false);
 				if (!nav.ok) {
-					expect(nav.error.code).toBe(expectedCode[via]);
+					expect(nav.error.code).toBe("routeros/unknown-path");
 					expect(nav.error.message).toContain("no such command");
 				}
 				expect(

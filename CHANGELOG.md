@@ -20,6 +20,20 @@ publish `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
 
 ### Changed
 
+- **Error codes:** RouterOS's `no such …` answers now split by meaning
+  (#659, CHR 7.25.1 and 7.24.6). A missing item in a menu that exists
+  (native `no such item`, a bare REST HTTP 404, `/execute`'s
+  `no such item (4) (…; line 1)`) is the new `routeros/no-such-item`; before
+  this it was `routeros/unknown-path`. A path or verb RouterOS does not have
+  (`no such command`, and REST's `no such command or directory (x)`) is now
+  `routeros/unknown-path` on both transports, not the catch-all
+  `routeros/request-failed` / `routeros/api-trap`; this includes a bare menu
+  path sent to `execute`. **Consumers** that match on `routeros/unknown-path`
+  to detect a missing item should match `routeros/no-such-item`.
+- `api --via ssh` (or `mac-telnet`) fails as
+  `routeros/unsupported-capability` with `capability: "api"`, not
+  `routeros/protocol-not-implemented` with `capability: "execute"`: the pairing
+  is not planned (#659).
 - `centrs --help` lists only what works today: the `api`, `cli` and `mcp`
   surfaces and the implemented protocols. `tui`, `proxy`, `snmp`, `romon` and
   `winbox-terminal` are no longer advertised, and the help headline no longer

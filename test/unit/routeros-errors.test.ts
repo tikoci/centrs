@@ -27,8 +27,50 @@ describe("mapRouterOsError grounded vocabulary", () => {
 		expect(ctx(error).detail).toBe("no such command prefix");
 	});
 
-	test("maps 'no such item' to routeros/unknown-path", () => {
-		expect(mapRouterOsError("no such item").code).toBe("routeros/unknown-path");
+	// #659, CHR 7.25.1: an unknown path is `no such command …` on both
+	// transports; a missing item in a known menu is `no such item`.
+	test("maps every 'no such command' form to routeros/unknown-path", () => {
+		for (const raw of [
+			"no such command",
+			"no such command prefix",
+			"no such command or directory (nosuch)",
+		]) {
+			for (const transport of ["rest-api", "native-api"] as const) {
+				expect(mapRouterOsError(raw, { transport, httpStatus: 400 }).code).toBe(
+					"routeros/unknown-path",
+				);
+			}
+		}
+	});
+
+	test("maps 'no such item' to routeros/no-such-item, not unknown-path", () => {
+		for (const raw of [
+			"no such item",
+			"no such item (4)",
+			"no such item (4) (/ip/address/set; line 1)",
+		]) {
+			expect(mapRouterOsError(raw).code).toBe("routeros/no-such-item");
+		}
+	});
+
+	test("maps a bare REST 404 body to routeros/no-such-item", () => {
+		const body = '{"error":404,"message":"Not Found"}';
+		const error = mapRouterOsError(body, {
+			transport: "rest-api",
+			httpStatus: 404,
+		});
+		expect(error.code).toBe("routeros/no-such-item");
+		expect(ctx(error).detail).toBe(body);
+		expect(error.summary).toContain("HTTP 404");
+	});
+
+	test("the 404 rule needs the 404 status", () => {
+		// The same text without the status is not a REST reply; it falls back
+		// to the path-shaped 'not found' rule.
+		const body = '{"error":404,"message":"Not Found"}';
+		expect(mapRouterOsError(body, { transport: "rest-api" }).code).not.toBe(
+			"routeros/no-such-item",
+		);
 	});
 
 	test("maps path-shaped 'not found' to routeros/unknown-path", () => {
@@ -104,7 +146,7 @@ describe("mapRouterOsError grounded vocabulary", () => {
 
 	test("strips an optional 'failure: ' prefix before specific matching", () => {
 		const error = mapRouterOsError("failure: no such item");
-		expect(error.code).toBe("routeros/unknown-path");
+		expect(error.code).toBe("routeros/no-such-item");
 	});
 
 	test("maps 'failure: <object> not found' to routeros/command-failed", () => {
@@ -127,6 +169,8 @@ describe("mapRouterOsError grounded vocabulary", () => {
 	test("REST and native-api classify grounded RouterOS strings identically", () => {
 		for (const raw of [
 			"no such command prefix",
+			"no such command",
+			"no such item",
 			"unknown parameter foo",
 			"invalid value for argument address",
 			"Session closed",
@@ -170,7 +214,7 @@ describe("mapRouterOsError grounded vocabulary", () => {
 
 	test("matching is case-insensitive and whitespace tolerant", () => {
 		expect(mapRouterOsError("   NO SUCH ITEM   ").code).toBe(
-			"routeros/unknown-path",
+			"routeros/no-such-item",
 		);
 		expect(ctx(mapRouterOsError("UNKNOWN PARAMETER Foo")).parameter).toBe(
 			"Foo",
@@ -190,7 +234,7 @@ describe("mapRouterOsError grounded vocabulary", () => {
 	test("sets details_url from the normalized code", () => {
 		const error = mapRouterOsError("no such item");
 		expect(error.detailsUrl).toBe(
-			"https://tikoci.dev/centrs/errors/routeros/unknown-path/",
+			"https://tikoci.dev/centrs/errors/routeros/no-such-item/",
 		);
 	});
 
@@ -215,7 +259,12 @@ describe("mapRouterOsResultError", () => {
 			mapRouterOsResultError("no such item", {
 				transport: "native-api",
 			})?.code,
-		).toBe("routeros/unknown-path");
+		).toBe("routeros/no-such-item");
+		expect(
+			mapRouterOsResultError("no such item (4) (/ip/address/set; line 1)", {
+				transport: "rest-api",
+			})?.code,
+		).toBe("routeros/no-such-item");
 		expect(
 			mapRouterOsResultError("syntax error (line 1 column 7)", {
 				transport: "rest-api",

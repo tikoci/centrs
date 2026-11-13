@@ -368,6 +368,24 @@ describe("RestAdapter retrieve operations", () => {
 			mock.restore();
 		}
 	});
+
+	// CHR 7.25.1 (#659): REST answers a missing item with a bare 404 and no
+	// `detail`, which is the item's absence, not an unknown path.
+	test("maps a detail-less REST 404 to routeros/no-such-item", async () => {
+		const mock = mockFetchSequence([
+			() => jsonResponse({ error: 404, message: "Not Found" }, 404),
+		]);
+		try {
+			const adapter = createProtocolAdapter(restConfig());
+			const error = await adapter
+				.getSingleton("/ip/address/*FFFF")
+				.catch((caught: unknown) => caught);
+			expect(error).toBeInstanceOf(CentrsError);
+			expect((error as CentrsError).code).toBe("routeros/no-such-item");
+		} finally {
+			mock.restore();
+		}
+	});
 });
 
 describe("RestAdapter execute seam", () => {

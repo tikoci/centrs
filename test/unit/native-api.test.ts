@@ -423,7 +423,7 @@ describe("native-api session command flow", () => {
 		const promise = transport.apiSession.talk({ command: "/bogus/print" });
 		const tag = transport.lastTag();
 		transport.reply(
-			["!trap", "=category=0", "=message=no such command", `.tag=${tag}`],
+			["!trap", "=category=0", "=message=missing =password=", `.tag=${tag}`],
 			["!done", `.tag=${tag}`],
 		);
 		await expect(promise).rejects.toMatchObject({ code: "routeros/api-trap" });
@@ -758,7 +758,7 @@ describe("native-api listen() streaming", () => {
 		const first = gen.next();
 		const tag = transport.lastTag();
 		transport.reply(
-			["!trap", "=category=0", "=message=no such command", `.tag=${tag}`],
+			["!trap", "=category=0", "=message=missing =password=", `.tag=${tag}`],
 			["!done", `.tag=${tag}`],
 		);
 		await expect(first).rejects.toMatchObject({ code: "routeros/api-trap" });

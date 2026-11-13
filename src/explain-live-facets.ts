@@ -635,6 +635,7 @@ async function childProbe(
 			if (
 				error instanceof CentrsError &&
 				(error.code === "routeros/unknown-path" ||
+					error.code === "routeros/no-such-item" ||
 					error.code === "routeros/api-trap")
 			)
 				return [];

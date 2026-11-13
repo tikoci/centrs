@@ -7,21 +7,20 @@ refused it before connecting. Nothing was sent.
 
 - `retrieve --via snmp` *(code)*.
 - `execute --via romon` and `execute --via winbox-terminal` *(code)*.
-- `api` with any `--via` other than `rest-api` or `native-api`, such as
-  `ssh` or `mac-telnet` *(code)*. Here the pairing is not planned at all:
-  `api` is a structured passthrough, and console transports run commands
-  through `execute` and `terminal`.
+
+`api --via ssh` or `mac-telnet` fails as
+[`routeros/unsupported-capability`](unsupported-capability.md) instead: that
+pairing is not planned.
 
 ## Context
 
 - `via`: the protocol asked for.
-- `capability`: the capability it was checked for (`api` reports `execute`).
+- `capability`: the capability it was checked for (`retrieve` or `execute`).
 
 ## Fix
 
-Use a transport the command supports. `retrieve` and `api` run over
-`rest-api` or `native-api`; `execute` runs over those two, `ssh` and
-`mac-telnet`. The [protocol matrix](../../MATRIX.md) says what is built. If
+Use a transport the command supports. `retrieve` runs over `rest-api` or
+`native-api`; `execute` runs over those two, `ssh` and `mac-telnet`. The [protocol matrix](../../MATRIX.md) says what is built. If
 the `--via` came from `CENTRS_VIA` or the device's saved `via=` property,
 override it with an explicit `--via`.
 

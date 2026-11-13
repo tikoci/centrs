@@ -705,9 +705,9 @@ centrs execute $R '/system/identity' --via rest-api --username $U --password $P
 
 No `--yes` gate: a truly bare known-menu path is console navigation, a no-op
 read, and structured mode proves the input is a single path token with no
-follow-up. The device still answers truthfully — REST reports
-`routeros/request-failed`, native API `routeros/api-trap`, both carrying
-RouterOS's own `no such command` — and the envelope carries
+follow-up. The device still answers truthfully — `routeros/unknown-path` on
+REST and native API, carrying RouterOS's own `no such command` — and the
+envelope carries
 `tip/execute-bare-menu-path`, naming `/system/identity/print` (or
 `centrs retrieve $R /system/identity`) as the read that answers. A bare
 no-argument *command* such as `/system/reboot` stays write-shaped and still
@@ -754,6 +754,26 @@ way and carries `transport/write-outcome-unknown`, and
 then finds the address: the script ran to the end.
 
 `test/integration/execute.test.ts` runs both at once on one CHR.
+
+### R4. A missing item and an unknown path are different codes (#659)
+
+```bash
+centrs execute $R '/system/script/run number=nosuch' --via rest-api --username $U --password $P --yes --json
+centrs execute $R '/ip/address/set *FFFF comment=x' --via rest-api --username $U --password $P --yes --json
+centrs execute $R '/system/script/nosuch' --via rest-api --no-validate --username $U --password $P --yes --json
+centrs execute $R '/nosuch/thing/print' --via rest-api --no-validate --username $U --password $P --yes --json
+```
+
+The first two fail as `routeros/no-such-item`: the menu exists, but no item
+matches. RouterOS answers a bare HTTP 404 over REST, `no such item` on the
+native API, and `no such item (4) (/ip/address/set; line 1)` through
+`/execute`. The last two fail as `routeros/unknown-path`: RouterOS's
+`no such command`, `no such command prefix` (native) or
+`no such command or directory (nosuch)` (REST). The same codes are asserted
+over native API.
+
+`test/integration/routeros-error-classes.test.ts` runs all four on both
+transports.
 
 ## Target selection (fan-out)
 
