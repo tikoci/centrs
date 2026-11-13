@@ -288,6 +288,52 @@ describe("mapRouterOsResultError", () => {
 		}
 	});
 
+	// #665 review, CHR 7.25.1: after earlier output, RouterOS prints the
+	// diagnostic as the last line with its location.
+	test("classifies a located diagnostic that follows earlier output", () => {
+		for (const transport of ["rest-api", "native-api"] as const) {
+			for (const [raw, code] of [
+				[
+					"before\r\nno such item (4) (/ip/address/set; line 1)",
+					"routeros/no-such-item",
+				],
+				[
+					"before\r\nno such item (/system/script/run; line 1)",
+					"routeros/no-such-item",
+				],
+				[
+					"before\r\nbad command name nosuchverb (line 1 column 18)",
+					"routeros/unknown-path",
+				],
+				[
+					"before\r\nsyntax error (line 1 column 8)",
+					transport === "rest-api"
+						? "routeros/request-failed"
+						: "routeros/api-trap",
+				],
+			] as const) {
+				expect(
+					mapRouterOsResultError(raw, { transport })?.code,
+					`${transport}: ${raw}`,
+				).toBe(code);
+			}
+		}
+	});
+
+	test("does not classify a trailed diagnostic without its location, or text after it", () => {
+		for (const raw of [
+			"before\r\nno such item",
+			"before\r\nno such item (4)",
+			"before\r\nbad command name nosuchverb",
+			"before\r\nno such item (4) (/ip/address/set; line 1)\r\nafter",
+			"before\r\nbad command name x (line 1 column 2)\r\nafter",
+			"before\r\nsyntax error",
+			"before\r\nsyntax error (line 1 column 8)\r\nafter",
+		]) {
+			expect(mapRouterOsResultError(raw), raw).toBeUndefined();
+		}
+	});
+
 	test("does not classify prose that starts with a 'no such' phrase", () => {
 		for (const raw of [
 			"no such command was found in the help text",

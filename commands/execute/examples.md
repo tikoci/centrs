@@ -772,6 +772,15 @@ native API, and `no such item (4) (/ip/address/set; line 1)` through
 `no such command or directory (nosuch)` (REST). The same codes are asserted
 over native API.
 
+A script that prints before it fails returns the diagnostic as its last line,
+location included: `:put before; /ip/address/set *FFFF comment=x` returns
+`before\r\nno such item (4) (/ip/address/set; line 1)` and fails as
+`routeros/no-such-item`, through `execute` and through
+`centrs api $R execute -X POST -f script=…`. A script line naming a verb the
+menu lacks prints `bad command name … (line N column M)` last and fails as
+`routeros/unknown-path`. Text that only starts with these phrases, or follows
+them, stays ordinary output.
+
 `test/integration/routeros-error-classes.test.ts` runs all four on both
 transports.
 

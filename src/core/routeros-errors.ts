@@ -154,9 +154,13 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		test: /no such item|no such entry/i,
 		// Returned text matches only the whole grounded diagnostic, with its
 		// optional `(4)` and `(<path>; line N)` suffixes, so stdout that merely
-		// starts with the phrase stays ordinary output.
+		// starts with the phrase stays ordinary output. After earlier output
+		// RouterOS prints it as the last line, location included (`:put
+		// before; /ip/address/set *FFFF comment=x` returns `before\r\nno such
+		// item (4) (/ip/address/set; line 1)`, CHR 7.25.1, both transports), so
+		// that trailed form matches only with its location suffix.
 		resultTest:
-			/^(?:failure:\s*)?no such (?:item|entry)(?: \(\d+\))?(?: \(\/[^\s();]+; line \d+\))?\s*$/i,
+			/^(?:(?:failure:\s*)?no such (?:item|entry)(?: \(\d+\))?(?: \(\/[^\s();]+; line \d+\))?|[\s\S]*\r?\nno such (?:item|entry)(?: \(\d+\))? \(\/[^\s();]+; line \d+\))\s*$/i,
 		build: (_match, raw) => ({
 			summary: `RouterOS has no such item: ${raw.trim()}`,
 			remediation: NO_SUCH_ITEM_REMEDIATION,
@@ -216,9 +220,13 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		code: "routeros/unknown-path",
 		description:
 			"RouterOS console rejected the command word ('bad command name …').",
-		// Console form (mac-telnet) of an unrecognized command/path word.
+		// Console form (mac-telnet) of an unrecognized command/path word. A
+		// script run from `/execute` prints it as the last line after earlier
+		// output, with its position (`before\r\nbad command name nosuchverb
+		// (line 1 column 18)`, CHR 7.25.1); that trailed form needs the position.
 		test: /bad command name/i,
-		resultTest: /^(?:failure:\s*)?(?:\(<%%\s*)?bad command name\b.*$/i,
+		resultTest:
+			/^(?:(?:failure:\s*)?(?:\(<%%\s*)?bad command name\b.*|[\s\S]*\r?\nbad command name \S+ \(line \d+ column \d+\)\s*)$/i,
 		build: (_match, raw) => ({
 			summary: `RouterOS has no command at this path: ${raw.trim()}`,
 			remediation: UNKNOWN_PATH_REMEDIATION,
@@ -346,10 +354,13 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 /**
  * Grounded result shapes that intentionally use the transport-specific
  * catch-all mapping. They are errors, but do not carry enough information for a
- * more specific normalized code.
+ * more specific normalized code. After earlier output RouterOS prints the
+ * rejection last, with its position (`:put before; [:parse "/nosuch/thing"]`
+ * returns `before\r\nsyntax error (line 1 column 8)`, CHR 7.25.1), so that
+ * trailed form matches only with the position.
  */
 const ROUTEROS_RESULT_CATCH_ALL =
-	/^(?:syntax error|expected (?:end of command|command name|input value))\b[^\n]*$/i;
+	/^(?:(?:syntax error|expected (?:end of command|command name|input value))\b[^\n]*|[\s\S]*\r?\n(?:syntax error|expected (?:end of command|command name|input value)) \(line \d+ column \d+\)\s*)$/i;
 
 /**
  * Map text returned by a successful transport only when it matches a grounded,

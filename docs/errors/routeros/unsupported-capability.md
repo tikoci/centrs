@@ -11,8 +11,10 @@ before connecting. Nothing was sent.
   and `retrieve --via btest` as
   [`settings/invalid-via`](../settings/invalid-via.md).
 - `execute` with `--via snmp`, `mndp` or `btest` *(code)*.
-- `api` with any `--via` other than `rest-api` or `native-api`, such as `ssh`
-  or `mac-telnet` *(code)*. `api` is a structured passthrough, and the console
+- `api` with any known `--via` protocol other than `rest-api` or
+  `native-api`, such as `ssh` or `mac-telnet` *(code)*. A value that is not a
+  protocol at all fails as
+  [`settings/invalid-via`](../settings/invalid-via.md). `api` is a structured passthrough, and the console
   transports run commands through `execute` and `terminal`.
 
 ## Context
