@@ -1,9 +1,24 @@
 # `internal/unreachable`
 
-An unreachable code path was reached (this is a centrs bug).
+centrs reached a state its code treats as impossible. The message is in
+`summary`.
 
-## Fix
+## What may have run
 
-See [`docs/CONSTITUTION.md`](../../CONSTITUTION.md) for the centrs error
-contract. This stub will be expanded with the typical trigger and remediation
-for `internal/unreachable`.
+Nothing. centrs raises it while picking a saved device, before it connects to
+a router or writes anything.
+
+## Report it
+
+This is a centrs bug. Open an issue with:
+
+- the command;
+- the `--json` envelope, including `summary`, `context` and `cause`;
+- the text output with `--verbose`, when the command takes it;
+- `centrs --version`, and how centrs was installed.
+
+Before you post, read every one of these and remove passwords
+(`--password`, `--cdb-password`, `CENTRS_PASSWORD`), keys, tokens and any
+other secret. centrs does not redact them for you: `summary` and `cause`
+keep the original error text, and the envelope can carry the command or
+script you ran. There is no `--bug-report` flag.

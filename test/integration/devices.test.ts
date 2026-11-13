@@ -1039,12 +1039,15 @@ describe("centrs devices (read-only)", () => {
 			"devices",
 			"set",
 			"192.0.2.5",
-			'note="rack 7 row B"',
+			'source="rack 7 row B"',
 			"--cdb-file",
 			cdbPath,
 			"--json",
 		]);
 		expect(result.exitCode).toBe(0);
+		expect(
+			(JSON.parse(result.stdout) as { warnings: unknown[] }).warnings,
+		).toEqual([]);
 		expect(await listBackups(cdbPath)).toHaveLength(1);
 		const show = await runWithCapture([
 			"devices",
@@ -1057,8 +1060,8 @@ describe("centrs devices (read-only)", () => {
 		const shown = JSON.parse(show.stdout) as {
 			data: { entry: { comment: string } };
 		};
-		expect(shown.data.entry.comment).toContain('note="rack 7 row B"');
-		expect(shown.data.entry.comment).not.toContain('note="\\"rack');
+		expect(shown.data.entry.comment).toContain('source="rack 7 row B"');
+		expect(shown.data.entry.comment).not.toContain('source="\\"rack');
 	});
 
 	test("example 22 remove deletes entry and writes backup", async () => {

@@ -1,9 +1,17 @@
 # `usage/invalid-concurrency`
 
-The --concurrency value must be an integer >= 1.
+`--concurrency` is not a whole number of at least 1. Nothing was sent.
+
+## Emitted by
+
+Fan-out commands (`retrieve`, `execute`, `api`, `transfer`) and library
+callers that pass `concurrency` *(code)*.
+
+## Context
+
+- `concurrency`: the rejected value.
 
 ## Fix
 
-See [`docs/CONSTITUTION.md`](../../CONSTITUTION.md) for the centrs error
-contract. This stub will be expanded with the typical trigger and remediation
-for `usage/invalid-concurrency`.
+Pass a positive integer, for example `--concurrency 4`, or leave it out. The
+default depends on the transport: 8 for REST, 4 for the native API.

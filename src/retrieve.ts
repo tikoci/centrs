@@ -1479,7 +1479,7 @@ function resolveProtocol(
 			code: "settings/invalid-via",
 			summary: `Unsupported protocol identifier: ${via.value}`,
 			remediation:
-				"Choose one of the known `via` values, such as `rest-api` for the current alpha retrieve loop.",
+				"Choose one of the known `via` values; `retrieve` runs over `rest-api` or `native-api`.",
 			context: { via: via.value },
 		});
 	}
@@ -1500,7 +1500,7 @@ function resolveProtocol(
 			code: "routeros/protocol-not-implemented",
 			summary: `Protocol ${via.value} is planned but not implemented yet.`,
 			remediation:
-				"Use `--via rest-api` for the current alpha retrieve implementation.",
+				"Use `--via rest-api` or `--via native-api`; `retrieve` runs over those two.",
 			context: { via: via.value, capability: "retrieve" },
 		});
 	}

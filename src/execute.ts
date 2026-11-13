@@ -1273,7 +1273,7 @@ function resolveExecuteProtocol(
 			code: "routeros/unsupported-capability",
 			summary: `Protocol ${via.value} does not support the execute capability.`,
 			remediation:
-				"Choose an execute-capable protocol such as `native-api`, `rest-api`, or `mac-telnet`.",
+				"Choose an execute-capable protocol: `native-api`, `rest-api`, `ssh` or `mac-telnet`.",
 			context: { via: via.value, capability: "execute" },
 		});
 	}

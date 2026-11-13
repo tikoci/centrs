@@ -1,9 +1,25 @@
 # `transport/checksum-unavailable`
 
-No file digest is available over the transport, so integrity was verified by size instead.
+A warning: `--verify checksum` was asked for, but RouterOS gives no file
+digest that `transfer` can read. Over REST or the native API it compares
+sizes instead; over SFTP it compares nothing. `ok` and `error` say whether the
+transfer, and any check that ran, passed.
+
+## What was checked
+
+- REST and native API: the file's size on the router is compared with the
+  bytes sent or received *(code)*.
+- SFTP: the router reports no size, so nothing is compared. centrs relies on
+  SFTP failing a transfer that does not complete *(code)*.
+
+Neither checks the contents.
 
 ## Fix
 
-See [`docs/CONSTITUTION.md`](../../CONSTITUTION.md) for the centrs error
-contract. This stub will be expanded with the typical trigger and remediation
-for `transport/checksum-unavailable`.
+- Use the default, `--verify size`, and the warning goes away.
+- To check contents, hash the file and compare the hash with one you trust:
+  the publisher's checksum, or the hash of the original file you uploaded.
+  Without such a reference, a hash alone proves nothing.
+
+The [`transfer` README](../../../commands/transfer/README.md) explains what
+each method can verify.

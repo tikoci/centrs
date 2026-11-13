@@ -231,10 +231,13 @@ Errors with `cdb/unknown-option`. No write.
 ### 21. Set value with spaces (quoting)
 
 ```bash
-centrs devices set 192.0.2.5 'note="rack 7 row B"' --cdb-file $CDB
+centrs devices set 192.0.2.5 'source="rack 7 row B"' --cdb-file $CDB
 ```
 
-`ok: true`. Re-reading parses the value back as `rack 7 row B` (one token).
+`ok: true`, with no warning. Re-reading parses the value back as
+`rack 7 row B` (one token). A key that is not a centrs device property
+(`note=`, for one) is saved too, but warns with `cdb/unknown-option` and has
+no effect: `devices set` never changes RouterOS settings.
 
 ## remove
 

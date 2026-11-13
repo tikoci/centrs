@@ -26,8 +26,9 @@ export const tipCatalog = [
 	},
 	{
 		code: "tip/credentials-missing",
-		summary: "The resolved device has no stored password.",
-		page: false,
+		summary:
+			"The saved device has no stored password and no __default__ record to fall back on.",
+		page: true,
 	},
 	{
 		code: "tip/discover-save",
@@ -85,7 +86,7 @@ export const tipCatalog = [
 	{
 		code: "tip/no-devices",
 		summary: "The CDB has no device records yet.",
-		page: false,
+		page: true,
 	},
 	{
 		code: "tip/rest-verb-mapping",

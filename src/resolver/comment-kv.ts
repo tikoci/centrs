@@ -279,14 +279,14 @@ export function parseCommentKv(comment: string): CommentKvResult {
 		if (reservedSet.has(kv.key)) {
 			warnings.push({
 				code: "cdb/reserved-option",
-				message: `Comment option "${kv.key}" is a first-class CDB field and is ignored; set it through the CDB record instead.`,
+				message: `"${kv.key}" is a record field, not a device property, and is ignored; set it with its flag (for example --${kv.key === "password" ? "password-stdin" : kv.key}).`,
 				context: { key: kv.key },
 			});
 			continue;
 		}
 		warnings.push({
 			code: "cdb/unknown-option",
-			message: `Unknown comment option "${kv.key}"; it has no effect.`,
+			message: `"${kv.key}" is not a centrs device property; it has no effect.`,
 			context: { key: kv.key },
 		});
 	}

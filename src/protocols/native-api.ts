@@ -334,6 +334,20 @@ function sentenceTag(words: readonly Uint8Array[]): string | undefined {
 	return undefined;
 }
 
+/**
+ * The reason a `!fatal` gives. RouterOS 7.25.1 sends it as a bare word after
+ * the reply word (`!fatal` `session terminated on request` on `/quit`), not as
+ * `=message=`; both shapes are read.
+ */
+export function fatalReason(reply: ApiReply): string | undefined {
+	const message = readAttribute(reply, "message");
+	if (message) return message;
+	const bare = reply.words
+		.slice(1)
+		.filter((word) => !word.startsWith("=") && !word.startsWith("."));
+	return bare.length > 0 ? bare.join(" ") : undefined;
+}
+
 /** Read an attribute by name (variable key avoids index-signature pitfalls). */
 export function readAttribute(
 	reply: ApiReply,
@@ -538,14 +552,18 @@ export class NativeApiSession {
 
 	private dispatch(reply: ApiReply): void {
 		if (reply.type === "!fatal") {
+			const reason = fatalReason(reply);
 			this.closeError = new CentrsError({
 				code: "routeros/api-fatal",
-				summary:
-					readAttribute(reply, "message") ??
-					`The RouterOS API service at ${this.endpoint} reported a fatal error.`,
+				summary: reason
+					? `The RouterOS API service at ${this.endpoint} closed the session: ${reason}`
+					: `The RouterOS API service at ${this.endpoint} reported a fatal error.`,
 				remediation:
-					"The router closed the API connection; check the System > Logging output on the device.",
-				context: { attributes: reply.attributes },
+					"RouterOS ended this API session; the reason is RouterOS's own. A command already sent may have run: check the device's state before repeating a write. Then reconnect; if it repeats, check the device log (`/log print`).",
+				context: {
+					attributes: reply.attributes,
+					...(reason ? { reason } : {}),
+				},
 			});
 			this.failAll(this.closeError);
 			// Fatal ends the session locally too: a peer that sends !fatal but

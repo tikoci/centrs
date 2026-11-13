@@ -97,9 +97,11 @@ publish `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
   `https://tikoci.github.io/centrs/errors/<code>` links redirected through
   plain HTTP, which some agent fetch tools refuse to follow; they still
   redirect.
-- A tip carries a `detailsUrl` only when it has a page; no tip has one yet, so
-  tips no longer link to URLs that 404. Earlier builds emitted
-  `…/centrs/tips/tip/<slug>/` for every tip (#659).
+- A tip carries a `detailsUrl` only when it has a published page, so tips no
+  longer link to URLs that 404. Earlier builds emitted
+  `…/centrs/tips/tip/<slug>/` for every tip. `tip/no-devices` and
+  `tip/credentials-missing` get pages, published at
+  `https://tikoci.dev/centrs/tips/<slug>/` (#659).
 - Error codes `routeros/error` and `transport/unreachable` are removed; no
   release ever emitted them. `validation/not-implemented` (0.1.0–0.1.7) keeps a
   page marked retired (#659).
@@ -110,6 +112,17 @@ publish `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
   `dns`, `tls-certificate`, `host-key-mismatch`, `connection-closed`,
   `incomplete-transfer`, `auth/failed`) get real pages instead of stubs
   (#464).
+- Every error code now has a written page; none is a scaffold stub. The
+  catch-all `routeros/request-failed` and `routeros/api-trap` pages, and the
+  native-API, MAC-Telnet, CDB, identity and safety-gate codes, were grounded on
+  CHR 7.25.1. The catalog summaries that MCP resources serve now agree with
+  each page (#659).
+- `routeros/api-fatal` keeps RouterOS's reason: RouterOS 7.25.1 sends it as a
+  bare word, not `=message=`. The fix text for the catch-all and fatal codes says to
+  check the router's state before repeating a write, since a script that
+  stops on an error keeps its earlier steps (#659).
+- Warnings and errors about device properties say "device property" instead
+  of "comment option" or "comment kv-soup" (#659).
 
 ### Maintenance
 
@@ -153,8 +166,6 @@ regression from 0.1.10.
 - [#657](https://github.com/tikoci/centrs/issues/657): `execute --cmr` drops a
   connected client that RouterOS will not select (half-paired or pending) as
   if no label matched.
-- [#659](https://github.com/tikoci/centrs/issues/659): some error pages are
-  still stubs.
 
 ## 0.1.10 — 2026-11-05
 

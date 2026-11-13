@@ -28,14 +28,16 @@ the slash-namespaced code as-is and a trailing slash (e.g.
 ## Source of truth and the contributor contract
 
 The enumerable list of every code lives in code, not here:
-[`src/core/error-catalog.ts`](../../src/core/error-catalog.ts). The per-code
-pages in this directory are generated from it (`bun run docs:errors`, which
-only scaffolds missing pages and never overwrites hand-enriched ones).
+[`src/core/error-catalog.ts`](../../src/core/error-catalog.ts). Every page in
+this directory is written by hand to the page contract below.
+`bun run docs:errors` scaffolds a stub for a code that has no page, and never
+overwrites a page that exists.
 
 When you introduce a new error code you must, in the same change:
 
 1. add an entry to `src/core/error-catalog.ts`, and
-2. add a `docs/errors/<code>.md` page (run `bun run docs:errors`).
+2. add a `docs/errors/<code>.md` page: run `bun run docs:errors`, then
+   replace the stub with a real page. A stub fails the test.
 
 `test/unit/error-pages.test.ts` enforces this three-way consistency — every live
 `code:` literal is cataloged, every catalogued code has a page, and no page is
@@ -69,9 +71,8 @@ Codes are slash-namespaced `family/slug`. The families and where they originate:
 
 The Pages build lists every code on the catalog index and rewrites the pages'
 relative links for the site. `test/unit/error-pages.test.ts` checks those links
-on every PR, and holds a shrinking list of pages that are still scaffold stubs
-(#659): a new scaffold fails until it is written, and a written page leaves
-the list.
+on every PR, and fails on any page that is still a scaffold stub (#659): a new
+code ships with a written page.
 
 ## Page contract
 
@@ -98,7 +99,8 @@ and depart from it when a code needs to.
 7. **Limits** — RouterOS versions, platforms or transports where no fix exists.
 8. **If this looks wrong** — the centrs bug it most likely is (a missing
    mapping, a wrong suggestion, a stale install) and what to put in an issue:
-   the command, the `--json` envelope, `centrs --version`. There is no
+   the command, the `--json` envelope, `centrs --version`, and an ask to
+   remove passwords and other secrets from both first. There is no
    `--bug-report` flag.
 9. **Related** — sibling codes, as relative `.md` links.
 
@@ -121,10 +123,11 @@ it depends on the version, platform or transport. A tip with a page is flagged
 `page: true` in [`src/core/tip-catalog.ts`](../../src/core/tip-catalog.ts), its
 page is `docs/tips/<slug>.md`, and only then does it carry a `detailsUrl`
 (`https://tikoci.dev/centrs/tips/<slug>/`, without the `tip/` segment).
-`test/unit/tip-catalog.test.ts` keeps the flag and the file in step. The
-Pages build does not publish `docs/tips/` yet: the change that sets the first
-`page: true` also teaches `scripts/build-pages-site.ts` to build
-`tips/<slug>/` with the same link rewriting and checks, or the URL 404s.
+`test/unit/tip-catalog.test.ts` keeps the flag and the file in step, and
+checks the page's links. The Pages build publishes each page as
+`tips/<slug>/` with the same link rewriting and checks as the error pages;
+`test/unit/pages-site.test.ts` assembles the site and fails when a tip's
+`detailsUrl` names no published page.
 
 ## RouterOS-fault mapping (`routeros/*`)
 

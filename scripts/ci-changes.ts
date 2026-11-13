@@ -10,7 +10,8 @@
  * **Docs-only** is defined conservatively by {@link isDocsOnlyPath}: a path is
  * docs-only when no unit test, build input, corpus census or CHR smoke can read
  * it. Prose that a test parses (`docs/MATRIX.md`, `commands/explain/README.md`),
- * generated docs (`docs/CLI.md`, `docs/errors/`) and the executable specs
+ * generated docs (`docs/CLI.md`), the error and tip pages (`docs/errors/`,
+ * `docs/tips/`, which the Pages tests assemble) and the executable specs
  * (`commands/<name>/examples.md`) are code for this purpose.
  * `test/unit/ci-changes.test.ts` fails when a test, script or source file
  * starts reading a path this module calls docs-only.
@@ -52,7 +53,7 @@ export const PROSE_READ_BY_TESTS: ReadonlySet<string> = new Set([
 ]);
 
 /** Directories whose markdown is generated, a fixture, or next to code. */
-const CODE_DIRS = ["src/", "test/", "scripts/", "docs/errors/"];
+const CODE_DIRS = ["src/", "test/", "scripts/", "docs/errors/", "docs/tips/"];
 
 /**
  * Whether changing `path` can never change the result of unit, build, corpus or

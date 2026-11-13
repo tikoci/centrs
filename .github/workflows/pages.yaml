@@ -5,9 +5,10 @@ run-name: Pages • ${{ github.event_name }}
 # (docs/errors/**/*.md) to GitHub Pages. This isn't just docs nicety: every
 # CentrsError carries `details_url: https://tikoci.dev/centrs/errors/<code>/`
 # (see docs/errors/README.md) — until this workflow existed, that URL 404'd for
-# every error a caller received. scripts/build-pages-site.ts does the tree
-# assembly (typedoc output + one index.html per error code, wrapping pandoc's
-# markdown->HTML); this workflow just builds it and deploys it.
+# every error a caller received. scripts/pages-site.ts does the tree assembly
+# (typedoc output + one index.html per error code and per tip page, wrapping
+# pandoc's markdown->HTML via scripts/build-pages-site.ts); this workflow just
+# builds it and deploys it.
 
 on:
   push:
@@ -15,6 +16,7 @@ on:
     paths:
       - "src/**"
       - "docs/errors/**"
+      - "docs/tips/**"
       - "package.json"
       - "typedoc.json"
       - "README.md"
@@ -23,6 +25,7 @@ on:
       - "bun.lock"
       - "scripts/build-pages-site.ts"
       - "scripts/pages-links.ts"
+      - "scripts/pages-site.ts"
       - "scripts/gen-error-pages.ts"
       - ".github/workflows/pages.yaml"
   workflow_dispatch: {}

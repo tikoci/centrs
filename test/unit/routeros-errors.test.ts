@@ -151,6 +151,16 @@ describe("mapRouterOsError grounded vocabulary", () => {
 		expect(error.code).toBe("routeros/request-failed");
 	});
 
+	// #663: a script that stops on `:error` keeps its earlier steps (CHR 7.25.1),
+	// so the catch-all must not invite a blind rerun of a write.
+	test("catch-all remediation asks for a state check before a rerun", () => {
+		for (const transport of ["native-api", "rest-api"] as const) {
+			const error = mapRouterOsError("pr663 deliberate stop", { transport });
+			expect(error.remediation).toContain("may have partly run");
+			expect(error.remediation).toContain("check the router's state");
+		}
+	});
+
 	test("preserves the original string in context.detail", () => {
 		const raw = "  unknown parameter weird  ";
 		const error = mapRouterOsError(raw);

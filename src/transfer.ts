@@ -881,6 +881,22 @@ function binaryWord(value: string): string {
 	return Buffer.from(value, "utf8").toString("latin1");
 }
 
+/**
+ * `--verify checksum` has no digest to read, so it falls back to what
+ * `--verify size` does — which depends on the method: REST/native compare the
+ * device-reported size, SFTP reports none and compares nothing.
+ */
+function checksumUnavailableWarning(
+	resolved: ResolvedTransferRequest,
+): Warning {
+	return {
+		code: "transport/checksum-unavailable",
+		message: isRestFamily(resolved.method)
+			? "RouterOS exposes no file digest centrs can read; comparing sizes instead."
+			: "RouterOS exposes no file digest centrs can read, and SFTP reports no size; nothing was compared, so only SFTP's own failure on an incomplete transfer applies.",
+	};
+}
+
 async function verifyWrittenSize(
 	resolved: ResolvedTransferRequest,
 	backend: FileBackend,
@@ -892,11 +908,7 @@ async function verifyWrittenSize(
 		return "off";
 	}
 	if (resolved.verify === "checksum") {
-		warnings.push({
-			code: "transport/checksum-unavailable",
-			message:
-				"RouterOS exposes no file digest over REST/native; verifying by size instead.",
-		});
+		warnings.push(checksumUnavailableWarning(resolved));
 	}
 	const row = await backend.findFile(remote);
 	const actual = row?.size;
@@ -943,11 +955,7 @@ function verifyReadSize(
 		return "off";
 	}
 	if (resolved.verify === "checksum") {
-		warnings.push({
-			code: "transport/checksum-unavailable",
-			message:
-				"RouterOS exposes no file digest over REST/native; verifying by size instead.",
-		});
+		warnings.push(checksumUnavailableWarning(resolved));
 	}
 	// As for uploads: with no device-reported size there is nothing to compare,
 	// so REST/native never claim `size` (#636, #589). The check runs before the
@@ -1227,7 +1235,7 @@ export function selectTransferMethod(
 			code: "settings/unsafe-protocol-blocked",
 			summary: "`ftp` is cleartext and is gated behind an explicit opt-in.",
 			remediation:
-				"Set `ALLOW_UNSAFE_PROTOCOLS=ftp` to permit it, or use the secure default (sftp) or `--via rest`.",
+				"Use `--via sftp`, `--via rest` or `--via native`. ftp transfer is not built yet: `ALLOW_UNSAFE_PROTOCOLS=ftp` only gets past this gate to `usage/not-implemented`.",
 			context: { via: "ftp" },
 		});
 	}

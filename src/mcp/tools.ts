@@ -435,7 +435,9 @@ export const devicesInputShape = {
 			}),
 		)
 		.optional()
-		.describe("Comment kv-soup updates for op=set. Use value=null to remove."),
+		.describe(
+			"Device property updates (key=value) for op=set. Use value=null to remove one.",
+		),
 	strict: z
 		.boolean()
 		.optional()
