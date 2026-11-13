@@ -1,8 +1,9 @@
 # `routeros/unknown-path`
 
-RouterOS has no command at the requested path, so it refused the request
-and nothing ran. Either a menu in the path does not exist, or the menu
-exists but has no such command (verb).
+RouterOS has no command at the requested path, so it refused that
+statement. Either a menu in the path does not exist, or the menu exists but
+has no such command (verb). A single command did not run; in a
+multi-statement script, the statements before the refused one already ran.
 
 ## Emitted by
 
@@ -43,6 +44,8 @@ the router itself says, for example with `--no-validate`.
    verb such as `print`, or read the menu with
    `centrs retrieve <router> <menu>`.
 2. If the menu belongs to a package, check `/system/package` on the device.
+3. Before running a script again, check what its earlier statements changed:
+   a rerun repeats them.
 
 ## Related
 

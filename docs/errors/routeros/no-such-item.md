@@ -7,18 +7,25 @@ one already ran.
 
 ## Emitted by
 
-`execute`, `api` and `transfer` over `--via rest-api` and `--via native-api`.
-RouterOS gives the same answer on each transport, so switching does not help.
+`execute`, `api` and `transfer` over `--via rest-api` and `--via native-api`,
+and `execute` over `--via ssh` and `--via mac-telnet`, where the console
+prints the same `no such item` text *(code)*. RouterOS gives the same answer
+on each transport, so switching does not help.
 Validation cannot catch it: the command is well formed, and only the device
 knows which items exist.
 
 ## Context
 
-- `detail`: RouterOS's message, verbatim. Over REST it is the whole
-  `{"error":404,"message":"Not Found"}` body, because RouterOS sends no
-  `detail` for this fault.
-- `httpStatus`, `status`, `path`: the REST request, when REST carried it
-  (HTTP 404).
+- `detail`: RouterOS's message, verbatim. When a structured REST request
+  fails with HTTP 404, it is the whole `{"error":404,"message":"Not Found"}`
+  body, because RouterOS sends no `detail` for this fault.
+- `httpStatus`, `status`, `path`: that REST request (HTTP 404).
+- `via`: the transport.
+
+A command that runs through `/execute`, or on a console transport, succeeds
+at the transport level and returns the text instead (HTTP 200 over REST).
+Its error carries that text in `detail` and the `via`, with no `httpStatus`,
+`status` or `path`.
 
 ## Typical triggers
 

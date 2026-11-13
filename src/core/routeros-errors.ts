@@ -152,7 +152,11 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		// (`/ip/address/remove numbers=*FFFF`). `/execute as-string` returns
 		// `no such item (4) (/ip/address/set; line 1)` as text on both transports.
 		test: /no such item|no such entry/i,
-		resultTest: /^(?:failure:\s*)?(?:no such item|no such entry)\b.*$/i,
+		// Returned text matches only the whole grounded diagnostic, with its
+		// optional `(4)` and `(<path>; line N)` suffixes, so stdout that merely
+		// starts with the phrase stays ordinary output.
+		resultTest:
+			/^(?:failure:\s*)?no such (?:item|entry)(?: \(\d+\))?(?: \(\/[^\s();]+; line \d+\))?\s*$/i,
 		build: (_match, raw) => ({
 			summary: `RouterOS has no such item: ${raw.trim()}`,
 			remediation: NO_SUCH_ITEM_REMEDIATION,
@@ -184,7 +188,7 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		// REST's `no such command or directory (<word>)` for an unknown top word.
 		test: /no such command(?: prefix| or directory)?\b/i,
 		resultTest:
-			/^(?:failure:\s*)?no such command(?: prefix| or directory)?\b.*$/i,
+			/^(?:failure:\s*)?no such command(?: prefix| or directory \([^\s()]+\))?(?: \(\/[^\s();]+; line \d+\))?\s*$/i,
 		build: (_match, raw) => ({
 			summary: `RouterOS has no command at this path: ${raw.trim()}`,
 			remediation: UNKNOWN_PATH_REMEDIATION,

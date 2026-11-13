@@ -272,6 +272,33 @@ describe("mapRouterOsResultError", () => {
 		).toBe("routeros/request-failed");
 	});
 
+	// #665 review: the result matchers take the whole grounded diagnostic
+	// only, so prose that starts with the phrase stays ordinary output.
+	test("classifies every grounded 'no such' result form", () => {
+		for (const [raw, code] of [
+			["no such command", "routeros/unknown-path"],
+			["no such command prefix", "routeros/unknown-path"],
+			["no such command or directory (nosuch)", "routeros/unknown-path"],
+			["no such item", "routeros/no-such-item"],
+			["no such item (4)", "routeros/no-such-item"],
+			["no such item (4) (/ip/address/set; line 1)", "routeros/no-such-item"],
+			["no such item (/interface/set; line 1)\n", "routeros/no-such-item"],
+		] as const) {
+			expect(mapRouterOsResultError(raw)?.code, raw).toBe(code);
+		}
+	});
+
+	test("does not classify prose that starts with a 'no such' phrase", () => {
+		for (const raw of [
+			"no such command was found in the help text",
+			"no such command prefix exists here, all good",
+			"no such item matched, so nothing to do",
+			"no such entry in the cache yet",
+		]) {
+			expect(mapRouterOsResultError(raw), raw).toBeUndefined();
+		}
+	});
+
 	test("does not classify arbitrary output containing error-like prose", () => {
 		expect(
 			mapRouterOsResultError("status: no such item appears in the help text"),
