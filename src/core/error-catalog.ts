@@ -269,7 +269,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "input/max-results-exceeded",
 		summary:
-			"The result was larger than the --max-results budget, so it was withheld; an execute command already ran.",
+			"The result was larger than the --max-results budget, so it was withheld. retrieve changed nothing; execute had already run the command.",
 	},
 	{
 		code: "input/unsupported-query",
@@ -633,7 +633,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "transport/checksum-unavailable",
 		summary:
-			"RouterOS gives no file digest, so --verify checksum compared sizes instead (warning).",
+			"RouterOS gives no file digest, so --verify checksum ran the default size check instead (warning).",
 	},
 	{
 		code: "transport/connection-closed",
@@ -664,7 +664,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "transport/insecure-trust",
 		summary:
-			"--insecure is set, so TLS certificates and SSH host keys were not verified (warning).",
+			"Insecure mode is on, so TLS certificates and SSH host keys are not verified (warning).",
 	},
 	{
 		code: "transport/provider-trust",

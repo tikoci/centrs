@@ -9,8 +9,8 @@ RouterOS refuses for any user that has a password.
 
 Choose one, from the narrowest to the broadest:
 
-- **For one call:** `--password` (or `--password-stdin` on `devices add` and
-  `set` only), or `CENTRS_PASSWORD` in the environment. Nothing is saved.
+- **For one call:** `--password` or `CENTRS_PASSWORD` on the command that
+  dials the device. Nothing is saved.
 - **On the device record:**
   `centrs devices set <router> --password-stdin`, with the password on stdin.
   `--password <secret>` works too, but the value then sits in your shell

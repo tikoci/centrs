@@ -895,7 +895,7 @@ async function verifyWrittenSize(
 		warnings.push({
 			code: "transport/checksum-unavailable",
 			message:
-				"RouterOS exposes no file digest over REST/native; verifying by size instead.",
+				"RouterOS exposes no file digest centrs can read; running the default size check instead.",
 		});
 	}
 	const row = await backend.findFile(remote);
@@ -946,7 +946,7 @@ function verifyReadSize(
 		warnings.push({
 			code: "transport/checksum-unavailable",
 			message:
-				"RouterOS exposes no file digest over REST/native; verifying by size instead.",
+				"RouterOS exposes no file digest centrs can read; running the default size check instead.",
 		});
 	}
 	// As for uploads: with no device-reported size there is nothing to compare,

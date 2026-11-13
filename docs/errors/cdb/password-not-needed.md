@@ -11,8 +11,11 @@ password was ignored. `ok` and `error` say how the command itself went.
 
 ## Fix
 
-- Drop `--cdb-password`, or unset `CENTRS_CDB_PASSWORD`.
-- To encrypt this CDB instead, run `centrs devices encrypt`.
+- Drop `--cdb-password`, or unset `CENTRS_CDB_PASSWORD`. If a `.env` file
+  sets it, remove the line there too: Bun loads `.env` again on every run.
+- To encrypt this CDB instead, run `centrs devices encrypt` with the new
+  password in `--cdb-password` or `CENTRS_CDB_PASSWORD`. It refuses an empty
+  one with [`cdb/password-required`](password-required.md).
 
 ## Related
 

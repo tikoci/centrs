@@ -18,8 +18,8 @@ refused with this code.
 
 ## Fix
 
-Write the MAC as six two-digit hex octets, separated by `:` or `-`, for example
-`aa:bb:cc:dd:ee:ff`.
+Write the MAC as six hex octets of one or two digits, separated by `:`, `-`
+or `.`, for example `aa:bb:cc:dd:ee:ff` or `8a:6:1c:a:2:1f`.
 
 ## Related
 

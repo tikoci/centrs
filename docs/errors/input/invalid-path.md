@@ -2,7 +2,8 @@
 
 A path centrs cannot send as given: an `api` endpoint whose row id does not
 fit the method, an endpoint with no menu path, or a file path SFTP cannot
-quote. Nothing was sent.
+quote. The rejected path was not sent. A `transfer` may already have queried
+another path, such as the source of a `copy`.
 
 ## Emitted by
 

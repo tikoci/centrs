@@ -109,7 +109,8 @@ export function parseMac(value: string): MacAddress {
 			throw new CentrsError({
 				code: "input/mac-address",
 				summary: `"${value}" has an invalid octet "${parts[index]}".`,
-				remediation: "Each octet must be a two-digit hex value (00–ff).",
+				remediation:
+					"Each octet must be a hex value of one or two digits (0–ff).",
 			});
 		}
 		octets[index] = octet;

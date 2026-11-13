@@ -19,8 +19,11 @@ back unchanged when it saves the record.
 
 ## Fix
 
-Nothing is needed: the fields round-trip. If `mayContainPassword` is set,
-`devices show` may report no password when one is stored.
+Nothing is needed to keep the record intact: the fields round-trip. If
+`mayContainPassword` is set, `devices show` may report no password when one
+is stored, and centrs cannot use that password to log in, because it cannot
+read it. If logins to this device fail, give the password another way: see
+[`tip/credentials-missing`](../../tips/credentials-missing.md).
 If a WinBox release keeps producing these, open an issue with the WinBox
 version, `tags` and `centrs --version`. Do not attach the CDB: it holds
 credentials.

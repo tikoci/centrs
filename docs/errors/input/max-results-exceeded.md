@@ -17,7 +17,11 @@ withheld.
 
 ## Fix
 
-- Raise the budget to at least `requiredBytes`, or drop `--max-results`.
+- Raise the budget to at least `requiredBytes` with
+  `--max-results <bytes>`. Dropping the flag is not enough when the budget
+  also comes from `CENTRS_MAX_RESULTS` or `centrs.env`:
+  `centrs settings print` shows where it is set, and
+  `centrs settings reset max-results` removes the saved one.
 - Ask for less: `--attributes` or a filter on `retrieve`, or a narrower
   `print` on `execute`.
 - After an `execute` write, do not rerun it to see the output. Check the
