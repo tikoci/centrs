@@ -37,6 +37,7 @@ describe("isDocsOnlyPath", () => {
 			"docs/errors/README.md",
 			"docs/errors/CENTRS_X.md",
 			"docs/errors/AGENTS.md",
+			"docs/tips/no-devices.md",
 			"test/fixtures/explain/AGENTS.md",
 			"src/protocols/AGENTS.md",
 			"test/CLAUDE.md",
@@ -114,12 +115,14 @@ const MENTIONS: Record<string, string> = {
 	"scripts/release-plan.ts → CHANGELOG.md":
 		"read by release.yaml only; release-plan.test.ts uses an inline changelog",
 	"test/unit/error-pages.test.ts → README.md": "docs/errors/README.md",
-	"scripts/build-pages-site.ts → README.md": "docs/errors/README.md, for Pages",
+	"scripts/pages-site.ts → README.md": "docs/errors/README.md, for Pages",
 	"scripts/pages-links.ts → README.md":
 		"docs/errors/README.md's site path; reads no file",
 	"test/unit/pages-links.test.ts → README.md":
 		"link strings in fixtures; reads no file",
 	"test/unit/pages-links.test.ts → docs/CONSTITUTION.md":
+		"link strings in fixtures; reads no file",
+	"test/unit/pages-links.test.ts → commands/devices/README.md":
 		"link strings in fixtures; reads no file",
 	...Object.fromEntries(
 		[

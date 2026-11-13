@@ -285,7 +285,8 @@ that keeps growing is being used as an issue.
 ### Auth and secrets
 
 - **Question:** unlocking an encrypted CDB without the password reaching a
-  transcript, and per-device credentials that live outside the CDB.
+  transcript, per-device credentials that live outside the CDB, and one
+  policy for who may relax centrs's own blocks.
 - **Lean:** encrypted CDB by default, with a tip for unlocking from the user's
   environment. A password command or file read once per CDB load (#603),
   keychain and OAuth helpers, per-device auth overrides. A workspace file can
@@ -293,7 +294,13 @@ that keeps growing is being used as an issue.
   (#542). A host's secret prompt can alter what it passes on (T3 Code's
   `request_secret` trims whitespace,
   [upstream #31690](https://github.com/pingdotgg/t3code/issues/31690)), so docs never
-  promise byte fidelity through one.
+  promise byte fidelity through one. The CDB's RouterOS account, then
+  RouterOS policy, is the security boundary; `mcp=ro`/`rw` is a centrs block
+  above it. An MCP agent can lift that block itself today (`centrs_devices`
+  `op: set`, `mcp=rw`, `confirm: true`; #664), so `mcp` should become a key
+  MCP cannot set. `insecure` resolves from the flag, `CENTRS_INSECURE`,
+  `centrs.env`, the device property and quickchr provenance, with uneven
+  rules and warnings; it needs the same review.
 - **Ready when:** workspace and local state is done, because the workspace
   trust rule bounds the unlock channel.
 - **Absorbed:** #420, #542, #603.
@@ -378,9 +385,12 @@ that keeps growing is being used as an issue.
   skills are the agent entry point; they should name the command prefixes that
   are safe to allowlist. Pages publishes `llms.txt` and the generated CLI
   reference, the README shows real envelopes, and one worked example spans
-  retrieve → export → transfer → `api --stream`. Many error pages are still
-  scaffold stubs, tracked by a shrinking list in `error-pages.test.ts`; a tip
-  carries a `detailsUrl` only when it has a page (#659).
+  retrieve → export → transfer → `api --stream`. Every error code has a
+  written page, and `error-pages.test.ts` fails on a scaffold stub. A tip
+  carries a `detailsUrl` only when its page is published (`tip/no-devices`,
+  `tip/credentials-missing`); `pages-site.test.ts` assembles the site to
+  prove it. The older error pages still need a re-pass against the page
+  contract (#659 phase 4).
   TIKOCI-wide instruction files are collected in `tikoci.github.io` and
   vendored here, each recording its source and revision.
 - **Ready when:** now.

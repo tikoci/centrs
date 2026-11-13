@@ -10,54 +10,9 @@ import {
 
 const ROOT = join(import.meta.dir, "..", "..");
 const ERRORS_DIR = join(ROOT, "docs", "errors");
-const STUB_MARKER = "This stub will be expanded";
 
-/**
- * Pages still holding the `docs:errors` scaffold (#659). This list may only
- * shrink: fill a page, then delete its line. A new scaffold fails the test, so
- * a new error code ships with a real page.
- */
-const REMAINING_STUBS: readonly string[] = [
-	"cdb/already-exists",
-	"cdb/created",
-	"cdb/invalid-option",
-	"cdb/invalid-record",
-	"cdb/override-applied",
-	"cdb/password-not-needed",
-	"cdb/reserved-key",
-	"cdb/reserved-option",
-	"cdb/unknown-field",
-	"cdb/write-not-permitted",
-	"discover/broadcast-unavailable",
-	"input/incomplete-gps",
-	"input/invalid-altitude",
-	"input/invalid-bbox",
-	"input/invalid-coordinate",
-	"input/invalid-match",
-	"input/invalid-path",
-	"input/invalid-radius",
-	"input/local-file-not-found",
-	"input/mac-address",
-	"input/max-results-exceeded",
-	"internal/devices-failed",
-	"internal/mcp-start",
-	"internal/mcp-tool",
-	"internal/native-api-length",
-	"internal/settings-failed",
-	"internal/unhandled",
-	"internal/unreachable",
-	"mndp/encode-failed",
-	"mndp/malformed",
-	"transport/auto-method",
-	"transport/checksum-unavailable",
-	"transport/insecure-trust",
-	"transport/unsupported-operation",
-	"usage/invalid-concurrency",
-	"usage/missing-group",
-	"usage/not-implemented",
-	"usage/target-exists",
-	"usage/timeout-out-of-range",
-];
+/** The `docs:errors` scaffold marker. No page may keep it (#659). */
+const STUB_MARKER = "This stub will be expanded";
 
 function pagePathForCode(code: string): string {
 	return join(ERRORS_DIR, `${code}.md`);
@@ -95,18 +50,13 @@ describe("error pages", () => {
 		expect(missing).toEqual([]);
 	});
 
-	test("no new stub pages, and filled pages leave the stub list (#659)", () => {
+	test("no page is a scaffold stub: every page is written (#659)", () => {
 		const stubs = pagesOnDisk()
 			.filter((code) =>
 				readFileSync(pagePathForCode(code), "utf8").includes(STUB_MARKER),
 			)
 			.sort();
-		expect({
-			newStubs: stubs.filter((code) => !REMAINING_STUBS.includes(code)),
-			filledButStillListed: REMAINING_STUBS.filter(
-				(code) => !stubs.includes(code),
-			),
-		}).toEqual({ newStubs: [], filledButStillListed: [] });
+		expect(stubs).toEqual([]);
 	});
 
 	test("relative links resolve to repo files (checked on PRs, not only by the Pages build)", () => {

@@ -375,9 +375,9 @@ export async function retrieveGroup(
 	if (group === undefined || group.length === 0) {
 		throw new CentrsError({
 			code: "usage/missing-group",
-			summary: "retrieve group fanout requires a non-empty `--group` value.",
+			summary: "retrieveGroup requires a non-empty `group`.",
 			remediation:
-				"Pass `--group <name>` matching a CDB group, e.g. `centrs retrieve --group prod /system/resource`.",
+				"Pass `group` naming a CDB group (`centrs devices groups` lists them), or call `retrieve` with `targetInput` to read one device.",
 		});
 	}
 	const selection: TargetSelection = {

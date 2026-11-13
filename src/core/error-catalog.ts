@@ -43,7 +43,8 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	// cdb/*
 	{
 		code: "cdb/already-exists",
-		summary: "A CDB entry with that target already exists.",
+		summary:
+			"devices add refused: a saved device with that target and user already exists. Nothing was written.",
 	},
 	{
 		code: "cdb/conflict",
@@ -56,7 +57,8 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "cdb/created",
-		summary: "A new CDB file was created at the resolved location.",
+		summary:
+			"No CDB was at the default path, so centrs created an empty one there (warning).",
 	},
 	{
 		code: "cdb/decrypt-failed",
@@ -89,12 +91,13 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "cdb/invalid-option",
-		summary: "A comment kv-soup option carried an invalid value.",
+		summary:
+			"A saved device property has a value centrs cannot use; it is ignored and the next setting source applies (warning).",
 	},
 	{
 		code: "cdb/invalid-record",
 		summary:
-			"A device record failed schema validation (blank target or wrong field type).",
+			"A device record failed validation (a blank target or a wrong field type). Nothing was written.",
 	},
 	{
 		code: "cdb/lock-unsupported",
@@ -117,13 +120,13 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "cdb/override-applied",
 		summary:
-			"A comment kv-soup override replaced a resolved setting (informational).",
+			"The device's saved via property was overridden by --via or CENTRS_VIA (warning).",
 	},
 	{ code: "cdb/parse-failed", summary: "The CDB file could not be parsed." },
 	{
 		code: "cdb/password-not-needed",
 		summary:
-			"A --cdb-password was supplied for an unencrypted CDB and was ignored.",
+			"A CDB password was given for an unencrypted CDB and was ignored (warning).",
 	},
 	{
 		code: "cdb/password-required",
@@ -132,11 +135,13 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "cdb/reserved-key",
-		summary: "Comment kv-soup cannot carry a first-class CDB field.",
+		summary:
+			"devices add or set got key=value for a field with its own flag (user, password, group, profile, session). Nothing was written.",
 	},
 	{
 		code: "cdb/reserved-option",
-		summary: "A reserved comment kv-soup option was rejected.",
+		summary:
+			"A saved device has user, password, group, profile or session as a key=value property; it is ignored (warning).",
 	},
 	{
 		code: "cdb/target-not-registered",
@@ -145,7 +150,8 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "cdb/unknown-field",
-		summary: "An unknown CDB field name was referenced.",
+		summary:
+			"A device record holds CDB fields centrs cannot decode; they are kept byte for byte (warning).",
 	},
 	{
 		code: "cdb/unknown-option",
@@ -155,14 +161,14 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "cdb/write-not-permitted",
 		summary:
-			"The device's CDB record is mcp=ro; MCP writes are not permitted until it is set to mcp=rw.",
+			"An MCP write was refused because the device's mcp property is ro (the default). Nothing was sent.",
 	},
 
 	// discover/*
 	{
 		code: "discover/broadcast-unavailable",
 		summary:
-			"The MNDP listener could not enable UDP broadcast; discovery continued passively without sending refresh probes.",
+			"UDP broadcast could not be enabled, so discover only listened for unprompted announcements (warning).",
 	},
 	{
 		code: "discover/failed",
@@ -188,16 +194,18 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "input/incomplete-gps",
-		summary: "lat/lon (or a --gps tuple) were not given as a complete pair.",
+		summary:
+			"A device location was given without both lat and lon. Nothing was written.",
 	},
 	{
 		code: "input/invalid-altitude",
-		summary: "The altitude is not a number, or altitude-type is not MSL/AGL.",
+		summary:
+			"The altitude is not a number, or the altitude type is not MSL or AGL. Nothing was written.",
 	},
 	{
 		code: "input/invalid-bbox",
 		summary:
-			"The --bbox is not four lat-first corners with south<=north and west<=east.",
+			"The --bbox is not south,west,north,east with south <= north and west <= east. Nothing was read or sent.",
 	},
 	{
 		code: "input/invalid-command",
@@ -206,17 +214,18 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "input/invalid-coordinate",
-		summary: "The latitude or longitude is not a number in its valid range.",
+		summary:
+			"A latitude or longitude is not a decimal-degrees number in range. Nothing was written or sent.",
 	},
 	{
 		code: "input/invalid-match",
 		summary:
-			"The --match value is not a supported selector (user=, target=, or a record-type token).",
+			"The --match value is not user=, target= or a record type. Nothing was changed.",
 	},
 	{
 		code: "input/invalid-path",
 		summary:
-			"A file path contains a character the transport cannot quote (e.g. a quote or newline).",
+			"An api endpoint or file path cannot be sent as given (row id, empty path, or a character SFTP cannot quote). That path was not sent; a transfer may have read other paths first.",
 	},
 	{
 		code: "input/invalid-query",
@@ -226,7 +235,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "input/invalid-radius",
 		summary:
-			"The --near radius is not a number with an optional m/km/mi/ft suffix.",
+			"The --near radius is not a non-negative number with an optional m/km/mi/ft unit. Nothing was read or sent.",
 	},
 	{
 		code: "input/invalid-routeros-path",
@@ -249,15 +258,18 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "input/local-file-not-found",
-		summary: "A local file required for the transfer could not be read.",
+		summary:
+			"A local file centrs was given could not be read. Nothing was sent.",
 	},
 	{
 		code: "input/mac-address",
-		summary: "The value is not a valid 6-octet MAC address.",
+		summary:
+			"The value is not a MAC address of six hex octets. Nothing was sent.",
 	},
 	{
 		code: "input/max-results-exceeded",
-		summary: "Output exceeded the requested byte budget.",
+		summary:
+			"The result was larger than the --max-results budget, so it was withheld. retrieve changed nothing; execute had already run the command.",
 	},
 	{
 		code: "input/unsupported-query",
@@ -272,37 +284,44 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "internal/devices-failed",
-		summary: "The devices command failed with an unexpected internal error.",
+		summary:
+			"A devices command failed with an error centrs has no code for (a centrs bug).",
 	},
 	{
 		code: "internal/mcp-start",
-		summary: "The MCP server failed to start.",
+		summary: "centrs mcp failed to start; no MCP session began.",
 	},
 	{
 		code: "internal/mcp-tool",
-		summary: "An MCP tool handler failed with an unexpected internal error.",
+		summary:
+			"An MCP tool failed with an error centrs has no code for (a centrs bug).",
 	},
 	{
 		code: "internal/native-api-length",
-		summary: "A native-API word length could not be encoded.",
+		summary:
+			"A native-API word length could not be encoded, so the command with that word was not sent (a centrs bug).",
 	},
 	{
 		code: "internal/settings-failed",
-		summary: "The settings command failed with an unexpected internal error.",
+		summary:
+			"A settings command failed with an error centrs has no code for (a centrs bug).",
 	},
 	{
 		code: "internal/unhandled",
-		summary: "An unexpected internal error occurred (this is a centrs bug).",
+		summary:
+			"A command failed with an error centrs has no code for (a centrs bug).",
 	},
 	{
 		code: "internal/unreachable",
-		summary: "An unreachable code path was reached (this is a centrs bug).",
+		summary:
+			"centrs reached a state its code treats as impossible (a centrs bug).",
 	},
 
 	// mndp/*
 	{
 		code: "mndp/encode-failed",
-		summary: "An MNDP field could not be encoded.",
+		summary:
+			"An MNDP packet could not be built: a MAC or IPv4 field is malformed. Nothing was sent.",
 	},
 	{
 		code: "mndp/listen-failed",
@@ -310,7 +329,8 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "mndp/malformed",
-		summary: "A received MNDP datagram could not be decoded.",
+		summary:
+			"An MNDP datagram could not be decoded; discover skips it and counts it as a warning.",
 	},
 
 	// cmr/* — `execute --cmr` (#450)
@@ -599,7 +619,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "transport/auto-method",
 		summary:
-			"Auto-selection moved the operation to a different method (informational auto-hop).",
+			"With no --via, transfer chose sftp because the upload is over 60 KB (warning).",
 	},
 	{
 		code: "transport/cancel-unacknowledged",
@@ -613,7 +633,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "transport/checksum-unavailable",
 		summary:
-			"No file digest is available over the transport, so integrity was verified by size instead.",
+			"RouterOS gives no file digest for --verify checksum: REST/native compared sizes instead, and SFTP compared nothing (warning).",
 	},
 	{
 		code: "transport/connection-closed",
@@ -644,7 +664,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "transport/insecure-trust",
 		summary:
-			"Peer verification was disabled via --insecure (TLS / SSH host-key checks skipped).",
+			"Insecure mode is on, so TLS certificates and SSH host keys are not verified (warning).",
 	},
 	{
 		code: "transport/provider-trust",
@@ -675,7 +695,8 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "transport/unsupported-operation",
-		summary: "The chosen transport does not support this operation.",
+		summary:
+			"The transfer method cannot do this operation (copy over sftp, or an upload over 60 KB over rest/native). Nothing was written; a copy may have looked up its files first.",
 	},
 	{
 		code: "transport/write-outcome-unknown",
@@ -700,7 +721,8 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "usage/invalid-concurrency",
-		summary: "The --concurrency value must be an integer >= 1.",
+		summary:
+			"--concurrency is not a whole number of at least 1. Nothing was sent.",
 	},
 	{
 		code: "usage/removed-flag",
@@ -737,7 +759,8 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "usage/missing-group",
-		summary: "The operation requires a non-empty --group value.",
+		summary:
+			"A group fan-out was asked for with an empty group name. Nothing was sent.",
 	},
 	{
 		code: "usage/missing-flag-value",
@@ -747,16 +770,17 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "usage/not-implemented",
 		summary:
-			"A recognized command form is reserved but not implemented yet (e.g. the interactive `devices edit` editor).",
+			"This command form is recognized but not built yet (devices edit; transfer via scp, fetch or ftp). Nothing was sent.",
 	},
 	{
 		code: "usage/target-exists",
 		summary:
-			"The destination already exists and would be overwritten; pass --force to replace it.",
+			"The destination already exists on the router, and centrs does not overwrite it without --force. Nothing was changed.",
 	},
 	{
 		code: "usage/timeout-out-of-range",
-		summary: "The requested timeout is outside the allowed range.",
+		summary:
+			"The --timeout is longer than REST's 60-second ceiling. Nothing was sent.",
 	},
 
 	// validation/*

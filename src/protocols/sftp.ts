@@ -387,7 +387,7 @@ export function quote(path: string): string {
 			code: "input/invalid-path",
 			summary: `Path contains a character SFTP cannot quote: ${path}`,
 			remediation:
-				"Remove embedded quotes / newlines from the path; RouterOS file names do not use them.",
+				"Remove the double quotes or newlines from the path; centrs cannot quote them for SFTP.",
 			context: { path },
 		});
 	}

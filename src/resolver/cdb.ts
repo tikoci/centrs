@@ -565,7 +565,7 @@ function invalidOption(
 ): undefined {
 	warnings.push({
 		code: "cdb/invalid-option",
-		message: `Comment option "${key}=${value}" is invalid (${detail}); it is ignored.`,
+		message: `Device property "${key}=${value}" is invalid (${detail}); it is ignored.`,
 		context: { key, value, recordIndex },
 	});
 	return undefined;
