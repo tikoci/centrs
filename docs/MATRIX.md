@@ -285,7 +285,8 @@ that keeps growing is being used as an issue.
 ### Auth and secrets
 
 - **Question:** unlocking an encrypted CDB without the password reaching a
-  transcript, and per-device credentials that live outside the CDB.
+  transcript, per-device credentials that live outside the CDB, and one
+  policy for who may relax centrs's own blocks.
 - **Lean:** encrypted CDB by default, with a tip for unlocking from the user's
   environment. A password command or file read once per CDB load (#603),
   keychain and OAuth helpers, per-device auth overrides. A workspace file can
@@ -293,7 +294,13 @@ that keeps growing is being used as an issue.
   (#542). A host's secret prompt can alter what it passes on (T3 Code's
   `request_secret` trims whitespace,
   [upstream #31690](https://github.com/pingdotgg/t3code/issues/31690)), so docs never
-  promise byte fidelity through one.
+  promise byte fidelity through one. The CDB's RouterOS account, then
+  RouterOS policy, is the security boundary; `mcp=ro`/`rw` is a centrs block
+  above it. An MCP agent can lift that block itself today (`centrs_devices`
+  `op: set`, `mcp=rw`, `confirm: true`; #664), so `mcp` should become a key
+  MCP cannot set. `insecure` resolves from the flag, `CENTRS_INSECURE`,
+  `centrs.env`, the device property and quickchr provenance, with uneven
+  rules and warnings; it needs the same review.
 - **Ready when:** workspace and local state is done, because the workspace
   trust rule bounds the unlock channel.
 - **Absorbed:** #420, #542, #603.

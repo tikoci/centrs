@@ -27,12 +27,19 @@ deliberate choice to let an agent change that router.
 
 ## Limits
 
-centrs does not require that a person makes that choice. The MCP
-`centrs_devices` tool can set the property too: `op: "set"` with an `updates`
-entry `mcp=rw` and `confirm: true` *(code)*. Both steps are tool calls, so an
-agent that may confirm its own calls can opt a device in and then write to it.
-If only a person should grant writes, have your MCP client ask you before
-every `centrs_devices` call that changes a record.
+`mcp=ro` is a block in centrs, not the security boundary. What an agent can
+change is decided by the RouterOS account the CDB holds for the device, and by
+RouterOS's policy for that account. To be sure an agent cannot write, give the
+device an account without write rights. The
+[`mcp` README](../../../commands/mcp/README.md) notes one case where RouterOS
+policy alone did not stop a write.
+
+centrs also does not require that a person sets `mcp=rw`. The MCP
+`centrs_devices` tool can set it too: `op: "set"` with an `updates` entry
+`mcp=rw` and `confirm: true` *(code)*. An agent that may confirm its own calls
+can therefore opt a device in and then write to it. To keep that choice with a
+person, have your MCP client ask you before every `centrs_devices` call that
+changes a record.
 
 ## Related
 
