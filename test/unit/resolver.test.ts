@@ -385,6 +385,50 @@ describe("resolver target provenance", () => {
 	});
 });
 
+// #663: an empty --host / CENTRS_HOST outranks the positional target, so the
+// error names it instead of asking for a target that would not help.
+describe("resolver empty host override", () => {
+	function unresolved(run: () => unknown): CentrsError {
+		try {
+			run();
+		} catch (error) {
+			return error as CentrsError;
+		}
+		throw new Error("resolved");
+	}
+
+	test("an empty --host names --host even with a target", () => {
+		const error = unresolved(() =>
+			resolveTarget(
+				{ targetInput: "192.0.2.10", host: "" },
+				EMPTY_ENV,
+				"rest-api",
+			),
+		);
+		expect(error.code).toBe("target/unresolved");
+		expect(error.summary).toContain("`--host` is set but empty");
+		expect(error.remediation).toContain("unset it");
+	});
+
+	test("an empty CENTRS_HOST names CENTRS_HOST even with a target", () => {
+		const error = unresolved(() =>
+			resolveTarget(
+				{ targetInput: "192.0.2.10" },
+				{ CENTRS_HOST: "" },
+				"rest-api",
+			),
+		);
+		expect(error.code).toBe("target/unresolved");
+		expect(error.summary).toContain("`CENTRS_HOST` is set but empty");
+	});
+
+	test("no target and no host keeps the generic message", () => {
+		const error = unresolved(() => resolveTarget({}, EMPTY_ENV, "rest-api"));
+		expect(error.code).toBe("target/unresolved");
+		expect(error.summary).toContain("no target, `--host` or `CENTRS_HOST`");
+	});
+});
+
 // #381: an unparseable `<router>` crashed as internal/unhandled (TypeError:
 // Invalid URL) instead of a classified input error.
 describe("resolver unparseable target", () => {

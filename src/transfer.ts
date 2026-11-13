@@ -1227,7 +1227,7 @@ export function selectTransferMethod(
 			code: "settings/unsafe-protocol-blocked",
 			summary: "`ftp` is cleartext and is gated behind an explicit opt-in.",
 			remediation:
-				"Set `ALLOW_UNSAFE_PROTOCOLS=ftp` to permit it, or use the secure default (sftp) or `--via rest`.",
+				"Use `--via sftp`, `--via rest` or `--via native`. ftp transfer is not built yet: `ALLOW_UNSAFE_PROTOCOLS=ftp` only gets past this gate to `usage/not-implemented`.",
 			context: { via: "ftp" },
 		});
 	}

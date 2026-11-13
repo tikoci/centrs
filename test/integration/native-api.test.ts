@@ -84,6 +84,41 @@ describeFast("native API against CHR", () => {
 		}
 	}, 300_000);
 
+	test("keeps RouterOS's !fatal reason on /quit (bare word, #659)", async () => {
+		const started = await startIntegrationChr({}, { reuse: true });
+		const chr = started.chr;
+
+		// The boot check sits inside the try so a failed boot still releases the lease.
+		try {
+			expect(await chr.waitForBoot(180_000)).toBe(true);
+			const auth = splitQuickChrAuth(
+				readEnv(started.env, "QUICKCHR_AUTH") ?? "admin:",
+			);
+			const { session } = await withBootReadyRetry(() =>
+				connectNativeApi({
+					host: "127.0.0.1",
+					port: chr.ports.api,
+					username: auth.username,
+					password: auth.password,
+				}),
+			);
+			try {
+				const error = await session
+					.talk({ command: "/quit" })
+					.catch((caught: unknown) => caught);
+				expect(error).toBeInstanceOf(CentrsError);
+				expect((error as CentrsError).code).toBe("routeros/api-fatal");
+				expect((error as CentrsError).context?.["reason"]).toBe(
+					"session terminated on request",
+				);
+			} finally {
+				session.close();
+			}
+		} finally {
+			await chr.destroy();
+		}
+	}, 300_000);
+
 	test("maps bad credentials to transport/auth-failed", async () => {
 		const started = await startIntegrationChr({}, { reuse: true });
 		const chr = started.chr;

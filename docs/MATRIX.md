@@ -438,6 +438,15 @@ done or declined. A nit that needs more explanation is an issue.
 - `execute --via ssh` sends a multi-line script as one prompt (CR line breaks,
   #576). An opt-in line-by-line mode (one prompt per line, as the console
   would run typed lines) could come later if a caller needs it.
+- `api --via ssh` (or `mac-telnet`) fails as
+  `routeros/protocol-not-implemented` with `capability: "execute"`, though
+  the pairing is not planned; `routeros/unsupported-capability` fits (#659).
+- `/system/script/run number=nosuch` fails as `routeros/unknown-path` on both
+  transports (REST 404, native `no such item`), but the path exists and only
+  the item is missing (CHR 7.25.1, #659).
+- The MAC-Telnet L2 integration files hang now and then on macOS, a different
+  one per full run, and pass on a rerun (#659). They passed with no hang on
+  Linux (2026-11-12).
 - `.github/instructions/`: trim Copilot-era verbosity when the TIKOCI-wide
   files are collected in `tikoci.github.io`.
 - `test/integration/api-stream-command.test.ts` fails intermittently in the

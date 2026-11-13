@@ -286,7 +286,7 @@ export function parseCommentKv(comment: string): CommentKvResult {
 		}
 		warnings.push({
 			code: "cdb/unknown-option",
-			message: `Unknown comment option "${kv.key}"; it has no effect.`,
+			message: `"${kv.key}" is not a centrs device property; it has no effect.`,
 			context: { key: kv.key },
 		});
 	}

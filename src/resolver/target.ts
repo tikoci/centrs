@@ -100,12 +100,34 @@ export function resolveTarget(
 		config,
 	);
 
+	// An empty `--host` or `CENTRS_HOST` still outranks the target, so name it:
+	// passing a target would not clear the error.
+	const emptyHostSource =
+		input.host !== undefined
+			? "`--host`"
+			: hostSetting?.source.kind === "env" ||
+					hostSetting?.source.kind === "config"
+				? "`CENTRS_HOST`"
+				: undefined;
+	if (
+		hostSetting !== undefined &&
+		hostSetting.value.trim().length === 0 &&
+		emptyHostSource !== undefined
+	) {
+		throw new CentrsError({
+			code: "target/unresolved",
+			summary: `${emptyHostSource} is set but empty, and it takes precedence over the target.`,
+			remediation: `Set ${emptyHostSource} to an address, such as \`192.0.2.10\`, or unset it so the target is used.`,
+			context: { targetInput: redactTargetInput(input.targetInput) },
+		});
+	}
 	if (!hostSetting || hostSetting.value.trim().length === 0) {
 		throw new CentrsError({
 			code: "target/unresolved",
-			summary: "No host could be resolved for `retrieve`.",
+			summary:
+				"No host could be resolved: no target, `--host` or `CENTRS_HOST`.",
 			remediation:
-				"Pass a target positional like `centrs retrieve 192.0.2.10 /system/resource --via rest-api` or set `--host` / `CENTRS_HOST`.",
+				"Pass a target (a CDB name or an address, such as `192.0.2.10`), or set `--host` / `CENTRS_HOST`.",
 			context: { targetInput: redactTargetInput(input.targetInput) },
 		});
 	}
