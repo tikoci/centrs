@@ -320,6 +320,49 @@ describe("mapRouterOsResultError", () => {
 		}
 	});
 
+	// #665 final review: only the trailing diagnostic picks the code. A fault
+	// phrase in the earlier output must not, and the full output is kept.
+	test("earlier output cannot pick the code of a trailed diagnostic", () => {
+		for (const transport of ["rest-api", "native-api"] as const) {
+			for (const [raw, code] of [
+				[
+					"no such item matched, so nothing to do\r\nbad command name nosuchverb (line 1 column 18)",
+					"routeros/unknown-path",
+				],
+				[
+					"not enough permissions in the example\r\nno such item (4) (/ip/address/set; line 1)",
+					"routeros/no-such-item",
+				],
+				[
+					"unknown parameter printed-in-help\r\nsyntax error (line 1 column 8)",
+					transport === "rest-api"
+						? "routeros/request-failed"
+						: "routeros/api-trap",
+				],
+				[
+					"no such command was printed\nnot enough permissions (9) (/system/identity/set; line 1)",
+					"routeros/permission-denied",
+				],
+			] as const) {
+				const error = mapRouterOsResultError(raw, {
+					transport,
+					context: { via: transport },
+				});
+				expect(error?.code, `${transport}: ${raw}`).toBe(code);
+				expect(ctx(error as CentrsError).detail).toBe(raw);
+			}
+		}
+	});
+
+	test("the position comes from the trailed diagnostic, not earlier output", () => {
+		const error = mapRouterOsResultError(
+			"printed (line 9 column 9) earlier\r\nbad command name x (line 1 column 18)",
+			{ transport: "rest-api" },
+		);
+		expect(error?.code).toBe("routeros/unknown-path");
+		expect(error?.position).toEqual({ line: 1, column: 18 });
+	});
+
 	test("does not classify a trailed diagnostic without its location, or text after it", () => {
 		for (const raw of [
 			"before\r\nno such item",

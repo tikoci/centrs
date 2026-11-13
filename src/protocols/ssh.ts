@@ -582,20 +582,22 @@ export class SshExecClient {
 /**
  * The RouterOS diagnostic in the output of a command that exited nonzero.
  * RouterOS prints it last, after whatever the statements before the failure
- * printed (`:put before` then `bad command name …`), so when the whole output
- * is not a diagnostic, its last line is tried. The full output stays in
- * `context.output`.
+ * printed (`:put before` then `bad command name …`), so the last line is tried
+ * first: a fault phrase in the earlier output must not pick the code (#665).
+ * Then the whole output, for a diagnostic that spans it. The full output stays
+ * in `context.output`.
  */
 function diagnosticError(
 	output: string,
 	context: Record<string, unknown>,
 ): CentrsError | undefined {
 	const opts = { transport: "ssh" as const, context };
-	const whole = mapRouterOsResultError(output, opts);
-	if (whole) return whole;
 	const lines = output.split("\n");
-	if (lines.length < 2) return undefined;
-	return mapRouterOsResultError(lines[lines.length - 1] ?? "", opts);
+	if (lines.length >= 2) {
+		const last = mapRouterOsResultError(lines[lines.length - 1] ?? "", opts);
+		if (last) return last;
+	}
+	return mapRouterOsResultError(output, opts);
 }
 
 function startSsh(argv: readonly string[]) {

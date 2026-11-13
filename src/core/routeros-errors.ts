@@ -133,10 +133,11 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		// 200 with ret `p5-first\r\nnot enough permissions (9)
 		// (/system/identity/set; line 1)`, identical on native-api), so the
 		// trailed form matches too — with the location suffix required, so a
-		// script that merely prints the bare phrase stays ordinary output.
+		// script that merely prints the bare phrase stays ordinary output (see
+		// `mapRouterOsResultError`).
 		test: /not enough permissions|not allowed \(9\)/i,
 		resultTest:
-			/^(?:not enough permissions \(9\)(?: \(\/[^\s();]+; line \d+\))?|[\s\S]*\r?\nnot enough permissions \(9\) \(\/[^\s();]+; line \d+\))$/i,
+			/^not enough permissions \(9\)(?: \(\/[^\s();]+; line \d+\))?$/i,
 		build: (_match, raw) => ({
 			summary: `RouterOS refused the command for lack of permission: ${raw.trim()}`,
 			remediation:
@@ -157,10 +158,10 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		// starts with the phrase stays ordinary output. After earlier output
 		// RouterOS prints it as the last line, location included (`:put
 		// before; /ip/address/set *FFFF comment=x` returns `before\r\nno such
-		// item (4) (/ip/address/set; line 1)`, CHR 7.25.1, both transports), so
-		// that trailed form matches only with its location suffix.
+		// item (4) (/ip/address/set; line 1)`, CHR 7.25.1, both transports);
+		// `mapRouterOsResultError` handles that trailed form.
 		resultTest:
-			/^(?:(?:failure:\s*)?no such (?:item|entry)(?: \(\d+\))?(?: \(\/[^\s();]+; line \d+\))?|[\s\S]*\r?\nno such (?:item|entry)(?: \(\d+\))? \(\/[^\s();]+; line \d+\))\s*$/i,
+			/^(?:failure:\s*)?no such (?:item|entry)(?: \(\d+\))?(?: \(\/[^\s();]+; line \d+\))?\s*$/i,
 		build: (_match, raw) => ({
 			summary: `RouterOS has no such item: ${raw.trim()}`,
 			remediation: NO_SUCH_ITEM_REMEDIATION,
@@ -223,10 +224,10 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		// Console form (mac-telnet) of an unrecognized command/path word. A
 		// script run from `/execute` prints it as the last line after earlier
 		// output, with its position (`before\r\nbad command name nosuchverb
-		// (line 1 column 18)`, CHR 7.25.1); that trailed form needs the position.
+		// (line 1 column 18)`, CHR 7.25.1); `mapRouterOsResultError` handles
+		// that trailed form.
 		test: /bad command name/i,
-		resultTest:
-			/^(?:(?:failure:\s*)?(?:\(<%%\s*)?bad command name\b.*|[\s\S]*\r?\nbad command name \S+ \(line \d+ column \d+\)\s*)$/i,
+		resultTest: /^(?:failure:\s*)?(?:\(<%%\s*)?bad command name\b.*$/i,
 		build: (_match, raw) => ({
 			summary: `RouterOS has no command at this path: ${raw.trim()}`,
 			remediation: UNKNOWN_PATH_REMEDIATION,
@@ -360,11 +361,32 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
  * trailed form matches only with the position.
  */
 const ROUTEROS_RESULT_CATCH_ALL =
-	/^(?:(?:syntax error|expected (?:end of command|command name|input value))\b[^\n]*|[\s\S]*\r?\n(?:syntax error|expected (?:end of command|command name|input value)) \(line \d+ column \d+\)\s*)$/i;
+	/^(?:syntax error|expected (?:end of command|command name|input value))\b[^\n]*$/i;
+
+/**
+ * The location RouterOS appends to a runtime diagnostic: `(<path>; line N)`
+ * or `(line N column M)`. A diagnostic that follows earlier output counts only
+ * with it, so a script that merely prints a fault phrase last stays output.
+ */
+const ROUTEROS_DIAGNOSTIC_LOCATION =
+	/\((?:\/[^\s();]+; line \d+|line \d+ column \d+)\)$/;
+
+function isResultDiagnostic(text: string): boolean {
+	return (
+		ROUTEROS_RESULT_CATCH_ALL.test(text) ||
+		routerOsErrorRules.some((rule) => rule.resultTest?.test(text))
+	);
+}
 
 /**
  * Map text returned by a successful transport only when it matches a grounded,
  * stdout-safe result shape. Returns `undefined` for ordinary script output.
+ *
+ * A script that prints before it fails returns the diagnostic as its last
+ * line, with its location (#549, #665). That line alone picks the rule and the
+ * position, so a fault phrase in the earlier output cannot pick the code. The
+ * error is still built from the whole output, so its summary and
+ * `context.detail` show what the earlier statements printed (#549).
  */
 export function mapRouterOsResultError(
 	raw: string,
@@ -372,10 +394,14 @@ export function mapRouterOsResultError(
 ): CentrsError | undefined {
 	const trimmed = raw.trim();
 	if (trimmed.length === 0) return undefined;
-	const matched =
-		ROUTEROS_RESULT_CATCH_ALL.test(trimmed) ||
-		routerOsErrorRules.some((rule) => rule.resultTest?.test(trimmed));
-	return matched ? mapRouterOsError(raw, opts) : undefined;
+	if (isResultDiagnostic(trimmed)) return mapRouterOsError(raw, opts);
+	const lineBreak = trimmed.lastIndexOf("\n");
+	if (lineBreak < 0) return undefined;
+	const last = trimmed.slice(lineBreak + 1).trim();
+	if (!ROUTEROS_DIAGNOSTIC_LOCATION.test(last) || !isResultDiagnostic(last)) {
+		return undefined;
+	}
+	return buildRouterOsError(raw, last, opts);
 }
 
 /**
@@ -391,8 +417,21 @@ export function mapRouterOsError(
 	raw: string,
 	opts: MapRouterOsErrorOptions = {},
 ): CentrsError {
+	return buildRouterOsError(raw, raw, opts);
+}
+
+/**
+ * Build the error for `raw`, choosing the rule and the position from
+ * `diagnostic`: all of `raw`, or the diagnostic line that ends it.
+ */
+function buildRouterOsError(
+	raw: string,
+	diagnostic: string,
+	opts: MapRouterOsErrorOptions,
+): CentrsError {
 	const trimmed = raw.trim();
-	const position = parseRouterOsPosition(raw);
+	const classified = diagnostic.trim();
+	const position = parseRouterOsPosition(diagnostic);
 	const baseContext: Record<string, unknown> = {
 		detail: raw,
 		...(opts.httpStatus !== undefined ? { httpStatus: opts.httpStatus } : {}),
@@ -402,7 +441,7 @@ export function mapRouterOsError(
 		if (rule.httpStatus !== undefined && rule.httpStatus !== opts.httpStatus) {
 			continue;
 		}
-		const match = trimmed.match(rule.test);
+		const match = classified.match(rule.test);
 		if (!match) {
 			continue;
 		}
