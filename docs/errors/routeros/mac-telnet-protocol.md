@@ -30,11 +30,11 @@ goes on *(code)*.
 
 ## If this looks wrong
 
-If the device is a normal RouterOS router, this is a centrs decoder bug.
-Open an issue with the command, the `--json` envelope, the RouterOS version
-and `centrs --version`. Remove passwords
-(`--password`, `--cdb-password`) and other secrets from both first. A packet capture of UDP 20561
-helps; strip anything sensitive from it first.
+If the device is a normal RouterOS router, this is a centrs decoder bug. Open
+an issue with the command, the `--json` envelope, the RouterOS version and
+`centrs --version`. Remove passwords (`--password`, `--cdb-password`) and
+other secrets from both first. A packet capture of UDP 20561 helps; strip
+anything sensitive from it first.
 
 ## Related
 

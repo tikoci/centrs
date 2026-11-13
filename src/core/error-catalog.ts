@@ -437,7 +437,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "routeros/api-trap",
 		summary:
-			"RouterOS refused a native-API command with a message centrs has no specific code for.",
+			"RouterOS reported an error on a native-API command, with a message centrs has no specific code for. The command may have partly run.",
 	},
 	{
 		code: "routeros/btest-connection-count-single-stream",
@@ -500,7 +500,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "routeros/request-failed",
 		summary:
-			"RouterOS refused a REST, SSH or MAC-Telnet request with a message centrs has no specific code for.",
+			"RouterOS reported an error on a REST, SSH or MAC-Telnet request, with a message centrs has no specific code for. The command may have partly run.",
 	},
 	{
 		code: "routeros/session-closed",

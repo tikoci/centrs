@@ -25,8 +25,8 @@ the command.
 ## If this looks wrong
 
 From the CLI, this code is a centrs bug. Open an issue with the command, the
-`--json` envelope and `centrs --version`. Remove passwords
-(`--password`, `--cdb-password`) and other secrets from both first.
+`--json` envelope and `centrs --version`. Remove passwords (`--password`,
+`--cdb-password`) and other secrets from both first.
 
 ## Related
 

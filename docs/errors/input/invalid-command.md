@@ -39,8 +39,8 @@ as text even with `--json`.
 
 If the flag is in `centrs <command> --help` and is still rejected, open an
 issue with the command line, the `--json` envelope and `centrs --version`.
-Remove passwords
-(`--password`, `--cdb-password`) and other secrets from both first.
+Remove passwords (`--password`, `--cdb-password`) and other secrets from both
+first.
 
 ## Related
 

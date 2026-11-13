@@ -30,10 +30,10 @@ user with no local login, fail as
 
 ## If this looks wrong
 
-Open an issue with the command, the `--json` envelope (its `summary` holds
-the device's text), the RouterOS version and `centrs --version`. Remove passwords
-(`--password`, `--cdb-password`) and other secrets from both first.
-A device string that recurs should get its own code.
+Open an issue with the command, the `--json` envelope (its `summary` holds the
+device's text), the RouterOS version and `centrs --version`. Remove passwords
+(`--password`, `--cdb-password`) and other secrets from both first. A device
+string that recurs should get its own code.
 
 ## Related
 

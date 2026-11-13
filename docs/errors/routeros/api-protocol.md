@@ -25,9 +25,9 @@ connection, which centrs reports as
 ## If this looks wrong
 
 If the port is the router's `api` service and the error repeats, it is a
-centrs decoder bug. Open an issue with the command, the `--json` envelope,
-the RouterOS version and `centrs --version`. Remove passwords
-(`--password`, `--cdb-password`) and other secrets from both first.
+centrs decoder bug. Open an issue with the command, the `--json` envelope, the
+RouterOS version and `centrs --version`. Remove passwords (`--password`,
+`--cdb-password`) and other secrets from both first.
 
 ## Related
 
