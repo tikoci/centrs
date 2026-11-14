@@ -1,5 +1,5 @@
 {
-	"_source": "Recorded by `bun run explain:probe:context-matrix 7.24.5` (scripts/probes/explain-context-matrix.ts) on stock CHR 7.24.5 x86, 2026-11-01, and re-recorded 2026-11-11 after #576 (SSH sends a script's line breaks as CR, one prompt); the re-record changed only the three SSH multiline cells (I1-nl-scope-ssh, I4-braces-multi-ssh, I6-menu-ssh) — two disposable CHRs (IP routes, MAC routes), 59 cells, every product cell through centrs executeEnvelope with pinned --via. Replicated on a second full-matrix pass with identical cell outcomes and gate table. Re-run that command to reproduce, then regenerate this file mechanically with `bun run explain:probe:context-matrix --slice <matrix-capture.json>` (cells/gate/inputs from the capture; routes/findings prose preserved for human review — a re-record that changes conclusions needs its prose and replay test updated too); per-run captures stay in `.scratch/`. Session submissions always carry their raw screen. Findings read per #507's dimensions; unknowns stay unknown. No router is needed to read this file.",
+	"_source": "Recorded by `bun run explain:probe:context-matrix 7.24.5` (scripts/probes/explain-context-matrix.ts) on stock CHR 7.24.5 x86, 2026-11-01, and re-recorded 2026-11-11 after #576 (SSH sends a script's line breaks as CR, one prompt); the re-record changed only the three SSH multiline cells (I1-nl-scope-ssh, I4-braces-multi-ssh, I6-menu-ssh) — two disposable CHRs (IP routes, MAC routes), 59 cells, every product cell through centrs executeEnvelope with pinned --via. Replicated on a second full-matrix pass with identical cell outcomes and gate table. Re-run that command to reproduce, then regenerate this file mechanically with `bun run explain:probe:context-matrix --slice <matrix-capture.json>` (cells/gate/inputs from the capture; routes/findings prose preserved for human review — a re-record that changes conclusions needs its prose and replay test updated too); per-run captures stay in `.scratch/`. Session submissions always carry their raw screen. Migrated by hand for #665, which changed centrs's code, not the device's answer: the bare-menu `no such command` cells (I6-menu-rest-split, I6-menu-native-split, gate I6-nav) now carry routeros/unknown-path and its summary in place of the recorded routeros/request-failed / routeros/api-trap; the `cause` is the recorded device text, unchanged. Findings read per #507's dimensions; unknowns stay unknown. No router is needed to read this file.",
 	"routerosVersion": "7.24.5 (stable)",
 	"arch": "x86_64",
 	"routes": {
@@ -68,7 +68,7 @@
 		{
 			"shape": "I6-nav",
 			"ok": false,
-			"code": "routeros/request-failed"
+			"code": "routeros/unknown-path"
 		},
 		{
 			"shape": "I6-print",
@@ -130,7 +130,7 @@
 		"SUBMISSION-2: SSH command execution runs multiline input as ONE prompt since #576: centrs sends line breaks as CR, so I1 whole over ssh answers a=2 and I4 whole answers a=2, like rest/native. Before #576 it sent LF, which ends RouterOS's SSH exec prompt, and each line ran on its own (I1: `syntax error (line 1 column 6)` + `a=`; I4: `missing closing brace (line 1 column 2)` + the same tail; per-line coordinates).",
 		"SUBMISSION-3: mac-telnet console runs multiline sends per line too: I1 whole shows the last line's echo plus `a=`. Braced multiline (I4) is absorbed as one submission on the console (`{... }` fold, a=2).",
 		"SUBMISSION-4: `;`-joined statements are one scope on EVERY route incl. the console: I2 answers a=2 on rest/native/ssh/stored, and the session raw screen shows the device printing a=2 (the product mac-telnet ret is empty — reader extraction loss, see DELIVERY-2).",
-		"SUBMISSION-5: a bare menu path is not executable over /execute (rest: routeros/request-failed `no such command`; native: routeros/api-trap) but navigates fine on console routes (ssh/mac/session/stored nav all ok). A bare `print` is validation/unknown-path on every product route (device stage; direct fallback confirms `bad command name print`) and routeros/unknown-path when run inside a stored script.",
+		"SUBMISSION-5: a bare menu path is not executable over /execute (rest and native: `no such command`, routeros/unknown-path since #665; recorded as routeros/request-failed and routeros/api-trap) but navigates fine on console routes (ssh/mac/session/stored nav all ok). A bare `print` is validation/unknown-path on every product route (device stage; direct fallback confirms `bad command name print`) and routeros/unknown-path when run inside a stored script.",
 		"SUBMISSION-6: menu context holds WITHIN one submission on every route it runs on (I6 whole shows the 192.0.2.44 entry on rest/native/stored/mac/session). ACROSS submissions it holds only on a held console (I6 session split shows the table; stored split answers `bad command name print`).",
 		"SUBMISSION-7: ssh carries multiline menu navigation since #576: I6 whole over ssh prints the address-list rows. Before #576 it exited 1 with no output (transport/network) because the LF-ended first line was a bare menu path and the second ran outside it; the nonzero exit is now reported as the router's answer (#576).",
 		"BODY-1: each stored-script run is one scope (I1-I4 whole -> a=2) and scripts share device-global state: a global set in one script reads g=11 in the next.",
@@ -887,8 +887,8 @@
 					"ms": 7,
 					"ok": false,
 					"error": {
-						"code": "routeros/request-failed",
-						"summary": "RouterOS reported an error: no such command",
+						"code": "routeros/unknown-path",
+						"summary": "RouterOS has no command at this path: no such command",
 						"cause": "\"no such command\""
 					},
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -941,8 +941,8 @@
 					"ms": 119,
 					"ok": false,
 					"error": {
-						"code": "routeros/api-trap",
-						"summary": "RouterOS reported an error: no such command",
+						"code": "routeros/unknown-path",
+						"summary": "RouterOS has no command at this path: no such command",
 						"cause": "\"no such command\""
 					},
 					"stages": [["offline", "passed"], ["device", "passed"]]

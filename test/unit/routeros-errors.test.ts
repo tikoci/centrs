@@ -27,8 +27,50 @@ describe("mapRouterOsError grounded vocabulary", () => {
 		expect(ctx(error).detail).toBe("no such command prefix");
 	});
 
-	test("maps 'no such item' to routeros/unknown-path", () => {
-		expect(mapRouterOsError("no such item").code).toBe("routeros/unknown-path");
+	// #659, CHR 7.25.1: an unknown path is `no such command …` on both
+	// transports; a missing item in a known menu is `no such item`.
+	test("maps every 'no such command' form to routeros/unknown-path", () => {
+		for (const raw of [
+			"no such command",
+			"no such command prefix",
+			"no such command or directory (nosuch)",
+		]) {
+			for (const transport of ["rest-api", "native-api"] as const) {
+				expect(mapRouterOsError(raw, { transport, httpStatus: 400 }).code).toBe(
+					"routeros/unknown-path",
+				);
+			}
+		}
+	});
+
+	test("maps 'no such item' to routeros/no-such-item, not unknown-path", () => {
+		for (const raw of [
+			"no such item",
+			"no such item (4)",
+			"no such item (4) (/ip/address/set; line 1)",
+		]) {
+			expect(mapRouterOsError(raw).code).toBe("routeros/no-such-item");
+		}
+	});
+
+	test("maps a bare REST 404 body to routeros/no-such-item", () => {
+		const body = '{"error":404,"message":"Not Found"}';
+		const error = mapRouterOsError(body, {
+			transport: "rest-api",
+			httpStatus: 404,
+		});
+		expect(error.code).toBe("routeros/no-such-item");
+		expect(ctx(error).detail).toBe(body);
+		expect(error.summary).toContain("HTTP 404");
+	});
+
+	test("the 404 rule needs the 404 status", () => {
+		// The same text without the status is not a REST reply; it falls back
+		// to the path-shaped 'not found' rule.
+		const body = '{"error":404,"message":"Not Found"}';
+		expect(mapRouterOsError(body, { transport: "rest-api" }).code).not.toBe(
+			"routeros/no-such-item",
+		);
 	});
 
 	test("maps path-shaped 'not found' to routeros/unknown-path", () => {
@@ -104,7 +146,7 @@ describe("mapRouterOsError grounded vocabulary", () => {
 
 	test("strips an optional 'failure: ' prefix before specific matching", () => {
 		const error = mapRouterOsError("failure: no such item");
-		expect(error.code).toBe("routeros/unknown-path");
+		expect(error.code).toBe("routeros/no-such-item");
 	});
 
 	test("maps 'failure: <object> not found' to routeros/command-failed", () => {
@@ -127,6 +169,8 @@ describe("mapRouterOsError grounded vocabulary", () => {
 	test("REST and native-api classify grounded RouterOS strings identically", () => {
 		for (const raw of [
 			"no such command prefix",
+			"no such command",
+			"no such item",
 			"unknown parameter foo",
 			"invalid value for argument address",
 			"Session closed",
@@ -170,7 +214,7 @@ describe("mapRouterOsError grounded vocabulary", () => {
 
 	test("matching is case-insensitive and whitespace tolerant", () => {
 		expect(mapRouterOsError("   NO SUCH ITEM   ").code).toBe(
-			"routeros/unknown-path",
+			"routeros/no-such-item",
 		);
 		expect(ctx(mapRouterOsError("UNKNOWN PARAMETER Foo")).parameter).toBe(
 			"Foo",
@@ -190,7 +234,7 @@ describe("mapRouterOsError grounded vocabulary", () => {
 	test("sets details_url from the normalized code", () => {
 		const error = mapRouterOsError("no such item");
 		expect(error.detailsUrl).toBe(
-			"https://tikoci.dev/centrs/errors/routeros/unknown-path/",
+			"https://tikoci.dev/centrs/errors/routeros/no-such-item/",
 		);
 	});
 
@@ -215,12 +259,133 @@ describe("mapRouterOsResultError", () => {
 			mapRouterOsResultError("no such item", {
 				transport: "native-api",
 			})?.code,
-		).toBe("routeros/unknown-path");
+		).toBe("routeros/no-such-item");
+		expect(
+			mapRouterOsResultError("no such item (4) (/ip/address/set; line 1)", {
+				transport: "rest-api",
+			})?.code,
+		).toBe("routeros/no-such-item");
 		expect(
 			mapRouterOsResultError("syntax error (line 1 column 7)", {
 				transport: "rest-api",
 			})?.code,
 		).toBe("routeros/request-failed");
+	});
+
+	// #665 review: the result matchers take the whole grounded diagnostic
+	// only, so prose that starts with the phrase stays ordinary output.
+	test("classifies every grounded 'no such' result form", () => {
+		for (const [raw, code] of [
+			["no such command", "routeros/unknown-path"],
+			["no such command prefix", "routeros/unknown-path"],
+			["no such command or directory (nosuch)", "routeros/unknown-path"],
+			["no such item", "routeros/no-such-item"],
+			["no such item (4)", "routeros/no-such-item"],
+			["no such item (4) (/ip/address/set; line 1)", "routeros/no-such-item"],
+			["no such item (/interface/set; line 1)\n", "routeros/no-such-item"],
+		] as const) {
+			expect(mapRouterOsResultError(raw)?.code, raw).toBe(code);
+		}
+	});
+
+	// #665 review, CHR 7.25.1: after earlier output, RouterOS prints the
+	// diagnostic as the last line with its location.
+	test("classifies a located diagnostic that follows earlier output", () => {
+		for (const transport of ["rest-api", "native-api"] as const) {
+			for (const [raw, code] of [
+				[
+					"before\r\nno such item (4) (/ip/address/set; line 1)",
+					"routeros/no-such-item",
+				],
+				[
+					"before\r\nno such item (/system/script/run; line 1)",
+					"routeros/no-such-item",
+				],
+				[
+					"before\r\nbad command name nosuchverb (line 1 column 18)",
+					"routeros/unknown-path",
+				],
+				[
+					"before\r\nsyntax error (line 1 column 8)",
+					transport === "rest-api"
+						? "routeros/request-failed"
+						: "routeros/api-trap",
+				],
+			] as const) {
+				expect(
+					mapRouterOsResultError(raw, { transport })?.code,
+					`${transport}: ${raw}`,
+				).toBe(code);
+			}
+		}
+	});
+
+	// #665 final review: only the trailing diagnostic picks the code. A fault
+	// phrase in the earlier output must not, and the full output is kept.
+	test("earlier output cannot pick the code of a trailed diagnostic", () => {
+		for (const transport of ["rest-api", "native-api"] as const) {
+			for (const [raw, code] of [
+				[
+					"no such item matched, so nothing to do\r\nbad command name nosuchverb (line 1 column 18)",
+					"routeros/unknown-path",
+				],
+				[
+					"not enough permissions in the example\r\nno such item (4) (/ip/address/set; line 1)",
+					"routeros/no-such-item",
+				],
+				[
+					"unknown parameter printed-in-help\r\nsyntax error (line 1 column 8)",
+					transport === "rest-api"
+						? "routeros/request-failed"
+						: "routeros/api-trap",
+				],
+				[
+					"no such command was printed\nnot enough permissions (9) (/system/identity/set; line 1)",
+					"routeros/permission-denied",
+				],
+			] as const) {
+				const error = mapRouterOsResultError(raw, {
+					transport,
+					context: { via: transport },
+				});
+				expect(error?.code, `${transport}: ${raw}`).toBe(code);
+				expect(ctx(error as CentrsError).detail).toBe(raw);
+			}
+		}
+	});
+
+	test("the position comes from the trailed diagnostic, not earlier output", () => {
+		const error = mapRouterOsResultError(
+			"printed (line 9 column 9) earlier\r\nbad command name x (line 1 column 18)",
+			{ transport: "rest-api" },
+		);
+		expect(error?.code).toBe("routeros/unknown-path");
+		expect(error?.position).toEqual({ line: 1, column: 18 });
+	});
+
+	test("does not classify a trailed diagnostic without its location, or text after it", () => {
+		for (const raw of [
+			"before\r\nno such item",
+			"before\r\nno such item (4)",
+			"before\r\nbad command name nosuchverb",
+			"before\r\nno such item (4) (/ip/address/set; line 1)\r\nafter",
+			"before\r\nbad command name x (line 1 column 2)\r\nafter",
+			"before\r\nsyntax error",
+			"before\r\nsyntax error (line 1 column 8)\r\nafter",
+		]) {
+			expect(mapRouterOsResultError(raw), raw).toBeUndefined();
+		}
+	});
+
+	test("does not classify prose that starts with a 'no such' phrase", () => {
+		for (const raw of [
+			"no such command was found in the help text",
+			"no such command prefix exists here, all good",
+			"no such item matched, so nothing to do",
+			"no such entry in the cache yet",
+		]) {
+			expect(mapRouterOsResultError(raw), raw).toBeUndefined();
+		}
 	});
 
 	test("does not classify arbitrary output containing error-like prose", () => {

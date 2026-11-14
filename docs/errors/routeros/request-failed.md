@@ -60,5 +60,6 @@ passwords (`--password`, `--cdb-password`) and other secrets from both first.
 - [`routeros/command-failed`](command-failed.md): RouterOS's `failure:` and
   `error:` messages.
 - [`routeros/invalid-value`](invalid-value.md),
+  [`routeros/no-such-item`](no-such-item.md),
   [`routeros/unknown-attribute`](unknown-attribute.md),
   [`routeros/unknown-path`](unknown-path.md): messages that are mapped.

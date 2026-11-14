@@ -89,6 +89,11 @@ export interface RouterOsErrorRule {
 	/** Pattern matched against the trimmed RouterOS string. */
 	test: RegExp;
 	/**
+	 * HTTP status the rule is limited to. When set, the rule matches only a REST
+	 * reply with that status; a native trap or `/execute` text never matches it.
+	 */
+	httpStatus?: number;
+	/**
 	 * Anchored form safe for classifying a successful transport's returned text.
 	 * Unlike an HTTP error body / native trap, `/execute as-string` also carries
 	 * ordinary stdout, so substring matches would turn user output into failures.
@@ -97,6 +102,12 @@ export interface RouterOsErrorRule {
 	/** Builds the normalized error fields from the regex match and raw string. */
 	build: (match: RegExpMatchArray, raw: string) => RouterOsErrorRuleResult;
 }
+
+const UNKNOWN_PATH_REMEDIATION =
+	"Check the path and verb against the device's command tree with `centrs explain <router> '<command>'`. A menu path alone is not a command: add a verb such as `print`. A menu whose package is not installed is missing too.";
+
+const NO_SUCH_ITEM_REMEDIATION =
+	"The menu exists, but no item matches the `.id`, number or name given. List the items with `centrs retrieve <router> <menu>` and use an `.id` from that list; a number from an earlier `print` does not carry over to another session.";
 
 function cleanToken(token: string): string {
 	return token.replace(/^["'`]+|["'`.,;:]+$/g, "");
@@ -122,10 +133,11 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		// 200 with ret `p5-first\r\nnot enough permissions (9)
 		// (/system/identity/set; line 1)`, identical on native-api), so the
 		// trailed form matches too — with the location suffix required, so a
-		// script that merely prints the bare phrase stays ordinary output.
+		// script that merely prints the bare phrase stays ordinary output (see
+		// `mapRouterOsResultError`).
 		test: /not enough permissions|not allowed \(9\)/i,
 		resultTest:
-			/^(?:not enough permissions \(9\)(?: \(\/[^\s();]+; line \d+\))?|[\s\S]*\r?\nnot enough permissions \(9\) \(\/[^\s();]+; line \d+\))$/i,
+			/^not enough permissions \(9\)(?: \(\/[^\s();]+; line \d+\))?$/i,
 		build: (_match, raw) => ({
 			summary: `RouterOS refused the command for lack of permission: ${raw.trim()}`,
 			remediation:
@@ -133,16 +145,58 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		}),
 	},
 	{
-		code: "routeros/unknown-path",
+		code: "routeros/no-such-item",
 		description:
-			"RouterOS did not recognize the command path or menu item ('no such ...').",
-		test: /no such command prefix|no such item|no such entry/i,
+			"The menu exists, but no item matches the id, number or name given ('no such item').",
+		// Grounded on CHR 7.25.1 (#659). The native API traps with `no such
+		// item` (`/system/script/run number=nosuch`), or `no such item (4)`
+		// (`/ip/address/remove numbers=*FFFF`). `/execute as-string` returns
+		// `no such item (4) (/ip/address/set; line 1)` as text on both transports.
+		test: /no such item|no such entry/i,
+		// Returned text matches only the whole grounded diagnostic, with its
+		// optional `(4)` and `(<path>; line N)` suffixes, so stdout that merely
+		// starts with the phrase stays ordinary output. After earlier output
+		// RouterOS prints it as the last line, location included (`:put
+		// before; /ip/address/set *FFFF comment=x` returns `before\r\nno such
+		// item (4) (/ip/address/set; line 1)`, CHR 7.25.1, both transports);
+		// `mapRouterOsResultError` handles that trailed form.
 		resultTest:
-			/^(?:failure:\s*)?(?:no such command prefix|no such item|no such entry)\b.*$/i,
+			/^(?:failure:\s*)?no such (?:item|entry)(?: \(\d+\))?(?: \(\/[^\s();]+; line \d+\))?\s*$/i,
 		build: (_match, raw) => ({
-			summary: `RouterOS does not recognize the path: ${raw.trim()}`,
-			remediation:
-				"Check the slash-prefixed RouterOS path against the device's command tree (use `--list-attributes` or `--no-validate` to narrow the mismatch).",
+			summary: `RouterOS has no such item: ${raw.trim()}`,
+			remediation: NO_SUCH_ITEM_REMEDIATION,
+		}),
+	},
+	{
+		code: "routeros/no-such-item",
+		description:
+			"REST answered HTTP 404: the menu exists, but no item matches the id, number or name given.",
+		// Grounded on CHR 7.25.1 (#659). REST answers a missing item with a bare
+		// `{"error":404,"message":"Not Found"}` and no `detail`, for a GET of
+		// `/rest/ip/address/*FFFF` and a POST of `/system/script/run
+		// number=nosuch`, `/ip/address/remove .id=*FFFF` or `/file/get
+		// .id=<missing>`. An unknown path is HTTP 400, never 404.
+		httpStatus: 404,
+		test: /"error"\s*:\s*404\b/,
+		build: () => ({
+			summary: "RouterOS has no such item: REST answered HTTP 404 Not Found.",
+			remediation: NO_SUCH_ITEM_REMEDIATION,
+		}),
+	},
+	{
+		code: "routeros/unknown-path",
+		description: "RouterOS has no command at the path ('no such command ...').",
+		// Grounded on CHR 7.25.1 (#659), the same text on REST `detail` (HTTP
+		// 400) and the native `!trap`: `no such command prefix` for an unknown
+		// menu under a known one, `no such command` for a menu or command with
+		// no such verb (`/system/reboot/print`, a bare `/system/identity`), and
+		// REST's `no such command or directory (<word>)` for an unknown top word.
+		test: /no such command(?: prefix| or directory)?\b/i,
+		resultTest:
+			/^(?:failure:\s*)?no such command(?: prefix| or directory \([^\s()]+\))?(?: \(\/[^\s();]+; line \d+\))?\s*$/i,
+		build: (_match, raw) => ({
+			summary: `RouterOS has no command at this path: ${raw.trim()}`,
+			remediation: UNKNOWN_PATH_REMEDIATION,
 		}),
 	},
 	{
@@ -167,13 +221,16 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		code: "routeros/unknown-path",
 		description:
 			"RouterOS console rejected the command word ('bad command name …').",
-		// Console form (mac-telnet) of an unrecognized command/path word.
+		// Console form (mac-telnet) of an unrecognized command/path word. A
+		// script run from `/execute` prints it as the last line after earlier
+		// output, with its position (`before\r\nbad command name nosuchverb
+		// (line 1 column 18)`, CHR 7.25.1); `mapRouterOsResultError` handles
+		// that trailed form.
 		test: /bad command name/i,
 		resultTest: /^(?:failure:\s*)?(?:\(<%%\s*)?bad command name\b.*$/i,
 		build: (_match, raw) => ({
-			summary: `RouterOS does not recognize the command: ${raw.trim()}`,
-			remediation:
-				"Check the slash-prefixed RouterOS path/command against the device's command tree.",
+			summary: `RouterOS has no command at this path: ${raw.trim()}`,
+			remediation: UNKNOWN_PATH_REMEDIATION,
 		}),
 	},
 	{
@@ -289,9 +346,8 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		test: /not found/i,
 		resultTest: /^\s*\/\S+\s+not found\s*$/i,
 		build: (_match, raw) => ({
-			summary: `RouterOS does not recognize the path: ${raw.trim()}`,
-			remediation:
-				"Check the slash-prefixed RouterOS path against the device's command tree (use `--list-attributes` or `--no-validate` to narrow the mismatch).",
+			summary: `RouterOS has no command at this path: ${raw.trim()}`,
+			remediation: UNKNOWN_PATH_REMEDIATION,
 		}),
 	},
 ];
@@ -299,14 +355,38 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 /**
  * Grounded result shapes that intentionally use the transport-specific
  * catch-all mapping. They are errors, but do not carry enough information for a
- * more specific normalized code.
+ * more specific normalized code. After earlier output RouterOS prints the
+ * rejection last, with its position (`:put before; [:parse "/nosuch/thing"]`
+ * returns `before\r\nsyntax error (line 1 column 8)`, CHR 7.25.1), so that
+ * trailed form matches only with the position.
  */
 const ROUTEROS_RESULT_CATCH_ALL =
 	/^(?:syntax error|expected (?:end of command|command name|input value))\b[^\n]*$/i;
 
 /**
+ * The location RouterOS appends to a runtime diagnostic: `(<path>; line N)`
+ * or `(line N column M)`. A diagnostic that follows earlier output counts only
+ * with it, so a script that merely prints a fault phrase last stays output.
+ */
+const ROUTEROS_DIAGNOSTIC_LOCATION =
+	/\((?:\/[^\s();]+; line \d+|line \d+ column \d+)\)$/;
+
+function isResultDiagnostic(text: string): boolean {
+	return (
+		ROUTEROS_RESULT_CATCH_ALL.test(text) ||
+		routerOsErrorRules.some((rule) => rule.resultTest?.test(text))
+	);
+}
+
+/**
  * Map text returned by a successful transport only when it matches a grounded,
  * stdout-safe result shape. Returns `undefined` for ordinary script output.
+ *
+ * A script that prints before it fails returns the diagnostic as its last
+ * line, with its location (#549, #665). That line alone picks the rule and the
+ * position, so a fault phrase in the earlier output cannot pick the code. The
+ * error is still built from the whole output, so its summary and
+ * `context.detail` show what the earlier statements printed (#549).
  */
 export function mapRouterOsResultError(
 	raw: string,
@@ -314,10 +394,14 @@ export function mapRouterOsResultError(
 ): CentrsError | undefined {
 	const trimmed = raw.trim();
 	if (trimmed.length === 0) return undefined;
-	const matched =
-		ROUTEROS_RESULT_CATCH_ALL.test(trimmed) ||
-		routerOsErrorRules.some((rule) => rule.resultTest?.test(trimmed));
-	return matched ? mapRouterOsError(raw, opts) : undefined;
+	if (isResultDiagnostic(trimmed)) return mapRouterOsError(raw, opts);
+	const lineBreak = trimmed.lastIndexOf("\n");
+	if (lineBreak < 0) return undefined;
+	const last = trimmed.slice(lineBreak + 1).trim();
+	if (!ROUTEROS_DIAGNOSTIC_LOCATION.test(last) || !isResultDiagnostic(last)) {
+		return undefined;
+	}
+	return buildRouterOsError(raw, last, opts);
 }
 
 /**
@@ -333,15 +417,31 @@ export function mapRouterOsError(
 	raw: string,
 	opts: MapRouterOsErrorOptions = {},
 ): CentrsError {
+	return buildRouterOsError(raw, raw, opts);
+}
+
+/**
+ * Build the error for `raw`, choosing the rule and the position from
+ * `diagnostic`: all of `raw`, or the diagnostic line that ends it.
+ */
+function buildRouterOsError(
+	raw: string,
+	diagnostic: string,
+	opts: MapRouterOsErrorOptions,
+): CentrsError {
 	const trimmed = raw.trim();
-	const position = parseRouterOsPosition(raw);
+	const classified = diagnostic.trim();
+	const position = parseRouterOsPosition(diagnostic);
 	const baseContext: Record<string, unknown> = {
 		detail: raw,
 		...(opts.httpStatus !== undefined ? { httpStatus: opts.httpStatus } : {}),
 	};
 
 	for (const rule of routerOsErrorRules) {
-		const match = trimmed.match(rule.test);
+		if (rule.httpStatus !== undefined && rule.httpStatus !== opts.httpStatus) {
+			continue;
+		}
+		const match = classified.match(rule.test);
 		if (!match) {
 			continue;
 		}

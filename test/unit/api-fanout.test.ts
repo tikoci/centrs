@@ -360,7 +360,10 @@ describe("apiFanout", () => {
 		};
 		await expect(
 			apiFanout({ ...base, via: "ssh" }, selection(), HERMETIC_ENV, internals),
-		).rejects.toMatchObject({ code: "routeros/protocol-not-implemented" });
+		).rejects.toMatchObject({
+			code: "routeros/unsupported-capability",
+			context: { via: "ssh", capability: "api" },
+		});
 		await expect(
 			apiFanout(
 				{ ...base, via: "bogus" },

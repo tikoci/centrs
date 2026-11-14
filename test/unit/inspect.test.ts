@@ -166,9 +166,10 @@ describe("inspectChildrenOrEmpty", () => {
 		]);
 	});
 
-	test("swallows the two grounded not-found codes to an empty list", async () => {
+	test("swallows the grounded not-found codes to an empty list", async () => {
 		for (const code of [
 			"routeros/unknown-path",
+			"routeros/no-such-item",
 			"routeros/api-trap",
 		] as const) {
 			const backend: InspectBackend = {

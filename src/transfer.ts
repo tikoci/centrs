@@ -648,7 +648,7 @@ class AdapterFileBackend implements FileBackend {
 	 * `/file print` omits the children of a container root, but RouterOS still
 	 * answers a direct `/file/get .id=<pathname>` for them (CHR 7.25.1 and
 	 * 7.24.6, #636). A missing pathname answers "no such item" (native) or 404
-	 * (REST), both mapped to `routeros/unknown-path`: that is absence. Any other
+	 * (REST), both mapped to `routeros/no-such-item`: that is absence. Any other
 	 * error is real and propagates.
 	 */
 	private async findFileByPath(name: string): Promise<FileRow | undefined> {
@@ -666,7 +666,7 @@ class AdapterFileBackend implements FileBackend {
 		} catch (error) {
 			if (
 				error instanceof CentrsError &&
-				error.code === "routeros/unknown-path"
+				error.code === "routeros/no-such-item"
 			) {
 				return undefined;
 			}

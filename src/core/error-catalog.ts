@@ -509,6 +509,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary: "The device requested an unsupported MAC-Telnet auth mode.",
 	},
 	{
+		code: "routeros/no-such-item",
+		summary:
+			"The RouterOS menu exists, but no item matches the id, number or name given.",
+	},
+	{
 		code: "routeros/permission-denied",
 		summary:
 			"RouterOS refused the command because the user's group lacks a policy it needs.",
@@ -532,7 +537,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "routeros/unknown-path",
-		summary: "RouterOS does not recognize the command path.",
+		summary: "RouterOS has no command at the requested path.",
 	},
 	{
 		code: "routeros/unsupported-capability",

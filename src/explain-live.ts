@@ -312,6 +312,7 @@ export async function collectExplainEvidence(
 						: code.startsWith("transport/")
 							? "transport-error"
 							: code === "routeros/unknown-path" ||
+									code === "routeros/no-such-item" ||
 									code === "routeros/unsupported-capability"
 								? "unsupported"
 								: "invalid-response";

@@ -296,6 +296,24 @@ describe("SshExecClient: remote exit status (#576)", () => {
 		});
 	});
 
+	// #665 final review: a fault phrase in earlier output cannot pick the code.
+	test("a fault phrase in earlier output does not override the final diagnostic", async () => {
+		const error = (await client({
+			exitCode: 1,
+			stdout:
+				"no such item matched, so nothing to do\r\nbad command name nosuchverb (line 2 column 1)\r\n",
+			stderr: KNOWN_HOSTS,
+		})
+			.exec(
+				encodeSshScript(
+					':put "no such item matched, so nothing to do"\n/nosuchverb',
+				),
+			)
+			.catch((e) => e)) as CentrsError;
+		expect(error.code).toBe("routeros/unknown-path");
+		expect(error.position).toEqual({ line: 2, column: 1 });
+	});
+
 	test("ordinary output before an unrecognized last line is still routeros/command-failed", async () => {
 		const error = (await client({
 			exitCode: 1,

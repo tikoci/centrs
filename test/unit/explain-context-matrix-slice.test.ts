@@ -21,7 +21,10 @@ import slice from "../fixtures/explain/context-matrix.slice.json" with {
  * committed raw screens prove the device printed). It has a follow-up issue;
  * the slice pins the broken behavior until a re-recorded matrix shows the fix.
  * The ssh multiline cells were re-recorded after #576 fixed them (CR line
- * breaks keep one prompt); only those three cells changed.
+ * breaks keep one prompt); only those three cells changed. #665 changed the
+ * code for RouterOS's `no such command` to `routeros/unknown-path`; the three
+ * bare-menu cells it touches were migrated by hand (see the slice's
+ * `_source`), since the device's answer did not change.
  */
 
 interface Submission {
@@ -177,8 +180,9 @@ describe("context-matrix evidence slice (#574)", () => {
 
 	test("menu context across submissions holds only on a held console", () => {
 		// Bare navigation fails over /execute but runs on console routes.
-		expect(code(cell("I6-menu-rest-split"), 0)).toBe("routeros/request-failed");
-		expect(code(cell("I6-menu-native-split"), 0)).toBe("routeros/api-trap");
+		// RouterOS answers `no such command` on both (#665: routeros/unknown-path).
+		expect(code(cell("I6-menu-rest-split"), 0)).toBe("routeros/unknown-path");
+		expect(code(cell("I6-menu-native-split"), 0)).toBe("routeros/unknown-path");
 		expect(cell("I6-menu-ssh-split").submissions[0]?.ok).toBe(true);
 		expect(cell("I6-menu-mactelnet-split").submissions[0]?.ok).toBe(true);
 		// A bare print is validation-rejected on every product route...
@@ -232,7 +236,7 @@ describe("context-matrix evidence slice (#574)", () => {
 		for (const shape of ["I1", "I2", "I3", "I4", "I5-set", "script-run"])
 			expect(gate[shape]).toBe("usage/confirmation-required");
 		for (const shape of ["I5-read", "I7"]) expect(gate[shape]).toBe("ran");
-		expect(gate["I6-nav"]).toBe("routeros/request-failed");
+		expect(gate["I6-nav"]).toBe("routeros/unknown-path");
 		expect(gate["I6-print"]).toBe("validation/unknown-path");
 		expect(gate["I8"]).toBe("validation/syntax");
 	});
