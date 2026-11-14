@@ -212,6 +212,11 @@ that keeps growing is being used as an issue.
 - **Lean, `centrs.db`:** SQLite, derived, deletable and secret-free; no code
   path depends on it. First tables: `seen` facts from MNDP, ARP and ping. A
   session log records verb, target and error code only until redaction exists.
+- **In progress elsewhere:** the TIKOCI-wide `tikoci-home` skill
+  ([tikoci.github.io#24](https://github.com/tikoci/tikoci.github.io/pull/24),
+  in review) is where this theme's layout is being aligned across tools: user
+  and project scopes under `.tikoci/`, and trust for `local/`. The leans
+  above follow it once it lands; centrs' review points live on that PR.
 - **Ready when:** now. It adds a settings layer, so the constitution changes
   first.
 - **Absorbed:** #92, #160.
