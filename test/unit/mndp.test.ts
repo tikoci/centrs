@@ -123,8 +123,6 @@ describe("parseMndpPacket", () => {
 
 		const neighbor = parseMndpPacket(packet);
 		expect(neighbor.headerHex).toBe("07000000");
-		expect(neighbor.counter).toBe(7);
-		expect(neighbor.counterByteOrder).toBe("little-endian");
 		expect(neighbor.macAddress).toBe("e4:8d:8c:11:22:33");
 		expect(neighbor.identity).toBe("edge-router");
 		expect(neighbor.version).toBe("7.18 (stable)");
@@ -158,11 +156,9 @@ describe("parseMndpPacket", () => {
 		expect(neighbor.ipv6Enabled).toBe(false);
 		expect(neighbor.running).toBe(0);
 		expect(neighbor.ttlSeconds).toBeUndefined();
-		// `ef 65 00 00` is 26,095 little-endian: uptime ÷ counter ≈ 10 s, the
+		// `ef 65 00 00` is 26,095 little-endian (ARM): uptime ÷ counter ≈ 10 s, the
 		// router's discover-interval. The old big-endian u16 at bytes 2–3 read 0.
 		expect(neighbor.headerHex).toBe("ef650000");
-		expect(neighbor.counter).toBe(26_095);
-		expect(neighbor.counterByteOrder).toBe("little-endian");
 		expect(neighbor.unknownTlvs).toHaveLength(0);
 	});
 
@@ -170,8 +166,6 @@ describe("parseMndpPacket", () => {
 		const neighbor = parseMndpPacket(fromHex(LAB.baseline));
 		expect(neighbor).toEqual({
 			headerHex: "08000000",
-			counter: 8,
-			counterByteOrder: "little-endian",
 			macAddress: "02:7e:d1:2a:67:1c",
 			identity: "mndp-observer",
 			version: "7.26beta5 2026-10-30 11:13:55",
@@ -226,7 +220,7 @@ describe("parseMndpPacket", () => {
 		expect(parseMndpPacket(fromHex(LAB.ttl9h)).ttlSeconds).toBe(255);
 	});
 
-	test("decodes a dying gasp (TLVs 1, 19 = 0, 17, 15) without a counter", () => {
+	test("decodes a dying gasp (TLVs 1, 19 = 0, 17, 15)", () => {
 		const neighbor = parseMndpPacket(fromHex(LAB.dyingGasp));
 		expect(neighbor).toEqual({
 			headerHex: "c1000000",
@@ -255,41 +249,30 @@ describe("parseMndpPacket", () => {
 		expect(neighbor.ipv6Addresses).toEqual(["2001:db8::1", "fe80::1"]);
 	});
 
-	test("reads a big-endian (MIPSBE) header counter using uptime", () => {
-		// m2ir field capture: a 7.25beta5 RB912R sent `00 00 23 58` (9,048) at
-		// 271,468 s uptime.
-		const packet = concat(
-			Uint8Array.from([0x00, 0x00, 0x23, 0x58]),
-			tlv(mndpTlvType.uptime, u32le(271_468)),
-		);
-		const neighbor = parseMndpPacket(packet);
-		expect(neighbor.counter).toBe(9_048);
-		expect(neighbor.counterByteOrder).toBe("big-endian");
+	test("keeps the header raw in either CPU byte order", () => {
+		// m2ir field capture: a MIPSBE RB912R sent `00 00 23 58` (9,048
+		// big-endian) and an ARM RB1100Dx4 sent `20 7c 01 00` (97,312
+		// little-endian). The packet does not say which order it uses.
+		expect(
+			parseMndpPacket(Uint8Array.from([0x00, 0x00, 0x23, 0x58])).headerHex,
+		).toBe("00002358");
+		expect(
+			parseMndpPacket(Uint8Array.from([0x20, 0x7c, 0x01, 0x00])).headerHex,
+		).toBe("207c0100");
 	});
 
-	test("reads a little-endian counter past 16 bits", () => {
-		// m2ir field capture: a 7.26beta5 RB1100Dx4 sent `20 7c 01 00`
-		// (97,312) at 973,177 s uptime.
-		const packet = concat(
-			Uint8Array.from([0x20, 0x7c, 0x01, 0x00]),
-			tlv(mndpTlvType.uptime, u32le(973_177)),
+	test("does not guess a counter from uptime", () => {
+		// 65,536 little-endian announcements in 60,000 s (sustained triggered
+		// announcements) reads as a plausible 256 big-endian; no uptime bound
+		// separates the two, so the codec exposes neither (PR #669 review).
+		const neighbor = parseMndpPacket(
+			concat(
+				Uint8Array.from([0x00, 0x00, 0x01, 0x00]),
+				tlv(mndpTlvType.uptime, u32le(60_000)),
+			),
 		);
-		const neighbor = parseMndpPacket(packet);
-		expect(neighbor.counter).toBe(97_312);
-		expect(neighbor.counterByteOrder).toBe("little-endian");
-	});
-
-	test("omits the counter when uptime cannot settle the byte order", () => {
-		// `00 01 02 00`: 131,328 little-endian, 66,048 big-endian; both fit
-		// under this uptime, so neither is reported.
-		const packet = concat(
-			Uint8Array.from([0x00, 0x01, 0x02, 0x00]),
-			tlv(mndpTlvType.uptime, u32le(10_000_000)),
-		);
-		const neighbor = parseMndpPacket(packet);
-		expect(neighbor.headerHex).toBe("00010200");
-		expect(neighbor.counter).toBeUndefined();
-		expect(neighbor.counterByteOrder).toBeUndefined();
+		expect(neighbor.headerHex).toBe("00000100");
+		expect(neighbor).not.toHaveProperty("counter");
 	});
 
 	test("preserves type 13 as an unknown TLV (never seen on the wire)", () => {
@@ -361,7 +344,6 @@ describe("parseMndpPacket", () => {
 		const neighbor = parseMndpPacket(mndpRefreshPacket());
 		expect(neighbor.macAddress).toBeUndefined();
 		expect(neighbor.headerHex).toBe("00000000");
-		expect(neighbor.counter).toBe(0);
 	});
 });
 
@@ -376,7 +358,7 @@ describe("mndpRunningNames", () => {
 describe("encodeMndpPacket", () => {
 	test("round-trips a neighbor through decode", () => {
 		const original: Partial<MndpNeighbor> = {
-			counter: 9,
+			headerHex: "09000000",
 			macAddress: "aa:bb:cc:dd:ee:ff",
 			unpack: "uncompress-headers",
 			aggregatedSize: 1000,
@@ -395,22 +377,20 @@ describe("encodeMndpPacket", () => {
 		const decoded = parseMndpPacket(encodeMndpPacket(original));
 		expect(decoded).toEqual({
 			...original,
-			headerHex: "09000000",
-			counterByteOrder: "little-endian",
 			unknownTlvs: [],
 		} as MndpNeighbor);
 	});
 
-	test("writes a big-endian header counter on request", () => {
-		const packet = encodeMndpPacket({
-			counter: 9_048,
-			counterByteOrder: "big-endian",
-			uptimeSeconds: 271_468,
-		});
-		const decoded = parseMndpPacket(packet);
-		expect(decoded.headerHex).toBe("00002358");
-		expect(decoded.counter).toBe(9_048);
-		expect(decoded.counterByteOrder).toBe("big-endian");
+	test("writes headerHex verbatim and rejects a malformed one", () => {
+		const packet = encodeMndpPacket({ headerHex: "00002358" });
+		expect(Array.from(packet.subarray(0, 4))).toEqual([0x00, 0x00, 0x23, 0x58]);
+		let caught: unknown;
+		try {
+			encodeMndpPacket({ headerHex: "2358" });
+		} catch (error) {
+			caught = error;
+		}
+		expect((caught as CentrsError).code).toBe("mndp/encode-failed");
 	});
 
 	test("appends extra raw TLVs that survive as unknown TLVs", () => {

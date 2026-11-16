@@ -161,8 +161,8 @@ describeFast("discover over MNDP against CHR (socket-connect L2)", () => {
 			expect(match.mac).toMatch(/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/);
 
 			// Grounded wire map (#668): TLV 14 is the IPv6-enabled flag, TLV 18
-			// the running bitmask (7.20+), TLV 19 the TTL (7.24+), and the header
-			// a u32 counter in the sender's byte order (x86 → little-endian).
+			// the running bitmask (7.20+), TLV 19 the TTL (7.24+). The header is
+			// kept raw: a u32 counter in the sender's byte order.
 			const routerOs = chr.state.version;
 			const ipv6Settings = asRecord(await chr.rest("/ipv6/settings"));
 			expect(match.ipv6Enabled).toBe(ipv6Settings["disable-ipv6"] !== "true");
@@ -183,10 +183,6 @@ describeFast("discover over MNDP against CHR (socket-connect L2)", () => {
 				}
 			}
 			expect(match.headerHex).toMatch(/^[0-9a-f]{8}$/);
-			expect(match.counter).toBeDefined();
-			if (match.counterByteOrder !== undefined) {
-				expect(match.counterByteOrder).toBe("little-endian");
-			}
 
 			// --save persisted the neighbor (no IPv4 on ether2 → MAC target).
 			expect(envelope.meta.operation?.saved?.added ?? 0).toBeGreaterThan(0);

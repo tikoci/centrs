@@ -255,8 +255,6 @@ describe("discover", () => {
 			listen: fakeListen([
 				neighbor("00:00:00:00:00:01", {
 					headerHex: "08000000",
-					counter: 8,
-					counterByteOrder: "little-endian",
 					unpack: "uncompress-all",
 					aggregatedSize: 1500,
 					ipv6Enabled: true,
@@ -273,8 +271,6 @@ describe("discover", () => {
 		const [record] = envelope.data.neighbors;
 		expect(record).toMatchObject({
 			headerHex: "08000000",
-			counter: 8,
-			counterByteOrder: "little-endian",
 			unpack: "uncompress-all",
 			aggregatedSize: 1500,
 			ipv6Enabled: true,
@@ -284,6 +280,7 @@ describe("discover", () => {
 		});
 		expect(record).not.toHaveProperty("sequence");
 		expect(record).not.toHaveProperty("ipv6");
+		expect(record).not.toHaveProperty("counter");
 	});
 
 	test("tips to use --save when neighbors are found but not saved", async () => {

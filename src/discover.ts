@@ -23,7 +23,6 @@ import { buildTip } from "./core/envelope.ts";
 import {
 	MNDP_BROADCAST_ADDRESS,
 	MNDP_PORT,
-	type MndpCounterByteOrder,
 	type MndpNeighbor,
 	type MndpUnpack,
 	mndpRefreshPacket,
@@ -329,11 +328,8 @@ export interface DiscoverNeighborRecord {
 	/** TLV 18 bit names (`capsman`, `cmr`, or `bit<n>`); `[]` when sent as `00`. */
 	running?: readonly string[];
 	ttlSeconds?: number;
-	/** Raw MNDP header bytes as hex. */
+	/** Raw MNDP header bytes as hex: the announcement counter in the sender's CPU byte order. */
 	headerHex: string;
-	/** Header announcement counter, when its byte order is settled. */
-	counter?: number;
-	counterByteOrder?: MndpCounterByteOrder;
 	/** Unknown TLVs reduced to `{ type, byteLength }` (bytes are not emitted). */
 	unknownTlvs: readonly { type: number; byteLength: number }[];
 	firstSeenAt: string;
@@ -433,12 +429,6 @@ function toDiscoverNeighbor(
 	}
 	if (neighbor.ttlSeconds !== undefined) {
 		record.ttlSeconds = neighbor.ttlSeconds;
-	}
-	if (neighbor.counter !== undefined) {
-		record.counter = neighbor.counter;
-	}
-	if (neighbor.counterByteOrder !== undefined) {
-		record.counterByteOrder = neighbor.counterByteOrder;
 	}
 	return record;
 }

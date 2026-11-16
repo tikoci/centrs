@@ -161,7 +161,6 @@ export {
 	MNDP_BROADCAST_ADDRESS,
 	MNDP_IPV6_MULTICAST_ADDRESS,
 	MNDP_PORT,
-	type MndpCounterByteOrder,
 	type MndpNeighbor,
 	type MndpTlvInput,
 	type MndpUnknownTlv,

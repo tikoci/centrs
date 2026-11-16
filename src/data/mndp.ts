@@ -21,10 +21,11 @@
  *   **sender's CPU byte order** — little-endian on x86, ARM and ARM64,
  *   big-endian on MIPSBE. It counts every announcement on that interface
  *   (periodic or triggered) and restarts at boot. The packet does not say
- *   which byte order it used, so the codec keeps the raw bytes
- *   ({@link MndpNeighbor.headerHex}) and only reports a
- *   {@link MndpNeighbor.counter} when the advertised uptime settles the order
- *   (see {@link parseMndpPacket}).
+ *   which byte order it used, and triggered announcements mean no rate bound
+ *   tells the two readings apart, so the codec keeps the raw bytes
+ *   ({@link MndpNeighbor.headerHex}) and does not decode a counter. A caller
+ *   that knows the sender's CPU can read it; the lab confirmed the order by
+ *   checking that uptime ÷ counter ≈ discover-interval.
  * - **TLVs** follow at offset 4: `type` (`u16` big-endian), `length` (`u16`
  *   big-endian), then `length` value bytes. TLV order changes between
  *   RouterOS versions (7.24 moves 17/15 after 18/19 and puts 2–4/9 right
@@ -109,9 +110,6 @@ export const mndpRunningBit = {
  */
 export type MndpUnpack = "simple" | "uncompress-headers" | "uncompress-all";
 
-/** Byte order of the header counter, which follows the sender's CPU. */
-export type MndpCounterByteOrder = "little-endian" | "big-endian";
-
 /** A TLV record whose `type` the codec does not interpret; preserved verbatim. */
 export interface MndpUnknownTlv {
 	type: number;
@@ -124,16 +122,12 @@ export interface MndpUnknownTlv {
  * so consumers never branch on their existence.
  */
 export interface MndpNeighbor {
-	/** Raw header bytes 0–3 as lower-case hex (e.g. `08000000`). */
-	headerHex: string;
 	/**
-	 * The header's announcement counter, present only when its byte order is
-	 * settled: the two byte orders read the same value, or exactly one reading
-	 * is no larger than {@link uptimeSeconds}.
+	 * Raw header bytes 0–3 as lower-case hex (e.g. `08000000`): the
+	 * announcement counter in the sender's CPU byte order. The IPv4 and IPv6
+	 * copies of one announcement carry the same header.
 	 */
-	counter?: number;
-	/** Byte order {@link counter} was read in; absent when both orders agree. */
-	counterByteOrder?: MndpCounterByteOrder;
+	headerHex: string;
 	/** TLV 1: per-interface MAC, lower-case colon-separated (e.g. `e4:8d:8c:11:22:33`). */
 	macAddress?: string;
 	/** TLVs 2–4: the `unpack` mode the sender's `/ip/packing` advertises. */
@@ -251,37 +245,6 @@ function toHex(bytes: Uint8Array): string {
 		.join("");
 }
 
-/**
- * Read the header counter when its byte order is settled. The counter
- * advances once per announcement and the shortest discover-interval is 5 s,
- * so a real counter never exceeds the sender's uptime in seconds; the
- * byte-swapped reading of any counter below 2^24 whose low byte is non-zero
- * does. When both readings fit (or uptime is absent, as in a dying gasp) the
- * order is ambiguous and no counter is reported.
- */
-function readCounter(
-	view: DataView,
-	uptimeSeconds: number | undefined,
-): { counter: number; counterByteOrder?: MndpCounterByteOrder } | undefined {
-	const little = view.getUint32(0, true);
-	const big = view.getUint32(0, false);
-	if (little === big) {
-		return { counter: little };
-	}
-	if (uptimeSeconds === undefined) {
-		return undefined;
-	}
-	const littleFits = little <= uptimeSeconds;
-	const bigFits = big <= uptimeSeconds;
-	if (littleFits && !bigFits) {
-		return { counter: little, counterByteOrder: "little-endian" };
-	}
-	if (bigFits && !littleFits) {
-		return { counter: big, counterByteOrder: "big-endian" };
-	}
-	return undefined;
-}
-
 type MutableNeighbor = Omit<MndpNeighbor, "unknownTlvs" | "ipv6Addresses"> & {
 	unknownTlvs: MndpUnknownTlv[];
 	ipv6Addresses?: string[];
@@ -331,13 +294,6 @@ export function parseMndpPacket(bytes: Uint8Array): MndpNeighbor {
 	const unpack = deriveUnpack(unpackFlags);
 	if (unpack !== undefined) {
 		neighbor.unpack = unpack;
-	}
-	const counter = readCounter(view, neighbor.uptimeSeconds);
-	if (counter !== undefined) {
-		neighbor.counter = counter.counter;
-		if (counter.counterByteOrder !== undefined) {
-			neighbor.counterByteOrder = counter.counterByteOrder;
-		}
 	}
 	return neighbor;
 }
@@ -502,6 +458,22 @@ function ipv4ToBytes(ipv4: string): Uint8Array {
 	return Uint8Array.from(parts.map((part) => Number.parseInt(part, 10) & 0xff));
 }
 
+function headerToBytes(headerHex: string): Uint8Array {
+	if (!/^[0-9a-fA-F]{8}$/.test(headerHex)) {
+		throw new CentrsError({
+			code: "mndp/encode-failed",
+			summary: `Cannot encode MNDP header "${headerHex}": expected 8 hex digits.`,
+			remediation: "Pass the 4 header bytes as hex, like `08000000`.",
+			context: { headerHex },
+		});
+	}
+	return Uint8Array.from(
+		[0, 2, 4, 6].map((index) =>
+			Number.parseInt(headerHex.slice(index, index + 2), 16),
+		),
+	);
+}
+
 function utf8(value: string): Uint8Array {
 	return new TextEncoder().encode(value);
 }
@@ -525,9 +497,8 @@ const UNPACK_FLAG_TYPES: Record<MndpUnpack, readonly number[]> = {
 /**
  * Encode a {@link MndpNeighbor} (plus any extra raw TLVs) back into a wire
  * packet. Primarily a round-trip aid for tests and for crafting fixtures. The
- * header carries `counter` in `counterByteOrder` (default little-endian, the
- * x86/ARM order); TLVs follow the 7.24.5+ order except that IPv6 addresses
- * are not encoded (pass TLV 15 in `extraTlvs`).
+ * header is `headerHex` (default all zeros); TLVs follow the 7.24.5+ order
+ * except that IPv6 addresses are not encoded (pass TLV 15 in `extraTlvs`).
  */
 export function encodeMndpPacket(
 	neighbor: Partial<MndpNeighbor>,
@@ -594,11 +565,7 @@ export function encodeMndpPacket(
 	}
 	const out = new Uint8Array(MNDP_HEADER_LENGTH + bodyLength);
 	const view = new DataView(out.buffer);
-	view.setUint32(
-		0,
-		neighbor.counter ?? 0,
-		neighbor.counterByteOrder !== "big-endian",
-	);
+	out.set(headerToBytes(neighbor.headerHex ?? "00000000"), 0);
 
 	let offset = MNDP_HEADER_LENGTH;
 	for (const tlv of tlvs) {

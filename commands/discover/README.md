@@ -168,8 +168,8 @@ Linux/CI). Grounding: quickchr `docs/mndp.md`, `examples/mndp/`,
 MNDP announcement, decodes it with centrs's codec, cross-checks
 `identity`/`platform`/`board`/`version`/`mac` against REST, checks the #668
 wire map (`ipv6Enabled` against `/ipv6/settings`, `running` on 7.20+,
-`ttlSeconds` against `discover-interval` on 7.24+, a little-endian header
-counter on x86; green on 7.25.1 and long-term 7.24.6), and `--save`s a
+`ttlSeconds` against `discover-interval` on 7.24+, the raw `headerHex`;
+green on 7.25.1 and long-term 7.24.6), and `--save`s a
 `macTarget`/`group=discovered`/`source=mndp` record (examples 1, 2, 4). It runs
 under `bun run test:integration` (gated by `CENTRS_RUN_FAST_INTEGRATION`). The
 network-independent examples (3 port-in-use, 5 custom group, 6 de-dupe, 7
