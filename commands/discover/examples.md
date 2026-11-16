@@ -33,7 +33,8 @@ Listens for the default `15s`, broadcasting an immediate refresh then every 5s. 
 `ok: true`, `meta.via: "mndp"`, `data` is `{ count, neighbors }` with
 `neighbors` sorted by MAC. Each neighbor carries `mac`, optional `identity`,
 `version`, `platform`, `board`, `uptimeSeconds`, `softwareId`,
-`interfaceName`, `ipv4`, `ipv6Addresses` (every TLV 15, global first),
+`interfaceName`, `ipv4` (with `ipv4FromSource: true` when it came from the
+datagram's IP source because TLV 17 was absent), `ipv6Addresses` (every TLV 15, global first),
 `ipv6Enabled`, `unpack`, `aggregatedSize`, `running` (bit names such as
 `capsman`, `cmr`), `ttlSeconds`, the raw `headerHex` (the announcement
 counter in the sender's CPU byte order, not decoded), and

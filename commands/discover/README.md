@@ -64,6 +64,12 @@ running services, TTL). The wire map is grounded in the tikoci/m2ir MNDP labs
    multicast with the same payload. The IPv6 copy was missing for 0 to 2
    announcements after some boots and for every one while IPv6 was disabled,
    so the listener binds IPv4 only and sees one copy of each announcement.
+   An announcement without TLV 17 (sent before the interface had an IPv4
+   address, often right after boot) gets `ipv4` from the datagram's IP source,
+   as RouterOS fills `/ip/neighbor` `address4` (tikoci/m2ir#5). The record then
+   carries `ipv4FromSource: true`, and `--save` uses that address. Sources in
+   `0.0.0.0/8`, loopback (a local relay, such as the CHR test bridge) and
+   `224.0.0.0` and above are not used.
 5. Returns a canonical envelope whose `data.neighbors` is sorted by MAC.
 
 The codec is pure and the socket layer is thin and injectable, so both are

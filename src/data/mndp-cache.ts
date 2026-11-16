@@ -32,6 +32,17 @@ export interface MndpCacheEntry {
 	lastSeenAt: number;
 	/** Lifetime after `lastSeenAt`: the advertised TTL, else the cache default. */
 	ttlMs: number;
+	/**
+	 * `true` when `neighbor.ipv4` came from the datagram's IP source because
+	 * the announcement carried no TLV 17 (see `discover`'s listener).
+	 */
+	ipv4FromSource?: true;
+}
+
+/** Listener-side facts about one observation, beyond the decoded packet. */
+export interface MndpObservation {
+	/** `neighbor.ipv4` was filled from the IP source, not TLV 17. */
+	ipv4FromSource?: boolean;
 }
 
 export interface MndpCacheOptions {
@@ -71,6 +82,7 @@ export class MndpCache {
 	observe(
 		neighbor: MndpNeighbor,
 		at: number = this.clock(),
+		observation: MndpObservation = {},
 	): MndpCacheEntry | undefined {
 		const key = mndpNeighborKey(neighbor);
 		if (neighbor.ttlSeconds === 0) {
@@ -90,6 +102,9 @@ export class MndpCache {
 					? this.ttlMs
 					: neighbor.ttlSeconds * 1000,
 		};
+		if (observation.ipv4FromSource === true) {
+			entry.ipv4FromSource = true;
+		}
 		this.store.set(key, entry);
 		return entry;
 	}

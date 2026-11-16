@@ -23,6 +23,7 @@ import {
 	type ListenMndpResult,
 	listenMndp,
 	saveDiscoveredNeighbors,
+	withSourceIpv4,
 } from "../../src/discover.ts";
 import { parseCommentKv } from "../../src/resolver/comment-kv.ts";
 import { udpLoopbackSupported } from "./udp-loopback.ts";
@@ -269,6 +270,43 @@ describe.skipIf(!MNDP_LOOPBACK)("listenMndp (loopback)", () => {
 	});
 });
 
+describe("withSourceIpv4", () => {
+	const bare = neighbor("00:00:00:00:00:01", { identity: "r1" });
+
+	test("fills a missing TLV 17 from a unicast IPv4 source", () => {
+		const result = withSourceIpv4(bare, "192.0.2.5");
+		expect(result.ipv4FromSource).toBe(true);
+		expect(result.neighbor.ipv4).toBe("192.0.2.5");
+		expect(bare.ipv4).toBeUndefined();
+		expect(withSourceIpv4(bare, "::ffff:10.0.0.1").neighbor.ipv4).toBe(
+			"10.0.0.1",
+		);
+	});
+
+	test("keeps TLV 17 when the announcement has one", () => {
+		const withTlv = neighbor("00:00:00:00:00:01", { ipv4: "192.0.2.9" });
+		const result = withSourceIpv4(withTlv, "192.0.2.5");
+		expect(result.ipv4FromSource).toBe(false);
+		expect(result.neighbor.ipv4).toBe("192.0.2.9");
+	});
+
+	test("ignores sources that are not a router's unicast address", () => {
+		for (const source of [
+			"127.0.0.1",
+			"0.0.0.0",
+			"255.255.255.255",
+			"224.0.0.1",
+			"fe80::1",
+			"not-an-ip",
+			undefined,
+		]) {
+			const result = withSourceIpv4(bare, source);
+			expect(result.ipv4FromSource).toBe(false);
+			expect(result.neighbor.ipv4).toBeUndefined();
+		}
+	});
+});
+
 describe("discover", () => {
 	test("returns a sorted neighbor set without saving", async () => {
 		const envelope = await discover({
@@ -321,6 +359,44 @@ describe("discover", () => {
 		expect(record).not.toHaveProperty("sequence");
 		expect(record).not.toHaveProperty("ipv6");
 		expect(record).not.toHaveProperty("counter");
+	});
+
+	test("marks an ipv4 that came from the IP source", async () => {
+		const sourced = withSourceIpv4(
+			neighbor("00:00:00:00:00:01", { identity: "booting" }),
+			"192.0.2.7",
+		);
+		const envelope = await discover({
+			listen: async () => {
+				const cache = new MndpCache({ now: () => 1_000 });
+				cache.observe(sourced.neighbor, 1_000, {
+					ipv4FromSource: sourced.ipv4FromSource,
+				});
+				cache.observe(
+					neighbor("00:00:00:00:00:02", { ipv4: "192.0.2.8" }),
+					1_000,
+				);
+				return {
+					cache,
+					port: 5678,
+					packetsReceived: 2,
+					packetsDecoded: 2,
+					packetsRejected: 0,
+					warnings: [],
+				};
+			},
+		});
+		expect(envelope.ok).toBe(true);
+		if (!envelope.ok) {
+			return;
+		}
+		const [fromSource, fromTlv] = envelope.data.neighbors;
+		expect(fromSource).toMatchObject({
+			ipv4: "192.0.2.7",
+			ipv4FromSource: true,
+		});
+		expect(fromTlv?.ipv4).toBe("192.0.2.8");
+		expect(fromTlv).not.toHaveProperty("ipv4FromSource");
 	});
 
 	test("tips to use --save when neighbors are found but not saved", async () => {
