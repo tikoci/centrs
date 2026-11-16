@@ -388,6 +388,9 @@ function applyTlv(
 	const text = (): string => new TextDecoder().decode(value);
 	switch (type) {
 		case mndpTlvType.macAddress:
+			if (value.length !== 6) {
+				return false;
+			}
 			neighbor.macAddress = formatMac(value);
 			return true;
 		case mndpTlvType.unpackSimple:
@@ -402,11 +405,10 @@ function applyTlv(
 			neighbor.identity = text();
 			return true;
 		case mndpTlvType.request:
-			if (value.length !== 0) {
-				return false;
-			}
+			// Any TLV 6 marks a request, so `discover` never learns a neighbor
+			// from one; an unexpected value is also kept in `unknownTlvs`.
 			neighbor.request = true;
-			return true;
+			return value.length === 0;
 		case mndpTlvType.version:
 			neighbor.version = text();
 			return true;

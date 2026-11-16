@@ -294,7 +294,8 @@ describe("parseMndpPacket", () => {
 		);
 		expect(neighbor.ttlSeconds).toBeUndefined();
 		expect(neighbor.unpack).toBeUndefined();
-		expect(neighbor.request).toBeUndefined();
+		// Any TLV 6 still marks a request; its unexpected value is kept too.
+		expect(neighbor.request).toBe(true);
 		expect(neighbor.unknownTlvs.map((item) => item.type)).toEqual([19, 2, 6]);
 	});
 
@@ -312,6 +313,27 @@ describe("parseMndpPacket", () => {
 		expect(Array.from(neighbor.unknownTlvs[0]?.value ?? [])).toEqual([
 			0xde, 0xad, 0xbe, 0xef,
 		]);
+	});
+
+	test("keeps a MAC TLV that is not 6 bytes in unknownTlvs", () => {
+		const neighbor = parseMndpPacket(
+			concat(header(1), tlv(1, Uint8Array.from([2, 0, 0, 0, 1]))),
+		);
+		expect(neighbor.macAddress).toBeUndefined();
+		expect(neighbor.unknownTlvs.map((t) => t.type)).toEqual([1]);
+	});
+
+	test("marks any TLV 6 as a request and keeps an unexpected value", () => {
+		const neighbor = parseMndpPacket(
+			concat(
+				header(0),
+				tlv(6, Uint8Array.from([1])),
+				tlv(1, Uint8Array.from([2, 0, 0, 0, 0, 1])),
+			),
+		);
+		expect(neighbor.request).toBe(true);
+		expect(neighbor.macAddress).toBe("02:00:00:00:00:01");
+		expect(neighbor.unknownTlvs.map((t) => t.type)).toEqual([6]);
 	});
 
 	test("throws mndp/malformed on a too-short header", () => {

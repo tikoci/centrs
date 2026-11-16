@@ -58,6 +58,35 @@ const REFRESH_REPLY_WINDOW_MS = 3_000;
 const QUIET_SPELL_MS = 3_000;
 /** Fixed periodic interval before `discover-interval` existed (pre-7.16). */
 const LEGACY_ANNOUNCE_INTERVAL_MS = 60_000;
+/** Quiet gap that ends one announcement event (its copies arrive together). */
+const EVENT_DRAIN_QUIET_MS = 500;
+
+/**
+ * Wait until `forwarded()` stops changing for `quietMs`, or `deadlineMs`
+ * passes. Returns whether the quiet spell completed.
+ */
+async function waitForQuiet(
+	forwarded: () => number,
+	quietMs: number,
+	deadlineMs: number,
+	pollMs: number,
+): Promise<boolean> {
+	const deadline = Date.now() + deadlineMs;
+	let seen = forwarded();
+	let quietSince = Date.now();
+	while (Date.now() - quietSince < quietMs) {
+		if (Date.now() >= deadline) {
+			return false;
+		}
+		await Bun.sleep(pollMs);
+		const now = forwarded();
+		if (now !== seen) {
+			seen = now;
+			quietSince = Date.now();
+		}
+	}
+	return true;
+}
 
 /** Seconds in a RouterOS duration such as `30s`, `10m` or `1h30m`. */
 function routerOsDurationSeconds(text: string): number | undefined {
@@ -148,33 +177,43 @@ describeFast("discover over MNDP against CHR (socket-connect L2)", () => {
 				onBound: (port) => bridge.setUdpTarget(port, "127.0.0.1"),
 			});
 			let refreshReplyMs: number | undefined;
+			// Set when the watcher could not set up a clean refresh window; the
+			// refresh is then not injected, so a stray announcement can't pass
+			// for its reply.
+			let setupFailure: string | undefined;
+			const forwarded = (): number => bridge.stats().forwarded;
 			const watcher = (async () => {
-				const settleDeadline = Date.now() + 20_000;
-				let seen = bridge.stats().forwarded;
-				let quietSince = Date.now();
-				while (
-					Date.now() - quietSince < QUIET_SPELL_MS &&
-					Date.now() < settleDeadline
-				) {
-					await Bun.sleep(250);
-					const now = bridge.stats().forwarded;
-					if (now !== seen) {
-						seen = now;
-						quietSince = Date.now();
-					}
+				if (!(await waitForQuiet(forwarded, QUIET_SPELL_MS, 20_000, 250))) {
+					setupFailure = `the listener never went ${QUIET_SPELL_MS} ms without a datagram within 20 s`;
+					controller.abort();
+					return;
 				}
 				if (!stretchInterval) {
 					// A quiet spell says nothing about where the next periodic
 					// announcement falls. Wait for one, then inject at once: the
 					// following periodic one is ~60 s away, far outside the window.
-					const periodic = bridge.stats().forwarded;
+					const periodic = forwarded();
 					const periodicDeadline =
 						Date.now() + LEGACY_ANNOUNCE_INTERVAL_MS + 10_000;
-					while (
-						bridge.stats().forwarded === periodic &&
-						Date.now() < periodicDeadline
-					) {
+					while (forwarded() === periodic && Date.now() < periodicDeadline) {
 						await Bun.sleep(50);
+					}
+					if (forwarded() === periodic) {
+						setupFailure = `no periodic announcement within ${
+							LEGACY_ANNOUNCE_INTERVAL_MS + 10_000
+						} ms on a pre-${MNDP_DISCOVER_INTERVAL_SINCE} sender`;
+						controller.abort();
+						return;
+					}
+					// Drain the rest of that announcement event (any further
+					// copies) before the snapshot, so none counts as the reply.
+					if (
+						!(await waitForQuiet(forwarded, EVENT_DRAIN_QUIET_MS, 5_000, 50))
+					) {
+						setupFailure =
+							"the periodic announcement event did not drain within 5 s";
+						controller.abort();
+						return;
 					}
 				}
 				const before = bridge.stats().forwarded;
@@ -194,6 +233,7 @@ describeFast("discover over MNDP against CHR (socket-connect L2)", () => {
 			await watcher;
 
 			expect(bridge.stats().connected).toBe(true);
+			expect(setupFailure, setupFailure).toBeUndefined();
 			expect(
 				refreshReplyMs,
 				`no announcement within ${REFRESH_REPLY_WINDOW_MS} ms of the injected refresh`,

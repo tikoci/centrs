@@ -267,8 +267,10 @@ export const CMR_SINCE = "7.26beta1";
  * MNDP TLVs that appear by version (tikoci/m2ir#4, centrs#668). TLV 18
  * `running` is absent on 7.19.4 and present from 7.20 (changelog 7.20: "report
  * router as CAPsMAN on MNDP under running parameter"). TLV 19 TTL is absent on
- * 7.24beta1 and older and present on 7.24.5+ (changelog 7.24 adds the dying
- * gasp). Both are bracketed boundaries: 7.24beta2–7.24.4 were not captured.
+ * 7.24beta1 and older and captured on 7.24.5+. The gate is the 7.24 release,
+ * whose changelog adds the dying gasp ("sends packet with TTL=0"), so TLV 19
+ * ships in 7.24.0; `routerOsAtLeast` orders 7.24 betas and release
+ * candidates below it. 7.24.0–7.24.4 are changelog-grounded, not captured.
  */
 export const MNDP_RUNNING_TLV_SINCE = "7.20";
 /**
