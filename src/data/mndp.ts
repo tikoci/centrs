@@ -1,35 +1,103 @@
 /**
  * Pure MNDP (MikroTik Neighbor Discovery Protocol) wire codec.
  *
- * MNDP is the UDP/5678 broadcast protocol RouterOS (and WinBox) use to discover
- * neighbors on a layer-2 segment. A response packet is a 4-byte header
- * (`type` + `sequence`) followed by zero or more big-endian TLV records.
- * This module is intentionally pure: {@link parseMndpPacket} turns bytes into a
- * typed {@link MndpNeighbor} and {@link encodeMndpPacket} does the reverse, so
- * the codec is unit-tested without any socket. The socket/IO layer lives in
- * `src/discover.ts`.
+ * MNDP is the UDP/5678 protocol RouterOS (and WinBox) use to discover
+ * neighbors on a layer-2 segment. This module is intentionally pure:
+ * {@link parseMndpPacket} turns bytes into a typed {@link MndpNeighbor} and
+ * {@link encodeMndpPacket} does the reverse, so the codec is unit-tested
+ * without any socket. The socket/IO layer lives in `src/discover.ts`.
  *
- * Wire facts (grounded on live RouterOS 7.23/7.24 packet captures — see the
- * `parses a real captured RouterOS announcement (big-endian TLVs)` fixture
- * test — and aligned with the `routeros-mndp` skill, which documents the same
- * big-endian TLV byte order and the type→field mapping for types 10/11/12. An
- * earlier revision of the skill table stated little-endian TLVs and an
- * off-by-one type mapping; the constitution requires grounding on live-router
- * evidence, and the skill has since been corrected to match this codec):
- * - Header: 4 bytes (a per-device sequence/type word then a `sequence` field).
- *   TLV records start at offset 4.
- * - Each TLV: `type` (uint16 **big-endian**), `length` (uint16 **big-endian**),
- *   then `length` value bytes whose interpretation depends on the type. (A
- *   little-endian reading turns `00 0a 00 04` into type 2560/length 1024 and
- *   overruns every buffer — which is why every real packet was being rejected.)
- * - MAC (type 1) and IPv4 (type 17) are big-endian byte sequences; uptime
- *   (type 10) is a little-endian uint32; string fields are UTF-8.
- * - Type mapping confirmed against the `bigdude` test router's REST facts:
- *   type 10 = uptime, type 11 = software-id, type 12 = board name.
- * - Board may arrive as type 12 or, on some firmware, type 13; type 12 wins.
- * - Unknown TLV types are preserved verbatim in {@link MndpNeighbor.unknownTlvs}
- *   and never cause a throw. Only a structurally malformed packet (too-short
- *   header, or a TLV whose declared length runs past the buffer) throws.
+ * ## Grounding
+ *
+ * The wire map below comes from the tikoci/m2ir MNDP grounding lab
+ * (`work/2026-11-mndp-grounding/FINDINGS.md`, tikoci/m2ir#4): CHR labs on
+ * 6.49.23, 7.24.6, 7.25 and 7.26beta5 changing one setting per step, plus a
+ * field capture of 6.49–7.26beta5 on ARM, ARM64 and MIPSBE. The follow-up
+ * "hub lab" (tikoci/m2ir#5) put 6.49.23, 7.17.2, 7.18.2, 7.20.8 and 7.26beta5
+ * on one segment to ground requests, TLV 14 by version, and the TLV 18
+ * bitmask. The unit tests lift the lab's captured payloads verbatim as
+ * fixtures.
+ *
+ * ## Packet layout
+ *
+ * - **Header** (bytes 0–3): one `u32` announcement counter in the
+ *   **sender's CPU byte order** — little-endian on x86, ARM and ARM64,
+ *   big-endian on MIPSBE. It counts every announcement on that interface
+ *   (periodic or triggered) and restarts at boot. The packet does not say
+ *   which byte order it used, and triggered announcements mean no rate bound
+ *   tells the two readings apart, so the codec keeps the raw bytes
+ *   ({@link MndpNeighbor.headerHex}) and does not decode a counter. A caller
+ *   that knows the sender's CPU can read it; the lab confirmed the order by
+ *   checking that uptime ÷ counter ≈ discover-interval. A header of
+ *   `00000000` also marks a request (see Requests below).
+ * - **TLVs** follow at offset 4: `type` (`u16` big-endian), `length` (`u16`
+ *   big-endian), then `length` value bytes. TLV order changes between
+ *   RouterOS versions (7.24 moves 17/15 after 18/19 and puts 2–4/9 right
+ *   after 1), so the decoder never depends on order.
+ *
+ * ## TLV types ({@link mndpTlvType})
+ *
+ * | Type | Field | Value |
+ * | ---- | ----- | ----- |
+ * | 1 | `macAddress` | 6 bytes |
+ * | 2, 3, 4 | `unpack` | Empty flags: 2 = `simple`, 2+3 = `uncompress-headers`, 2+3+4 = `uncompress-all`. Sent only when the sender's `/ip/packing` `unpacking` is not `none` |
+ * | 5 | `identity` | UTF-8 |
+ * | 6 | `request` | Empty flag: the packet is a refresh request (see Requests). Never in an announcement |
+ * | 7 | `version` | Text; format varies by version (see {@link MndpNeighbor.version}) |
+ * | 8 | `platform` | Text: `MikroTik`, or the branding package's name |
+ * | 9 | `aggregatedSize` | `/ip/packing` `aggregated-size`, `u32` little-endian (seen on x86; unverified on big-endian CPUs). Sent with TLV 2 |
+ * | 10 | `uptimeSeconds` | `u32` little-endian, also on MIPSBE |
+ * | 11 | `softwareId` | Text |
+ * | 12 | `board` | Text, the short board id (`CHR`, `RB1100Dx4`) |
+ * | 14 | `ipv6Enabled` | 1 byte, `01`/`00`; its meaning depends on the sender's version (see {@link MndpNeighbor.ipv6Enabled}) |
+ * | 15 | `ipv6Addresses` | 16 bytes; **repeats** once per IPv6 address on the interface (global first, then link-local) |
+ * | 16 | `interfaceName` | Text; `bridge/port` for a bridge port |
+ * | 17 | `ipv4` | 4 bytes, network order |
+ * | 18 | `running` | `u8` bitmask (7.20+): `01` CAPsMAN, `02` CMR controller, `03` both, `00` neither |
+ * | 19 | `ttlSeconds` | `u8` (7.24+): `min(discover-interval × 4 + 1, 255)`; `00` is a dying gasp |
+ *
+ * Type 6 appears only in requests; 13 and anything above 19 have appeared in
+ * no capture. Every TLV
+ * type the codec does not interpret — and any known type whose value has an
+ * unexpected length — is preserved verbatim in
+ * {@link MndpNeighbor.unknownTlvs} and never causes a throw. Only a
+ * structurally malformed packet throws: a too-short header, a TLV whose
+ * declared length runs past the buffer, or trailing bytes that are not a
+ * whole TLV. RouterOS drops that last kind whole too (see Requests).
+ *
+ * ## Transport and lifecycle
+ *
+ * Every announcement goes out as an IPv4 broadcast. Most also go out as an
+ * IPv6 `ff02::1` multicast with the same payload and counter, so a receiver
+ * that listens on both should treat (MAC, header) as one announcement. The
+ * IPv6 copy is not guaranteed: on 7.17–7.26beta5 it was missing for 0 to 2
+ * announcements after boot, for every announcement while `disable-ipv6=yes`,
+ * and sometimes for the first one after IPv6 was re-enabled; 6.49 sends it
+ * only with the `ipv6` package. On 7.x, an announcement with TLV 15 always
+ * had the IPv6 copy, but not the reverse (tikoci/m2ir#7). A **dying
+ * gasp** (7.24+, `dying-gasp=yes`) is a short announcement sent before a
+ * graceful reboot or shutdown: header, then TLVs 1, 19 = `00`, 17, 15.
+ *
+ * ## Requests
+ *
+ * A packet is a refresh request when its header is `00000000` **or** it
+ * carries TLV 6. RouterOS drops a datagram whole when its TLVs do not end
+ * exactly at the end of the datagram, so a trailing byte (the old 9-zero-byte
+ * form) gets no reply. {@link mndpRefreshPacket} sends header `00000000` plus
+ * an empty TLV 6: every tested version (6.49.23, 7.17.2, 7.18.2, 7.20.8,
+ * 7.26beta5) answered it, and it did not add the requester to the tested 7.x
+ * routers' neighbor tables (6.49.23's was not read; a bare `00000000` does add
+ * it on 7.x, with an empty identity). The reply is an ordinary announcement,
+ * broadcast from port 5678 to `255.255.255.255:5678`, and usually also to
+ * `ff02::1:5678`, even when the request was unicast or sent over IPv6, so a
+ * requester must listen on 5678. Observed delays were 21 ms–1.96 s on 7.x and
+ * 11 ms–1.87 s on 6.49.23; no upper bound was measured. On 7.x a burst of
+ * requests gets one reply. The `discover` listener ignores any packet with
+ * TLV 6, even one that carries a MAC, as RouterOS does.
+ * The first announcement after boot has header `00000000`, so it doubles as
+ * a request; it carries a MAC and decodes as a neighbor. It goes out 2–18 s
+ * into uptime, so TLVs 15 and 17 are often missing, and it was IPv4 only in
+ * 12 of the 13 boots captured.
  */
 
 import { CentrsError } from "../errors.ts";
@@ -39,21 +107,46 @@ export const MNDP_PORT = 5678;
 export const MNDP_BROADCAST_ADDRESS = "255.255.255.255";
 export const MNDP_IPV6_MULTICAST_ADDRESS = "ff02::1";
 
-/** TLV type identifiers defined by MNDP. */
+/** TLV type identifiers (see the module doc's TLV table for each value). */
 export const mndpTlvType = {
 	macAddress: 1,
+	unpackSimple: 2,
+	unpackHeaders: 3,
+	unpackAll: 4,
 	identity: 5,
+	request: 6,
 	version: 7,
 	platform: 8,
+	aggregatedSize: 9,
 	uptime: 10,
 	softwareId: 11,
 	board: 12,
-	boardAlt: 13,
-	unpack: 14,
-	ipv6: 15,
+	ipv6Enabled: 14,
+	ipv6Address: 15,
 	interfaceName: 16,
 	ipv4: 17,
+	running: 18,
+	ttl: 19,
 } as const;
+
+/**
+ * Bits of the TLV 18 `running` bitmask (7.20+). RouterOS prints them as
+ * `running=capsman`, `running=cmr` and `running=capsman,cmr` (`03`), and
+ * omits the field for `00`.
+ */
+export const mndpRunningBit = {
+	/** `/interface/wifi/capsman` is enabled. */
+	capsman: 0x01,
+	/** The router is a CMR controller (`/cmr`). */
+	cmrController: 0x02,
+} as const;
+
+/**
+ * The `/ip/neighbor` `unpack` value a receiver derives from the empty flag
+ * TLVs 2, 3 and 4. Absent when none of them is sent (`unpack=none`, or a
+ * sender that predates packing TLVs).
+ */
+export type MndpUnpack = "simple" | "uncompress-headers" | "uncompress-all";
 
 /** A TLV record whose `type` the codec does not interpret; preserved verbatim. */
 export interface MndpUnknownTlv {
@@ -63,35 +156,75 @@ export interface MndpUnknownTlv {
 
 /**
  * A decoded MNDP announcement. Every advertised field is optional because a
- * device only sends what it has; `sequence` and `unknownTlvs` are always set so
- * consumers never branch on their existence.
+ * device only sends what it has; `headerHex` and `unknownTlvs` are always set
+ * so consumers never branch on their existence.
  */
 export interface MndpNeighbor {
-	/** Per-interface MAC, lower-case colon-separated (e.g. `e4:8d:8c:11:22:33`). */
+	/**
+	 * Raw header bytes 0–3 as lower-case hex (e.g. `08000000`): the
+	 * announcement counter in the sender's CPU byte order. The IPv4 and IPv6
+	 * copies of one announcement carry the same header.
+	 */
+	headerHex: string;
+	/** TLV 1: per-interface MAC, lower-case colon-separated (e.g. `e4:8d:8c:11:22:33`). */
 	macAddress?: string;
-	/** Hostname; shared across all interfaces of one device. */
+	/** TLVs 2–4: the `unpack` mode the sender's `/ip/packing` advertises. */
+	unpack?: MndpUnpack;
+	/** TLV 5: identity; shared across all interfaces of one device. */
 	identity?: string;
-	/** RouterOS version string, e.g. `7.18 (stable)`. */
+	/**
+	 * TLV 6: `true` when the packet is a refresh request. The `discover`
+	 * listener never caches one, even when it carries a MAC.
+	 */
+	request?: boolean;
+	/**
+	 * TLV 7: RouterOS version text. The format changes by version: 6.x
+	 * `6.49.21 (long-term)`, 7.6–7.13 `7.12.1 (stable) Nov/17/2023 11:38:45`,
+	 * 7.14–7.24 `7.24.6 (long-term) 2026-10-30 08:24:29`, and 7.25+
+	 * `7.25.1 2026-11-02 12:39:53` (no channel).
+	 */
 	version?: string;
-	/** Usually `MikroTik`. */
+	/** TLV 8: `MikroTik`, or the branding package's name. */
 	platform?: string;
-	/** Board model, e.g. `RB4011iGS+5HacQ2HnD` or `CHR`. */
-	board?: string;
-	/** Seconds since boot. */
+	/** TLV 9: `/ip/packing` `aggregated-size` (little-endian `u32`). */
+	aggregatedSize?: number;
+	/** TLV 10: seconds since boot. */
 	uptimeSeconds?: number;
-	/** License identifier. */
+	/** TLV 11: license software id. */
 	softwareId?: string;
-	/** Firmware compression flag. */
-	unpack?: number;
-	/** Link-local or global IPv6 of the sending interface. */
-	ipv6?: string;
-	/** Sending interface name on the router, e.g. `ether1`. */
+	/** TLV 12: short board id, e.g. `RB4011iGS+5HacQ2HnD` or `CHR`. */
+	board?: string;
+	/**
+	 * TLV 14: `true` = IPv6 enabled. What that tracks depends on the sender's
+	 * version: before 7.18 it means IPv6 is present (6.x: the `ipv6` package
+	 * is enabled; 7.17 always sends `01`), not the setting. On 7.18–7.20 it
+	 * follows `/ipv6/settings disable-ipv6` asymmetrically: disabling IPv6
+	 * leaves `true` until the sender reboots, while re-enabling it sets `true`
+	 * at once, so `true` there does not prove IPv6 is enabled. 7.26beta5
+	 * follows the setting at once in both directions. The live-update boundary is
+	 * probably 7.21 ("fixed MNDP IPv6 status reporting"); 7.21–7.25 were not
+	 * tested.
+	 */
+	ipv6Enabled?: boolean;
+	/**
+	 * TLV 15, repeated: the sending interface's IPv6 addresses in arrival
+	 * order (global first, then link-local).
+	 */
+	ipv6Addresses?: readonly string[];
+	/** TLV 16: sending interface, e.g. `ether1`, or `bridge/port` for a bridge port. */
 	interfaceName?: string;
-	/** IPv4 of the sending interface, dotted-quad. */
+	/** TLV 17: IPv4 of the sending interface, dotted-quad. */
 	ipv4?: string;
-	/** Per-device monotonically increasing sequence number from the header. */
-	sequence: number;
-	/** TLV records with an unrecognized type, preserved in arrival order. */
+	/** TLV 18 (7.20+): services bitmask; see {@link mndpRunningBit}. */
+	running?: number;
+	/**
+	 * TLV 19 (7.24+): seconds a receiver should keep this neighbor,
+	 * `min(discover-interval × 4 + 1, 255)`. `0` is a dying gasp: the sender is
+	 * rebooting or shutting down. It is an approximate lifetime: RouterOS
+	 * removed a silent neighbor at about the TTL or up to ~20 s after it.
+	 */
+	ttlSeconds?: number;
+	/** TLV records the codec does not interpret, preserved in arrival order. */
 	unknownTlvs: readonly MndpUnknownTlv[];
 }
 
@@ -159,11 +292,24 @@ function collapseIpv6(groups: readonly string[]): string {
 	return `${head}::${tail}`;
 }
 
+function toHex(bytes: Uint8Array): string {
+	return Array.from(bytes)
+		.map((b) => b.toString(16).padStart(2, "0"))
+		.join("");
+}
+
+type MutableNeighbor = Omit<MndpNeighbor, "unknownTlvs" | "ipv6Addresses"> & {
+	unknownTlvs: MndpUnknownTlv[];
+	ipv6Addresses?: string[];
+};
+
 /**
  * Decode a raw MNDP datagram into a {@link MndpNeighbor}. Throws a
  * `mndp/malformed` {@link CentrsError} on a structurally invalid packet
- * (too-short header or a TLV whose length overruns the buffer). Unknown TLV
- * types are preserved, not rejected.
+ * (too-short header, a TLV whose length overruns the buffer, or 1–3 trailing
+ * bytes that are not a whole TLV, which RouterOS also drops). Unknown TLV
+ * types, and known types with an unexpected value length, are preserved in
+ * `unknownTlvs`, not rejected.
  */
 export function parseMndpPacket(bytes: Uint8Array): MndpNeighbor {
 	if (bytes.length < MNDP_HEADER_LENGTH) {
@@ -174,14 +320,11 @@ export function parseMndpPacket(bytes: Uint8Array): MndpNeighbor {
 	}
 
 	const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-	const sequence = view.getUint16(2, false);
-	const neighbor: {
-		sequence: number;
-		unknownTlvs: MndpUnknownTlv[];
-	} & Partial<MndpNeighbor> = {
-		sequence,
+	const neighbor: MutableNeighbor = {
+		headerHex: toHex(bytes.subarray(0, MNDP_HEADER_LENGTH)),
 		unknownTlvs: [],
 	};
+	const unpackFlags = new Set<number>();
 
 	let offset = MNDP_HEADER_LENGTH;
 	while (offset + TLV_HEADER_LENGTH <= bytes.length) {
@@ -196,77 +339,159 @@ export function parseMndpPacket(bytes: Uint8Array): MndpNeighbor {
 			);
 		}
 		const value = bytes.subarray(valueStart, valueEnd);
-		applyTlv(neighbor, type, value, view, valueStart);
+		if (!applyTlv(neighbor, unpackFlags, type, value, view, valueStart)) {
+			neighbor.unknownTlvs.push({ type, value: value.slice() });
+		}
 		offset = valueEnd;
 	}
+	if (offset !== bytes.length) {
+		malformed(
+			`MNDP packet has ${bytes.length - offset} trailing byte(s) after its last TLV; RouterOS drops such a datagram.`,
+			{ trailingBytes: bytes.length - offset, byteLength: bytes.length },
+		);
+	}
 
-	return neighbor as MndpNeighbor;
+	const unpack = deriveUnpack(unpackFlags);
+	if (unpack !== undefined) {
+		neighbor.unpack = unpack;
+	}
+	return neighbor;
 }
 
+/** Map the TLV 2/3/4 flags to `/ip/neighbor` `unpack`; the highest flag wins. */
+function deriveUnpack(flags: ReadonlySet<number>): MndpUnpack | undefined {
+	if (flags.has(mndpTlvType.unpackAll)) {
+		return "uncompress-all";
+	}
+	if (flags.has(mndpTlvType.unpackHeaders)) {
+		return "uncompress-headers";
+	}
+	if (flags.has(mndpTlvType.unpackSimple)) {
+		return "simple";
+	}
+	return undefined;
+}
+
+/**
+ * Apply one TLV to the neighbor. Returns `false` when the codec does not
+ * interpret it (unknown type, or a known type with an unexpected length) so
+ * the caller preserves it in `unknownTlvs`.
+ */
 function applyTlv(
-	neighbor: { unknownTlvs: MndpUnknownTlv[] } & Partial<MndpNeighbor>,
+	neighbor: MutableNeighbor,
+	unpackFlags: Set<number>,
 	type: number,
 	value: Uint8Array,
 	view: DataView,
 	valueStart: number,
-): void {
+): boolean {
 	const text = (): string => new TextDecoder().decode(value);
 	switch (type) {
 		case mndpTlvType.macAddress:
+			if (value.length !== 6) {
+				return false;
+			}
 			neighbor.macAddress = formatMac(value);
-			break;
+			return true;
+		case mndpTlvType.unpackSimple:
+		case mndpTlvType.unpackHeaders:
+		case mndpTlvType.unpackAll:
+			if (value.length !== 0) {
+				return false;
+			}
+			unpackFlags.add(type);
+			return true;
 		case mndpTlvType.identity:
 			neighbor.identity = text();
-			break;
+			return true;
+		case mndpTlvType.request:
+			// Any TLV 6 marks a request, so `discover` never learns a neighbor
+			// from one; an unexpected value is also kept in `unknownTlvs`.
+			neighbor.request = true;
+			return value.length === 0;
 		case mndpTlvType.version:
 			neighbor.version = text();
-			break;
+			return true;
 		case mndpTlvType.platform:
 			neighbor.platform = text();
-			break;
-		case mndpTlvType.board:
-			neighbor.board = text();
-			break;
-		case mndpTlvType.boardAlt:
-			// Some firmware uses type 13; prefer type 12 when both are present.
-			if (neighbor.board === undefined) {
-				neighbor.board = text();
+			return true;
+		case mndpTlvType.aggregatedSize:
+			if (value.length !== 4) {
+				return false;
 			}
-			break;
+			neighbor.aggregatedSize = view.getUint32(valueStart, true);
+			return true;
 		case mndpTlvType.uptime:
-			if (value.length >= 4) {
-				neighbor.uptimeSeconds = view.getUint32(valueStart, true);
+			if (value.length !== 4) {
+				return false;
 			}
-			break;
+			neighbor.uptimeSeconds = view.getUint32(valueStart, true);
+			return true;
 		case mndpTlvType.softwareId:
 			neighbor.softwareId = text();
-			break;
-		case mndpTlvType.unpack:
-			if (value.length >= 1) {
-				neighbor.unpack = value[0];
+			return true;
+		case mndpTlvType.board:
+			neighbor.board = text();
+			return true;
+		case mndpTlvType.ipv6Enabled:
+			if (value.length !== 1) {
+				return false;
 			}
-			break;
-		case mndpTlvType.ipv6:
-			if (value.length === 16) {
-				neighbor.ipv6 = formatIpv6(value);
-			} else {
-				neighbor.unknownTlvs.push({ type, value: value.slice() });
+			neighbor.ipv6Enabled = value[0] !== 0;
+			return true;
+		case mndpTlvType.ipv6Address:
+			if (value.length !== 16) {
+				return false;
 			}
-			break;
+			neighbor.ipv6Addresses ??= [];
+			neighbor.ipv6Addresses.push(formatIpv6(value));
+			return true;
 		case mndpTlvType.interfaceName:
 			neighbor.interfaceName = text();
-			break;
+			return true;
 		case mndpTlvType.ipv4:
-			if (value.length === 4) {
-				neighbor.ipv4 = formatIpv4(value);
-			} else {
-				neighbor.unknownTlvs.push({ type, value: value.slice() });
+			if (value.length !== 4) {
+				return false;
 			}
-			break;
+			neighbor.ipv4 = formatIpv4(value);
+			return true;
+		case mndpTlvType.running:
+			if (value.length !== 1) {
+				return false;
+			}
+			neighbor.running = value[0];
+			return true;
+		case mndpTlvType.ttl:
+			if (value.length !== 1) {
+				return false;
+			}
+			neighbor.ttlSeconds = value[0];
+			return true;
 		default:
-			neighbor.unknownTlvs.push({ type, value: value.slice() });
-			break;
+			return false;
 	}
+}
+
+/**
+ * Names of the bits set in a TLV 18 `running` bitmask: `capsman`, `cmr`, and
+ * `bit<n>` for a bit no capture has grounded yet.
+ */
+export function mndpRunningNames(running: number): string[] {
+	const names: string[] = [];
+	for (let bit = 0; bit < 8; bit += 1) {
+		const mask = 1 << bit;
+		if ((running & mask) === 0) {
+			continue;
+		}
+		if (mask === mndpRunningBit.capsman) {
+			names.push("capsman");
+		} else if (mask === mndpRunningBit.cmrController) {
+			names.push("cmr");
+		} else {
+			names.push(`bit${bit}`);
+		}
+	}
+	return names;
 }
 
 /** A single TLV record for {@link encodeMndpPacket}. */
@@ -301,63 +526,106 @@ function ipv4ToBytes(ipv4: string): Uint8Array {
 	return Uint8Array.from(parts.map((part) => Number.parseInt(part, 10) & 0xff));
 }
 
+function headerToBytes(headerHex: string): Uint8Array {
+	if (!/^[0-9a-fA-F]{8}$/.test(headerHex)) {
+		throw new CentrsError({
+			code: "mndp/encode-failed",
+			summary: `Cannot encode MNDP header "${headerHex}": expected 8 hex digits.`,
+			remediation: "Pass the 4 header bytes as hex, like `08000000`.",
+			context: { headerHex },
+		});
+	}
+	return Uint8Array.from(
+		[0, 2, 4, 6].map((index) =>
+			Number.parseInt(headerHex.slice(index, index + 2), 16),
+		),
+	);
+}
+
 function utf8(value: string): Uint8Array {
 	return new TextEncoder().encode(value);
 }
 
+function u32le(value: number): Uint8Array {
+	const out = new Uint8Array(4);
+	new DataView(out.buffer).setUint32(0, value, true);
+	return out;
+}
+
+const UNPACK_FLAG_TYPES: Record<MndpUnpack, readonly number[]> = {
+	simple: [mndpTlvType.unpackSimple],
+	"uncompress-headers": [mndpTlvType.unpackSimple, mndpTlvType.unpackHeaders],
+	"uncompress-all": [
+		mndpTlvType.unpackSimple,
+		mndpTlvType.unpackHeaders,
+		mndpTlvType.unpackAll,
+	],
+};
+
 /**
  * Encode a {@link MndpNeighbor} (plus any extra raw TLVs) back into a wire
- * packet. Primarily a round-trip aid for tests and for crafting fixtures; the
- * field order mirrors the TLV type ordering RouterOS emits.
+ * packet. Primarily a round-trip aid for tests and for crafting fixtures. The
+ * header is `headerHex` (default all zeros); TLVs follow the 7.24.5+ order,
+ * led by TLV 6 when `request` is set, except that IPv6 addresses are not
+ * encoded (pass TLV 15 in `extraTlvs`).
  */
 export function encodeMndpPacket(
-	neighbor: Partial<MndpNeighbor> & { sequence?: number },
+	neighbor: Partial<MndpNeighbor>,
 	extraTlvs: readonly MndpTlvInput[] = [],
 ): Uint8Array {
 	const tlvs: MndpTlvInput[] = [];
+	const push = (type: number, value: Uint8Array): void => {
+		tlvs.push({ type, value });
+	};
+	if (neighbor.request === true) {
+		push(mndpTlvType.request, new Uint8Array(0));
+	}
 	if (neighbor.macAddress !== undefined) {
-		tlvs.push({
-			type: mndpTlvType.macAddress,
-			value: macToBytes(neighbor.macAddress),
-		});
-	}
-	if (neighbor.identity !== undefined) {
-		tlvs.push({ type: mndpTlvType.identity, value: utf8(neighbor.identity) });
-	}
-	if (neighbor.version !== undefined) {
-		tlvs.push({ type: mndpTlvType.version, value: utf8(neighbor.version) });
-	}
-	if (neighbor.platform !== undefined) {
-		tlvs.push({ type: mndpTlvType.platform, value: utf8(neighbor.platform) });
-	}
-	if (neighbor.board !== undefined) {
-		tlvs.push({ type: mndpTlvType.board, value: utf8(neighbor.board) });
-	}
-	if (neighbor.uptimeSeconds !== undefined) {
-		const value = new Uint8Array(4);
-		new DataView(value.buffer).setUint32(0, neighbor.uptimeSeconds, true);
-		tlvs.push({ type: mndpTlvType.uptime, value });
-	}
-	if (neighbor.softwareId !== undefined) {
-		tlvs.push({
-			type: mndpTlvType.softwareId,
-			value: utf8(neighbor.softwareId),
-		});
+		push(mndpTlvType.macAddress, macToBytes(neighbor.macAddress));
 	}
 	if (neighbor.unpack !== undefined) {
-		tlvs.push({
-			type: mndpTlvType.unpack,
-			value: Uint8Array.from([neighbor.unpack & 0xff]),
-		});
+		for (const type of UNPACK_FLAG_TYPES[neighbor.unpack]) {
+			push(type, new Uint8Array(0));
+		}
+	}
+	if (neighbor.aggregatedSize !== undefined) {
+		push(mndpTlvType.aggregatedSize, u32le(neighbor.aggregatedSize));
+	}
+	if (neighbor.identity !== undefined) {
+		push(mndpTlvType.identity, utf8(neighbor.identity));
+	}
+	if (neighbor.version !== undefined) {
+		push(mndpTlvType.version, utf8(neighbor.version));
+	}
+	if (neighbor.platform !== undefined) {
+		push(mndpTlvType.platform, utf8(neighbor.platform));
+	}
+	if (neighbor.uptimeSeconds !== undefined) {
+		push(mndpTlvType.uptime, u32le(neighbor.uptimeSeconds));
+	}
+	if (neighbor.softwareId !== undefined) {
+		push(mndpTlvType.softwareId, utf8(neighbor.softwareId));
+	}
+	if (neighbor.board !== undefined) {
+		push(mndpTlvType.board, utf8(neighbor.board));
+	}
+	if (neighbor.ipv6Enabled !== undefined) {
+		push(
+			mndpTlvType.ipv6Enabled,
+			Uint8Array.from([neighbor.ipv6Enabled ? 1 : 0]),
+		);
 	}
 	if (neighbor.interfaceName !== undefined) {
-		tlvs.push({
-			type: mndpTlvType.interfaceName,
-			value: utf8(neighbor.interfaceName),
-		});
+		push(mndpTlvType.interfaceName, utf8(neighbor.interfaceName));
+	}
+	if (neighbor.running !== undefined) {
+		push(mndpTlvType.running, Uint8Array.from([neighbor.running & 0xff]));
+	}
+	if (neighbor.ttlSeconds !== undefined) {
+		push(mndpTlvType.ttl, Uint8Array.from([neighbor.ttlSeconds & 0xff]));
 	}
 	if (neighbor.ipv4 !== undefined) {
-		tlvs.push({ type: mndpTlvType.ipv4, value: ipv4ToBytes(neighbor.ipv4) });
+		push(mndpTlvType.ipv4, ipv4ToBytes(neighbor.ipv4));
 	}
 	for (const tlv of extraTlvs) {
 		tlvs.push(tlv);
@@ -369,8 +637,7 @@ export function encodeMndpPacket(
 	}
 	const out = new Uint8Array(MNDP_HEADER_LENGTH + bodyLength);
 	const view = new DataView(out.buffer);
-	view.setUint16(0, 0, false);
-	view.setUint16(2, neighbor.sequence ?? 0, false);
+	out.set(headerToBytes(neighbor.headerHex ?? "00000000"), 0);
 
 	let offset = MNDP_HEADER_LENGTH;
 	for (const tlv of tlvs) {
@@ -383,13 +650,16 @@ export function encodeMndpPacket(
 }
 
 /**
- * MNDP discovery request that prompts immediate replies. The reply trigger is
- * the leading zeroed 4-byte header (the same minimal form MAC-Telnet sends);
- * RouterOS accepts longer forms too, so this emits the 9-byte all-zero variant.
- * See the `routeros-mndp` skill "Refresh Packet" section.
+ * MNDP refresh request: header `00000000` plus an empty TLV 6, and no
+ * trailing bytes, since RouterOS drops a datagram whose TLVs do not end
+ * exactly at its end. Every tested RouterOS version (6.49.23–7.26beta5)
+ * answered it with a broadcast announcement to port 5678, and the tested 7.x
+ * routers did not add the requester to their neighbor tables. See the module
+ * doc's Requests
+ * section (tikoci/m2ir#5).
  */
 export function mndpRefreshPacket(): Uint8Array {
-	return new Uint8Array(9);
+	return Uint8Array.of(0, 0, 0, 0, 0, mndpTlvType.request, 0, 0);
 }
 
 /**

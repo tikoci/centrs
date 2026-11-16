@@ -35,17 +35,41 @@ centrs discover [--timeout 15s] [--save] [--group discovered] \
 
 MNDP is UDP broadcast on port `5678`; each RouterOS interface answers a refresh
 with a TLV-encoded announcement (MAC, identity, version, platform, board,
-uptime, software-id, interface, IPv4/IPv6). `discover`:
+uptime, software-id, interface, IPv4/IPv6 addresses, IPv6-enabled, packing,
+running services, TTL). The wire map is grounded in the tikoci/m2ir MNDP labs
+(tikoci/m2ir#4, #5) and documented TLV by TLV in `src/data/mndp.ts`. `discover`:
 
 1. Binds a UDP socket (default `0.0.0.0:5678`) with address/port reuse so
    it can coexist with other MNDP listeners when the platform permits it.
-2. Broadcasts a refresh request **immediately**, then every 5s, and listens for
-   the `--timeout` window. Sending the first refresh up front (rather than after
-   the initial 5s tick) is what makes a short default window viable: responders
-   reply within a round-trip instead of waiting for their own ~60s passive cycle.
+   Binding 5678 is required, not a default of convenience: RouterOS answers a
+   request with an ordinary announcement broadcast to port 5678, never to the
+   requester's source port.
+2. Broadcasts a refresh request (header `00000000` plus an empty TLV 6, exactly
+   8 bytes) **immediately**, then every 5s, and listens for the `--timeout`
+   window. Tested routers replied 11 ms to 1.96 s later (an observed range,
+   not a bound), so sending the first refresh
+   up front (rather than after the initial 5s tick) is what makes a short
+   default window viable: responders do not wait for their own periodic
+   announcement (`discover-interval`, 30s by default). A 7.x router answers a
+   burst of requests once, so during the listen each router announces about
+   every 5s; each reply also advances its header counter. RouterOS drops a
+   request with trailing bytes, which is why the earlier 9-zero-byte refresh
+   got no reply.
 3. Decodes each datagram with the pure codec in `src/data/mndp.ts`, tolerating
-   unknown TLV types and ignoring malformed datagrams and its own refresh echo.
-4. Stores neighbors in an in-memory TTL cache keyed by MAC.
+   unknown TLV types and ignoring malformed datagrams (including trailing
+   bytes that are not a whole TLV, which RouterOS drops too), its own refresh
+   echo, and any request (TLV 6), even one that carries a MAC.
+4. Stores neighbors in an in-memory TTL cache keyed by MAC. RouterOS sends
+   every announcement as an IPv4 broadcast and most also as an IPv6 `ff02::1`
+   multicast with the same payload. The IPv6 copy was missing for 0 to 2
+   announcements after some boots and for every one while IPv6 was disabled,
+   so the listener binds IPv4 only and sees one copy of each announcement.
+   An announcement without TLV 17 has no `ipv4`. RouterOS fills
+   `/ip/neighbor` `address4` from the IP source in that case (tikoci/m2ir#5),
+   but `discover` does not: every RouterOS announcement without TLV 17 in the
+   m2ir captures (6.49.23 and 7.x, boot announcements included) came from
+   `0.0.0.0`. Only spoofed packets and hosts' requests carried a usable
+   source, and `discover` ignores requests.
 5. Returns a canonical envelope whose `data.neighbors` is sorted by MAC.
 
 The codec is pure and the socket layer is thin and injectable, so both are
@@ -83,11 +107,18 @@ writer" holds.
   `noaddr:<identity>:<interface>` key. Each entry records the latest decoded
   neighbor plus `firstSeenAt` / `lastSeenAt` epoch-ms timestamps. The cache is
   process-local only — the CDB stays the single durable datastore.
-- **TTL:** entries expire `180s` (three ~60s announce cycles) after they were
-  last seen. Three cycles tolerates a couple of dropped broadcasts before a
-  still-present neighbor is forgotten. Re-observing a neighbor refreshes
-  `lastSeenAt` and keeps `firstSeenAt`. The clock is injectable for
-  deterministic tests.
+- **TTL:** an entry expires the sender's advertised TLV 19 TTL after it was
+  last seen (7.24+: `min(discover-interval × 4 + 1, 255)` seconds). A sender
+  that advertises no TTL gets `180s` (three of the older 60s announce cycles,
+  six of the 30s default since 7.16), which tolerates a couple of dropped
+  broadcasts. A TTL of `0` is a dying gasp sent
+  before a graceful reboot or shutdown; it removes the entry at once rather
+  than replacing the full announcement with its four-TLV packet. RouterOS's own
+  `/ip/neighbor` treats the TTL as approximate: it removed a silent neighbor at
+  about the TTL or up to ~20 s after it, so the two tables can briefly
+  disagree. Re-observing a
+  neighbor refreshes `lastSeenAt` and keeps `firstSeenAt`. The clock is
+  injectable for deterministic tests.
 
 ## `--save` provenance and de-dupe
 
@@ -154,10 +185,18 @@ refresh-send path stays covered by the loopback unit test). Prefer
 Linux/CI). Grounding: quickchr `docs/mndp.md`, `examples/mndp/`,
 `test/lab/mndp/REPORT.md`.
 
-`test/integration/discover.test.ts` exercises this end to end on RouterOS CHR
-7.23.1: it boots `["user", { type: "socket-connect", port }]`, captures a real
-MNDP announcement, decodes it with centrs's codec, cross-checks
-`identity`/`platform`/`board`/`version`/`mac` against REST, and `--save`s a
+`test/integration/discover.test.ts` exercises this end to end on RouterOS
+CHR: it boots `["user", { type: "socket-connect", port }]`, waits for the
+announcements its own setup triggered to drain, injects exactly one refresh,
+and requires a reply within 3 s. On 7.16+ it first sets
+`discover-interval=10m` so no periodic announcement can land in that window;
+older senders announce every 60 s with no setting, so it injects right after
+a periodic announcement instead. It then decodes that real announcement with
+centrs's codec, cross-checks
+`identity`/`platform`/`board`/`version`/`mac` against REST, checks the #668
+wire map (`ipv6Enabled` against `/ipv6/settings`, `running` on 7.20+,
+`ttlSeconds` against `discover-interval` on 7.24+, the raw `headerHex`;
+green on 7.25.1 and long-term 7.24.6), and `--save`s a
 `macTarget`/`group=discovered`/`source=mndp` record (examples 1, 2, 4). It runs
 under `bun run test:integration` (gated by `CENTRS_RUN_FAST_INTEGRATION`). The
 network-independent examples (3 port-in-use, 5 custom group, 6 de-dupe, 7

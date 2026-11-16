@@ -264,6 +264,24 @@ export const REST_API_WITHOUT_API_POLICY_SINCE = "7.26beta3";
 export const CMR_SINCE = "7.26beta1";
 
 /**
+ * MNDP TLVs that appear by version (tikoci/m2ir#4, centrs#668). TLV 18
+ * `running` is absent on 7.19.4 and present from 7.20 (changelog 7.20: "report
+ * router as CAPsMAN on MNDP under running parameter"). TLV 19 TTL is absent on
+ * 7.24beta1 and older and captured on 7.24.5+. The gate is the 7.24 release,
+ * whose changelog adds the dying gasp ("sends packet with TTL=0"), so TLV 19
+ * ships in 7.24.0; `routerOsAtLeast` orders 7.24 betas and release
+ * candidates below it. 7.24.0–7.24.4 are changelog-grounded, not captured.
+ */
+export const MNDP_RUNNING_TLV_SINCE = "7.20";
+/**
+ * `/ip/neighbor/discovery-settings discover-interval` exists from 7.16
+ * (changelog 7.16: "added discover-interval setting", default 30 s; the period
+ * was a fixed 60 s before). Changelog-grounded, not booted on both sides.
+ */
+export const MNDP_DISCOVER_INTERVAL_SINCE = "7.16";
+export const MNDP_TTL_TLV_SINCE = "7.24";
+
+/**
  * How a `:parse` REJECTION reads, as an accepted set rather than one wording
  * (#296) — the `VALIDATION_REJECT_CODES` pattern applied to raw device text.
  *

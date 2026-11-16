@@ -2,7 +2,11 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { createSocket, Socket } from "node:dgram";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { encodeMndpPacket, type MndpNeighbor } from "../../src/data/mndp.ts";
+import {
+	encodeMndpPacket,
+	type MndpNeighbor,
+	mndpRefreshPacket,
+} from "../../src/data/mndp.ts";
 import { MndpCache } from "../../src/data/mndp-cache.ts";
 import {
 	buildWinBoxCdbEntryRecord,
@@ -43,7 +47,7 @@ function neighbor(
 	overrides: Partial<MndpNeighbor> = {},
 ): MndpNeighbor {
 	return {
-		sequence: 0,
+		headerHex: "00000000",
 		macAddress: mac,
 		identity: "rt",
 		unknownTlvs: [],
@@ -146,13 +150,49 @@ describe.skipIf(!MNDP_LOOPBACK)("listenMndp (loopback)", () => {
 			sendRefresh: false,
 			onBound: (port) => {
 				const sender = createSocket("udp4");
-				sender.send(new Uint8Array(9), port, "127.0.0.1", () => sender.close());
+				sender.send(mndpRefreshPacket(), port, "127.0.0.1", () =>
+					sender.close(),
+				);
 			},
 		});
 		expect(result.packetsReceived).toBe(1);
 		expect(result.packetsDecoded).toBe(0);
 		expect(result.packetsRejected).toBe(1);
 		// A MAC-less echo parses fine — it is not a malformed datagram.
+		expect(result.warnings).toHaveLength(0);
+	});
+
+	test("ignores a request that carries a MAC but still decodes a boot announcement", async () => {
+		const result = await listenMndp({
+			host: "127.0.0.1",
+			port: 0,
+			timeoutMs: 300,
+			sendRefresh: false,
+			onBound: (port) => {
+				const sender = createSocket("udp4");
+				// Another scanner's request: TLV 6 plus a MAC and identity.
+				const request = encodeMndpPacket({
+					request: true,
+					macAddress: "02:00:00:00:00:01",
+					identity: "scanner",
+				});
+				// A boot announcement: header 0, a MAC, no TLV 6.
+				const boot = encodeMndpPacket({
+					headerHex: "00000000",
+					macAddress: "02:00:00:00:00:02",
+					identity: "r1",
+				});
+				sender.send(request, port, "127.0.0.1", () => {
+					sender.send(boot, port, "127.0.0.1", () => sender.close());
+				});
+			},
+		});
+		expect(result.packetsReceived).toBe(2);
+		expect(result.packetsRejected).toBe(1);
+		expect(result.packetsDecoded).toBe(1);
+		expect(
+			result.cache.entries().map((entry) => entry.neighbor.macAddress),
+		).toEqual(["02:00:00:00:00:02"]);
 		expect(result.warnings).toHaveLength(0);
 	});
 
@@ -248,6 +288,39 @@ describe("discover", () => {
 		]);
 		expect(envelope.meta.via).toBe("mndp");
 		expect(envelope.meta.operation?.saved).toBeUndefined();
+	});
+
+	test("projects the grounded MNDP fields into the envelope", async () => {
+		const envelope = await discover({
+			listen: fakeListen([
+				neighbor("00:00:00:00:00:01", {
+					headerHex: "08000000",
+					unpack: "uncompress-all",
+					aggregatedSize: 1500,
+					ipv6Enabled: true,
+					ipv6Addresses: ["2001:db8::1", "fe80::1"],
+					running: 0x01,
+					ttlSeconds: 121,
+				}),
+			]),
+		});
+		expect(envelope.ok).toBe(true);
+		if (!envelope.ok) {
+			return;
+		}
+		const [record] = envelope.data.neighbors;
+		expect(record).toMatchObject({
+			headerHex: "08000000",
+			unpack: "uncompress-all",
+			aggregatedSize: 1500,
+			ipv6Enabled: true,
+			ipv6Addresses: ["2001:db8::1", "fe80::1"],
+			running: ["capsman"],
+			ttlSeconds: 121,
+		});
+		expect(record).not.toHaveProperty("sequence");
+		expect(record).not.toHaveProperty("ipv6");
+		expect(record).not.toHaveProperty("counter");
 	});
 
 	test("tips to use --save when neighbors are found but not saved", async () => {

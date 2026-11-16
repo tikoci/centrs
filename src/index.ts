@@ -164,8 +164,11 @@ export {
 	type MndpNeighbor,
 	type MndpTlvInput,
 	type MndpUnknownTlv,
+	type MndpUnpack,
 	mndpNeighborKey,
 	mndpRefreshPacket,
+	mndpRunningBit,
+	mndpRunningNames,
 	mndpTlvType,
 	parseMndpPacket,
 } from "./data/mndp.ts";

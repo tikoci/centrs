@@ -24,7 +24,9 @@ import {
 	MNDP_BROADCAST_ADDRESS,
 	MNDP_PORT,
 	type MndpNeighbor,
+	type MndpUnpack,
 	mndpRefreshPacket,
+	mndpRunningNames,
 	parseMndpPacket,
 } from "./data/mndp.ts";
 import { MndpCache } from "./data/mndp-cache.ts";
@@ -247,8 +249,11 @@ export function listenMndp(
 			packetsReceived += 1;
 			try {
 				const neighbor = parseMndpPacket(new Uint8Array(message));
-				if (!neighbor.macAddress) {
-					// Self-echo of our own refresh, or a MAC-less announcement.
+				if (!neighbor.macAddress || neighbor.request === true) {
+					// Self-echo of our own refresh, another scanner's request
+					// (TLV 6, even one carrying a MAC: RouterOS does not learn a
+					// neighbor from it either), or a MAC-less announcement. A boot
+					// announcement (header 0, no TLV 6) still decodes.
 					packetsRejected += 1;
 					return;
 				}
@@ -319,8 +324,15 @@ export interface DiscoverNeighborRecord {
 	softwareId?: string;
 	interfaceName?: string;
 	ipv4?: string;
-	ipv6?: string;
-	sequence: number;
+	ipv6Addresses?: readonly string[];
+	ipv6Enabled?: boolean;
+	unpack?: MndpUnpack;
+	aggregatedSize?: number;
+	/** TLV 18 bit names (`capsman`, `cmr`, or `bit<n>`); `[]` when sent as `00`. */
+	running?: readonly string[];
+	ttlSeconds?: number;
+	/** Raw MNDP header bytes as hex: the announcement counter in the sender's CPU byte order. */
+	headerHex: string;
 	/** Unknown TLVs reduced to `{ type, byteLength }` (bytes are not emitted). */
 	unknownTlvs: readonly { type: number; byteLength: number }[];
 	firstSeenAt: string;
@@ -368,7 +380,7 @@ function toDiscoverNeighbor(
 	lastSeenAt: number,
 ): DiscoverNeighborRecord {
 	const record: DiscoverNeighborRecord = {
-		sequence: neighbor.sequence,
+		headerHex: neighbor.headerHex,
 		unknownTlvs: neighbor.unknownTlvs.map((tlv) => ({
 			type: tlv.type,
 			byteLength: tlv.value.length,
@@ -403,8 +415,23 @@ function toDiscoverNeighbor(
 	if (neighbor.ipv4 !== undefined) {
 		record.ipv4 = neighbor.ipv4;
 	}
-	if (neighbor.ipv6 !== undefined) {
-		record.ipv6 = neighbor.ipv6;
+	if (neighbor.ipv6Addresses !== undefined) {
+		record.ipv6Addresses = [...neighbor.ipv6Addresses];
+	}
+	if (neighbor.ipv6Enabled !== undefined) {
+		record.ipv6Enabled = neighbor.ipv6Enabled;
+	}
+	if (neighbor.unpack !== undefined) {
+		record.unpack = neighbor.unpack;
+	}
+	if (neighbor.aggregatedSize !== undefined) {
+		record.aggregatedSize = neighbor.aggregatedSize;
+	}
+	if (neighbor.running !== undefined) {
+		record.running = mndpRunningNames(neighbor.running);
+	}
+	if (neighbor.ttlSeconds !== undefined) {
+		record.ttlSeconds = neighbor.ttlSeconds;
 	}
 	return record;
 }
