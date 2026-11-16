@@ -35,7 +35,9 @@ centrs discover [--timeout 15s] [--save] [--group discovered] \
 
 MNDP is UDP broadcast on port `5678`; each RouterOS interface answers a refresh
 with a TLV-encoded announcement (MAC, identity, version, platform, board,
-uptime, software-id, interface, IPv4/IPv6). `discover`:
+uptime, software-id, interface, IPv4/IPv6 addresses, IPv6-enabled, packing,
+running services, TTL). The wire map is grounded in the tikoci/m2ir MNDP lab
+(tikoci/m2ir#4) and documented TLV by TLV in `src/data/mndp.ts`. `discover`:
 
 1. Binds a UDP socket (default `0.0.0.0:5678`) with address/port reuse so
    it can coexist with other MNDP listeners when the platform permits it.
@@ -45,7 +47,9 @@ uptime, software-id, interface, IPv4/IPv6). `discover`:
    reply within a round-trip instead of waiting for their own ~60s passive cycle.
 3. Decodes each datagram with the pure codec in `src/data/mndp.ts`, tolerating
    unknown TLV types and ignoring malformed datagrams and its own refresh echo.
-4. Stores neighbors in an in-memory TTL cache keyed by MAC.
+4. Stores neighbors in an in-memory TTL cache keyed by MAC. RouterOS sends each
+   announcement twice (IPv4 broadcast and IPv6 `ff02::1`, same payload); the
+   listener binds IPv4 only, so it sees one copy.
 5. Returns a canonical envelope whose `data.neighbors` is sorted by MAC.
 
 The codec is pure and the socket layer is thin and injectable, so both are
@@ -83,11 +87,16 @@ writer" holds.
   `noaddr:<identity>:<interface>` key. Each entry records the latest decoded
   neighbor plus `firstSeenAt` / `lastSeenAt` epoch-ms timestamps. The cache is
   process-local only — the CDB stays the single durable datastore.
-- **TTL:** entries expire `180s` (three ~60s announce cycles) after they were
-  last seen. Three cycles tolerates a couple of dropped broadcasts before a
-  still-present neighbor is forgotten. Re-observing a neighbor refreshes
-  `lastSeenAt` and keeps `firstSeenAt`. The clock is injectable for
-  deterministic tests.
+- **TTL:** an entry expires the sender's advertised TLV 19 TTL after it was
+  last seen (7.24+: `min(discover-interval × 4 + 1, 255)` seconds). A sender
+  that advertises no TTL gets `180s` (three ~60s announce cycles), which
+  tolerates a couple of dropped broadcasts. A TTL of `0` is a dying gasp sent
+  before a graceful reboot or shutdown; it removes the entry at once rather
+  than replacing the full announcement with its four-TLV packet. RouterOS's own
+  `/ip/neighbor` treats the TTL as a minimum and may keep a silent neighbor up
+  to ~20 s longer, so the two tables can briefly disagree. Re-observing a
+  neighbor refreshes `lastSeenAt` and keeps `firstSeenAt`. The clock is
+  injectable for deterministic tests.
 
 ## `--save` provenance and de-dupe
 
@@ -157,7 +166,10 @@ Linux/CI). Grounding: quickchr `docs/mndp.md`, `examples/mndp/`,
 `test/integration/discover.test.ts` exercises this end to end on RouterOS CHR
 7.23.1: it boots `["user", { type: "socket-connect", port }]`, captures a real
 MNDP announcement, decodes it with centrs's codec, cross-checks
-`identity`/`platform`/`board`/`version`/`mac` against REST, and `--save`s a
+`identity`/`platform`/`board`/`version`/`mac` against REST, checks the #668
+wire map (`ipv6Enabled` against `/ipv6/settings`, `running` on 7.20+,
+`ttlSeconds` against `discover-interval` on 7.24+, a little-endian header
+counter on x86; green on 7.25.1 and long-term 7.24.6), and `--save`s a
 `macTarget`/`group=discovered`/`source=mndp` record (examples 1, 2, 4). It runs
 under `bun run test:integration` (gated by `CENTRS_RUN_FAST_INTEGRATION`). The
 network-independent examples (3 port-in-use, 5 custom group, 6 de-dupe, 7

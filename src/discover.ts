@@ -23,8 +23,11 @@ import { buildTip } from "./core/envelope.ts";
 import {
 	MNDP_BROADCAST_ADDRESS,
 	MNDP_PORT,
+	type MndpCounterByteOrder,
 	type MndpNeighbor,
+	type MndpUnpack,
 	mndpRefreshPacket,
+	mndpRunningNames,
 	parseMndpPacket,
 } from "./data/mndp.ts";
 import { MndpCache } from "./data/mndp-cache.ts";
@@ -319,8 +322,18 @@ export interface DiscoverNeighborRecord {
 	softwareId?: string;
 	interfaceName?: string;
 	ipv4?: string;
-	ipv6?: string;
-	sequence: number;
+	ipv6Addresses?: readonly string[];
+	ipv6Enabled?: boolean;
+	unpack?: MndpUnpack;
+	aggregatedSize?: number;
+	/** TLV 18 bit names (`capsman`, `cmr`, or `bit<n>`); `[]` when sent as `00`. */
+	running?: readonly string[];
+	ttlSeconds?: number;
+	/** Raw MNDP header bytes as hex. */
+	headerHex: string;
+	/** Header announcement counter, when its byte order is settled. */
+	counter?: number;
+	counterByteOrder?: MndpCounterByteOrder;
 	/** Unknown TLVs reduced to `{ type, byteLength }` (bytes are not emitted). */
 	unknownTlvs: readonly { type: number; byteLength: number }[];
 	firstSeenAt: string;
@@ -368,7 +381,7 @@ function toDiscoverNeighbor(
 	lastSeenAt: number,
 ): DiscoverNeighborRecord {
 	const record: DiscoverNeighborRecord = {
-		sequence: neighbor.sequence,
+		headerHex: neighbor.headerHex,
 		unknownTlvs: neighbor.unknownTlvs.map((tlv) => ({
 			type: tlv.type,
 			byteLength: tlv.value.length,
@@ -403,8 +416,29 @@ function toDiscoverNeighbor(
 	if (neighbor.ipv4 !== undefined) {
 		record.ipv4 = neighbor.ipv4;
 	}
-	if (neighbor.ipv6 !== undefined) {
-		record.ipv6 = neighbor.ipv6;
+	if (neighbor.ipv6Addresses !== undefined) {
+		record.ipv6Addresses = [...neighbor.ipv6Addresses];
+	}
+	if (neighbor.ipv6Enabled !== undefined) {
+		record.ipv6Enabled = neighbor.ipv6Enabled;
+	}
+	if (neighbor.unpack !== undefined) {
+		record.unpack = neighbor.unpack;
+	}
+	if (neighbor.aggregatedSize !== undefined) {
+		record.aggregatedSize = neighbor.aggregatedSize;
+	}
+	if (neighbor.running !== undefined) {
+		record.running = mndpRunningNames(neighbor.running);
+	}
+	if (neighbor.ttlSeconds !== undefined) {
+		record.ttlSeconds = neighbor.ttlSeconds;
+	}
+	if (neighbor.counter !== undefined) {
+		record.counter = neighbor.counter;
+	}
+	if (neighbor.counterByteOrder !== undefined) {
+		record.counterByteOrder = neighbor.counterByteOrder;
 	}
 	return record;
 }

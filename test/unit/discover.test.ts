@@ -43,7 +43,7 @@ function neighbor(
 	overrides: Partial<MndpNeighbor> = {},
 ): MndpNeighbor {
 	return {
-		sequence: 0,
+		headerHex: "00000000",
 		macAddress: mac,
 		identity: "rt",
 		unknownTlvs: [],
@@ -248,6 +248,42 @@ describe("discover", () => {
 		]);
 		expect(envelope.meta.via).toBe("mndp");
 		expect(envelope.meta.operation?.saved).toBeUndefined();
+	});
+
+	test("projects the grounded MNDP fields into the envelope", async () => {
+		const envelope = await discover({
+			listen: fakeListen([
+				neighbor("00:00:00:00:00:01", {
+					headerHex: "08000000",
+					counter: 8,
+					counterByteOrder: "little-endian",
+					unpack: "uncompress-all",
+					aggregatedSize: 1500,
+					ipv6Enabled: true,
+					ipv6Addresses: ["2001:db8::1", "fe80::1"],
+					running: 0x01,
+					ttlSeconds: 121,
+				}),
+			]),
+		});
+		expect(envelope.ok).toBe(true);
+		if (!envelope.ok) {
+			return;
+		}
+		const [record] = envelope.data.neighbors;
+		expect(record).toMatchObject({
+			headerHex: "08000000",
+			counter: 8,
+			counterByteOrder: "little-endian",
+			unpack: "uncompress-all",
+			aggregatedSize: 1500,
+			ipv6Enabled: true,
+			ipv6Addresses: ["2001:db8::1", "fe80::1"],
+			running: ["capsman"],
+			ttlSeconds: 121,
+		});
+		expect(record).not.toHaveProperty("sequence");
+		expect(record).not.toHaveProperty("ipv6");
 	});
 
 	test("tips to use --save when neighbors are found but not saved", async () => {

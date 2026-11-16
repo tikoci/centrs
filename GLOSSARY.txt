@@ -325,6 +325,10 @@ ECONNRESET
 EHOSTDOWN
 REUSEPORT
 REUSEADDR
+# capsman: RouterOS CAPsMAN (wireless controller); MNDP TLV 18 bit 0x01 (#668).
+capsman
+# MIPSBE: big-endian MIPS RouterBOARDs; they send the MNDP header counter big-endian (#668).
+MIPSBE
 # L2 bridge frame-parsing terms (test/integration/mndp-l2-bridge.ts):
 # ethertype: 16-bit EtherType field in an Ethernet frame (0x0800 = IPv4).
 ethertype

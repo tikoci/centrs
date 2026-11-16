@@ -54,6 +54,19 @@ publish `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
   from `/root/.config/tikoci/` to `/home/bun/.config/tikoci/`. Mount your CDB
   and `centrs.env` there, readable by user ID 1000, or set `CENTRS_CDB_FILE` /
   `--cdb-file`; `XDG_CONFIG_HOME` moves only `centrs.env` (#614).
+- **MNDP / `discover`:** the codec follows the grounded wire map from
+  tikoci/m2ir#4 (#668). TLV 14 is `ipv6Enabled` (it was misread as
+  `unpack`); `unpack` now comes from TLVs 2–4, with TLV 9 as
+  `aggregatedSize`. TLV 15 repeats, so `ipv6` (which kept only the last,
+  link-local address) is replaced by `ipv6Addresses`. New fields: `running`
+  (TLV 18), `ttlSeconds` (TLV 19). The header is a `u32` counter in the
+  sender's CPU byte order, so `sequence` (a big-endian `u16` that stayed `0`
+  on little-endian routers) is replaced by `headerHex` plus `counter` /
+  `counterByteOrder` when uptime settles the order. Type 13 is no longer read
+  as a fallback board; it lands in `unknownTlvs`. The neighbor cache expires
+  entries at the advertised TTL and drops them on a dying gasp (TTL 0).
+  **Consumers** reading `sequence`, `ipv6` or the numeric `unpack` from the
+  `discover` envelope or `MndpNeighbor` must move to the new fields.
 
 ### Fixed
 

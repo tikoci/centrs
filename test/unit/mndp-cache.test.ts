@@ -7,7 +7,7 @@ import {
 
 function neighbor(mac: string, identity?: string): MndpNeighbor {
 	return {
-		sequence: 0,
+		headerHex: "00000000",
 		macAddress: mac,
 		identity,
 		unknownTlvs: [],
@@ -33,6 +33,32 @@ describe("MndpCache", () => {
 		expect(cache.get("aa:aa:aa:aa:aa:aa")).toBeUndefined();
 		expect(cache.size()).toBe(0);
 		expect(cache.neighbors()).toHaveLength(0);
+	});
+
+	test("expires at the advertised TLV 19 TTL instead of the default", () => {
+		let clock = 0;
+		const cache = new MndpCache({ now: () => clock });
+		cache.observe({ ...neighbor("cc:cc:cc:cc:cc:cc"), ttlSeconds: 21 });
+		expect(cache.get("cc:cc:cc:cc:cc:cc")?.ttlMs).toBe(21_000);
+
+		clock = 20_999;
+		expect(cache.size()).toBe(1);
+		clock = 21_000;
+		expect(cache.size()).toBe(0);
+	});
+
+	test("a dying gasp (TTL 0) removes the entry instead of replacing it", () => {
+		const cache = new MndpCache({ now: () => 0 });
+		cache.observe(neighbor("dd:dd:dd:dd:dd:dd", "full"));
+		const gasp: MndpNeighbor = {
+			headerHex: "c1000000",
+			macAddress: "dd:dd:dd:dd:dd:dd",
+			ttlSeconds: 0,
+			unknownTlvs: [],
+		};
+		expect(cache.observe(gasp)).toBeUndefined();
+		expect(cache.get("dd:dd:dd:dd:dd:dd")).toBeUndefined();
+		expect(cache.size()).toBe(0);
 	});
 
 	test("re-observing refreshes lastSeenAt and keeps firstSeenAt", () => {
