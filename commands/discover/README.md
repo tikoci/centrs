@@ -55,10 +55,14 @@ running services, TTL). The wire map is grounded in the tikoci/m2ir MNDP labs
    request with trailing bytes, which is why the earlier 9-zero-byte refresh
    got no reply.
 3. Decodes each datagram with the pure codec in `src/data/mndp.ts`, tolerating
-   unknown TLV types and ignoring malformed datagrams and its own refresh echo.
-4. Stores neighbors in an in-memory TTL cache keyed by MAC. RouterOS sends each
-   announcement twice (IPv4 broadcast and IPv6 `ff02::1`, same payload); the
-   listener binds IPv4 only, so it sees one copy.
+   unknown TLV types and ignoring malformed datagrams (including trailing
+   bytes that are not a whole TLV, which RouterOS drops too) and its own
+   refresh echo.
+4. Stores neighbors in an in-memory TTL cache keyed by MAC. RouterOS sends
+   every announcement as an IPv4 broadcast and most also as an IPv6 `ff02::1`
+   multicast with the same payload. The IPv6 copy is missing for the first
+   announcements after boot and while IPv6 is disabled, so the listener binds
+   IPv4 only and sees one copy of each announcement.
 5. Returns a canonical envelope whose `data.neighbors` is sorted by MAC.
 
 The codec is pure and the socket layer is thin and injectable, so both are
@@ -174,8 +178,8 @@ refresh-send path stays covered by the loopback unit test). Prefer
 Linux/CI). Grounding: quickchr `docs/mndp.md`, `examples/mndp/`,
 `test/lab/mndp/REPORT.md`.
 
-`test/integration/discover.test.ts` exercises this end to end on RouterOS CHR
-7.23.1: it boots `["user", { type: "socket-connect", port }]`, waits for the
+`test/integration/discover.test.ts` exercises this end to end on RouterOS
+CHR: it boots `["user", { type: "socket-connect", port }]`, waits for the
 announcements its own setup triggered to drain, injects exactly one refresh,
 and requires a reply within 3 s. On 7.16+ it first sets
 `discover-interval=10m` so no periodic announcement can land in that window;

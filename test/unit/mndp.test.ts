@@ -342,6 +342,25 @@ describe("parseMndpPacket", () => {
 		expect((caught as CentrsError).code).toBe("mndp/malformed");
 	});
 
+	test("throws mndp/malformed on trailing bytes that are not a whole TLV", () => {
+		// RouterOS drops such a datagram whole (tikoci/m2ir#5): the old
+		// 9-zero-byte refresh, and a well-formed announcement plus one byte.
+		const withTrailingByte = concat(
+			encodeMndpPacket({ macAddress: "02:00:00:00:00:01", identity: "r1" }),
+			Uint8Array.from([0]),
+		);
+		for (const packet of [new Uint8Array(9), withTrailingByte]) {
+			let caught: unknown;
+			try {
+				parseMndpPacket(packet);
+			} catch (error) {
+				caught = error;
+			}
+			expect(caught).toBeInstanceOf(CentrsError);
+			expect((caught as CentrsError).code).toBe("mndp/malformed");
+		}
+	});
+
 	test("the refresh packet is header 0 plus an empty TLV 6, with no trailing bytes", () => {
 		// m2ir#5: RouterOS drops a request whose TLVs do not end exactly at the
 		// end of the datagram (9 zero bytes: 0 replies in 11 sends).

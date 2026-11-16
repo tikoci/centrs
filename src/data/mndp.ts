@@ -61,14 +61,20 @@
  * type the codec does not interpret — and any known type whose value has an
  * unexpected length — is preserved verbatim in
  * {@link MndpNeighbor.unknownTlvs} and never causes a throw. Only a
- * structurally malformed packet (too-short header, or a TLV whose declared
- * length runs past the buffer) throws.
+ * structurally malformed packet throws: a too-short header, a TLV whose
+ * declared length runs past the buffer, or trailing bytes that are not a
+ * whole TLV. RouterOS drops that last kind whole too (see Requests).
  *
  * ## Transport and lifecycle
  *
- * Each announcement goes out twice, as an IPv4 broadcast and an IPv6
- * `ff02::1` multicast, with the same payload and counter; a receiver that
- * listens on both should treat (MAC, header) as one announcement. A **dying
+ * Every announcement goes out as an IPv4 broadcast. Most also go out as an
+ * IPv6 `ff02::1` multicast with the same payload and counter, so a receiver
+ * that listens on both should treat (MAC, header) as one announcement. The
+ * IPv6 copy is not guaranteed: on 7.17–7.26beta5 it was missing for 0 to 2
+ * announcements after boot, for every announcement while `disable-ipv6=yes`,
+ * and sometimes for the first one after IPv6 was re-enabled; 6.49 sends it
+ * only with the `ipv6` package. On 7.x, an announcement with TLV 15 always
+ * had the IPv6 copy, but not the reverse (tikoci/m2ir#7). A **dying
  * gasp** (7.24+, `dying-gasp=yes`) is a short announcement sent before a
  * graceful reboot or shutdown: header, then TLVs 1, 19 = `00`, 17, 15.
  *
@@ -84,8 +90,10 @@
  * broadcast from port 5678 to `255.255.255.255:5678` and `ff02::1:5678` 21 ms
  * to ~2 s later, even when the request was unicast or sent over IPv6, so a
  * requester must listen on 5678. On 7.x a burst of requests gets one reply.
- * The first announcement after boot has header `00000000` (IPv4 copy only),
- * so it doubles as a request; it carries a MAC and decodes as a neighbor.
+ * The first announcement after boot has header `00000000`, so it doubles as
+ * a request; it carries a MAC and decodes as a neighbor. It goes out 2–18 s
+ * into uptime, so TLVs 15 and 17 are often missing, and it was IPv4 only in
+ * 12 of the 13 boots captured.
  */
 
 import { CentrsError } from "../errors.ts";
@@ -294,7 +302,8 @@ type MutableNeighbor = Omit<MndpNeighbor, "unknownTlvs" | "ipv6Addresses"> & {
 /**
  * Decode a raw MNDP datagram into a {@link MndpNeighbor}. Throws a
  * `mndp/malformed` {@link CentrsError} on a structurally invalid packet
- * (too-short header or a TLV whose length overruns the buffer). Unknown TLV
+ * (too-short header, a TLV whose length overruns the buffer, or 1–3 trailing
+ * bytes that are not a whole TLV, which RouterOS also drops). Unknown TLV
  * types, and known types with an unexpected value length, are preserved in
  * `unknownTlvs`, not rejected.
  */
@@ -330,6 +339,12 @@ export function parseMndpPacket(bytes: Uint8Array): MndpNeighbor {
 			neighbor.unknownTlvs.push({ type, value: value.slice() });
 		}
 		offset = valueEnd;
+	}
+	if (offset !== bytes.length) {
+		malformed(
+			`MNDP packet has ${bytes.length - offset} trailing byte(s) after its last TLV; RouterOS drops such a datagram.`,
+			{ trailingBytes: bytes.length - offset, byteLength: bytes.length },
+		);
 	}
 
 	const unpack = deriveUnpack(unpackFlags);
