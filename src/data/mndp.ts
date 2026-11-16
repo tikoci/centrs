@@ -185,9 +185,11 @@ export interface MndpNeighbor {
 	/**
 	 * TLV 14: `true` = IPv6 enabled. What that tracks depends on the sender's
 	 * version: before 7.18 it means IPv6 is present (6.x: the `ipv6` package
-	 * is enabled; 7.17 always sends `01`), not the setting; on 7.18–7.20 it
-	 * reflects `/ipv6/settings disable-ipv6` only as of the sender's last boot;
-	 * 7.26beta5 follows the setting at once. The live-update boundary is
+	 * is enabled; 7.17 always sends `01`), not the setting. On 7.18–7.20 it
+	 * follows `/ipv6/settings disable-ipv6` asymmetrically: disabling IPv6
+	 * leaves `true` until the sender reboots, while re-enabling it sets `true`
+	 * at once, so `true` there does not prove IPv6 is enabled. 7.26beta5
+	 * follows the setting at once in both directions. The live-update boundary is
 	 * probably 7.21 ("fixed MNDP IPv6 status reporting"); 7.21–7.25 were not
 	 * tested.
 	 */

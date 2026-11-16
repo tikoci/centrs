@@ -176,9 +176,12 @@ Linux/CI). Grounding: quickchr `docs/mndp.md`, `examples/mndp/`,
 
 `test/integration/discover.test.ts` exercises this end to end on RouterOS CHR
 7.23.1: it boots `["user", { type: "socket-connect", port }]`, waits for the
-announcements its own setup triggered to drain (on 7.24+ it also sets
-`discover-interval=10m` so no periodic one interferes), injects exactly one
-refresh and requires a reply within 3 s, captures that real MNDP announcement, decodes it with centrs's codec, cross-checks
+announcements its own setup triggered to drain, injects exactly one refresh,
+and requires a reply within 3 s. On 7.16+ it first sets
+`discover-interval=10m` so no periodic announcement can land in that window;
+older senders announce every 60 s with no setting, so it injects right after
+a periodic announcement instead. It then decodes that real announcement with
+centrs's codec, cross-checks
 `identity`/`platform`/`board`/`version`/`mac` against REST, checks the #668
 wire map (`ipv6Enabled` against `/ipv6/settings`, `running` on 7.20+,
 `ttlSeconds` against `discover-interval` on 7.24+, the raw `headerHex`;

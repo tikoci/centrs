@@ -39,6 +39,7 @@ import { discover } from "../../src/discover.ts";
 import { parseCommentKv } from "../../src/resolver/comment-kv.ts";
 import {
 	isChrIntegrationEnabled,
+	MNDP_DISCOVER_INTERVAL_SINCE,
 	MNDP_RUNNING_TLV_SINCE,
 	MNDP_TTL_TLV_SINCE,
 	recordIntegrationEvidence,
@@ -55,6 +56,8 @@ const IDENTITY = "centrs-mndp";
 const REFRESH_REPLY_WINDOW_MS = 3_000;
 /** The listener counts as quiet after this long with no forwarded datagram. */
 const QUIET_SPELL_MS = 3_000;
+/** Fixed periodic interval before `discover-interval` existed (pre-7.16). */
+const LEGACY_ANNOUNCE_INTERVAL_MS = 60_000;
 
 /** Seconds in a RouterOS duration such as `30s`, `10m` or `1h30m`. */
 function routerOsDurationSeconds(text: string): number | undefined {
@@ -113,10 +116,15 @@ describeFast("discover over MNDP against CHR (socket-connect L2)", () => {
 			expect(await chr.waitForBoot(180_000)).toBe(true);
 
 			// Make discovery deterministic: a known identity + MNDP on every NIC.
-			// Where TLV 19 exists (7.24+), discover-interval does too: stretch it
-			// so no periodic announcement can land in the refresh window below.
+			// Where discover-interval exists (7.16+), stretch it so no periodic
+			// announcement can land in the refresh window below. Older senders
+			// announce every 60 s with no setting; the watcher phase-aligns
+			// to that period instead.
 			const routerOs = chr.state.version;
-			const stretchInterval = routerOsAtLeast(routerOs, MNDP_TTL_TLV_SINCE);
+			const stretchInterval = routerOsAtLeast(
+				routerOs,
+				MNDP_DISCOVER_INTERVAL_SINCE,
+			);
 			await chr.exec(`/system/identity/set name=${IDENTITY}`);
 			await chr.exec(
 				`/ip/neighbor/discovery-settings/set discover-interface-list=all${
@@ -131,7 +139,7 @@ describeFast("discover over MNDP against CHR (socket-connect L2)", () => {
 			const discoverPromise = discover({
 				host: "127.0.0.1",
 				port: 0,
-				timeoutMs: 40_000,
+				timeoutMs: stretchInterval ? 40_000 : 120_000,
 				sendRefresh: false,
 				save: true,
 				cdbFile: cdbPath,
@@ -153,6 +161,20 @@ describeFast("discover over MNDP against CHR (socket-connect L2)", () => {
 					if (now !== seen) {
 						seen = now;
 						quietSince = Date.now();
+					}
+				}
+				if (!stretchInterval) {
+					// A quiet spell says nothing about where the next periodic
+					// announcement falls. Wait for one, then inject at once: the
+					// following periodic one is ~60 s away, far outside the window.
+					const periodic = bridge.stats().forwarded;
+					const periodicDeadline =
+						Date.now() + LEGACY_ANNOUNCE_INTERVAL_MS + 10_000;
+					while (
+						bridge.stats().forwarded === periodic &&
+						Date.now() < periodicDeadline
+					) {
+						await Bun.sleep(50);
 					}
 				}
 				const before = bridge.stats().forwarded;
@@ -216,7 +238,7 @@ describeFast("discover over MNDP against CHR (socket-connect L2)", () => {
 			// the running bitmask (7.20+), TLV 19 the TTL (7.24+). The header is
 			// kept raw: a u32 counter in the sender's byte order. TLV 14 tracks
 			// disable-ipv6 only on newer senders (7.17 always sends 01; 7.18–7.20
-			// only after a reboot), so this holds on the default config, which
+			// latch a disable until reboot), so this holds on the default config, which
 			// never toggles it.
 			const ipv6Settings = asRecord(await chr.rest("/ipv6/settings"));
 			expect(match.ipv6Enabled).toBe(ipv6Settings["disable-ipv6"] !== "true");

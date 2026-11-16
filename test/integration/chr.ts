@@ -271,6 +271,12 @@ export const CMR_SINCE = "7.26beta1";
  * gasp). Both are bracketed boundaries: 7.24beta2–7.24.4 were not captured.
  */
 export const MNDP_RUNNING_TLV_SINCE = "7.20";
+/**
+ * `/ip/neighbor/discovery-settings discover-interval` exists from 7.16
+ * (changelog 7.16: "added discover-interval setting", default 30 s; the period
+ * was a fixed 60 s before). Changelog-grounded, not booted on both sides.
+ */
+export const MNDP_DISCOVER_INTERVAL_SINCE = "7.16";
 export const MNDP_TTL_TLV_SINCE = "7.24";
 
 /**
