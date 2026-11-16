@@ -14,7 +14,10 @@
  * centrs runs with `sendRefresh: false`: its own UDP broadcast cannot reach the
  * guest through the bridge, so the bridge performs the L2 refresh injection (the
  * same write-back primitive MAC-Telnet will reuse). centrs's refresh-send path
- * stays covered by the loopback unit test.
+ * stays covered by the loopback unit test. The test injects exactly one
+ * {@link mndpRefreshPacket} after the listener goes quiet and asserts that
+ * RouterOS answers it, so it proves the refresh bytes work rather than passing
+ * on a triggered or periodic announcement (tikoci/m2ir#5).
  *
  * Covers examples 1 (passive discover + neighbor fields), 2 (scan packet-count
  * meta), and 4 (`--save` into a CDB) from `commands/discover/examples.md` on
@@ -48,6 +51,26 @@ const describeFast = isChrIntegrationEnabled() ? describe : describe.skip;
 
 const IDENTITY = "centrs-mndp";
 
+/** m2ir#5 saw replies 21 ms to 1.96 s after a request on 7.x. */
+const REFRESH_REPLY_WINDOW_MS = 3_000;
+/** The listener counts as quiet after this long with no forwarded datagram. */
+const QUIET_SPELL_MS = 3_000;
+
+/** Seconds in a RouterOS duration such as `30s`, `10m` or `1h30m`. */
+function routerOsDurationSeconds(text: string): number | undefined {
+	const match =
+		/^(?:(\d+)w)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/.exec(text);
+	if (!match || text === "") return undefined;
+	const [, w, d, h, m, sec] = match.map((part) => Number(part ?? 0));
+	return (
+		(w ?? 0) * 604_800 +
+		(d ?? 0) * 86_400 +
+		(h ?? 0) * 3_600 +
+		(m ?? 0) * 60 +
+		(sec ?? 0)
+	);
+}
+
 function asRecord(value: unknown): Record<string, string> {
 	return (value ?? {}) as Record<string, string>;
 }
@@ -74,11 +97,10 @@ describeFast("discover over MNDP against CHR (socket-connect L2)", () => {
 			]),
 		);
 
-		// Host TCP server first — QEMU is the connecting side. Inject a refresh
-		// every 4s so RouterOS replies within a round-trip.
+		// Host TCP server first — QEMU is the connecting side. No auto-refresh:
+		// the test injects one refresh itself and checks RouterOS answers it.
 		const bridge = await startMndpL2Bridge({
 			refreshPayload: mndpRefreshPacket(),
-			autoRefreshMs: 4_000,
 		});
 
 		let chr: Awaited<ReturnType<typeof startIntegrationChr>>["chr"] | undefined;
@@ -91,14 +113,20 @@ describeFast("discover over MNDP against CHR (socket-connect L2)", () => {
 			expect(await chr.waitForBoot(180_000)).toBe(true);
 
 			// Make discovery deterministic: a known identity + MNDP on every NIC.
+			// Where TLV 19 exists (7.24+), discover-interval does too: stretch it
+			// so no periodic announcement can land in the refresh window below.
+			const routerOs = chr.state.version;
+			const stretchInterval = routerOsAtLeast(routerOs, MNDP_TTL_TLV_SINCE);
 			await chr.exec(`/system/identity/set name=${IDENTITY}`);
 			await chr.exec(
-				"/ip/neighbor/discovery-settings/set discover-interface-list=all",
+				`/ip/neighbor/discovery-settings/set discover-interface-list=all${
+					stretchInterval ? " discover-interval=10m" : ""
+				}`,
 			);
 
-			// Run centrs's real discover() against the bridged UDP feed. Abort the
-			// listen shortly after the first real announcement is forwarded so the
-			// test does not burn the whole timeout window.
+			// Run centrs's real discover() against the bridged UDP feed. Once the
+			// announcements triggered by the settings above have drained, inject
+			// one refresh, wait for its reply, then abort the listen.
 			const controller = new AbortController();
 			const discoverPromise = discover({
 				host: "127.0.0.1",
@@ -111,19 +139,43 @@ describeFast("discover over MNDP against CHR (socket-connect L2)", () => {
 				signal: controller.signal,
 				onBound: (port) => bridge.setUdpTarget(port, "127.0.0.1"),
 			});
+			let refreshReplyMs: number | undefined;
 			const watcher = (async () => {
-				const deadline = Date.now() + 38_000;
-				while (Date.now() < deadline) {
-					if (bridge.stats().forwarded > 0) {
-						await Bun.sleep(750); // let the datagram land + decode
-						controller.abort();
-						return;
-					}
+				const settleDeadline = Date.now() + 20_000;
+				let seen = bridge.stats().forwarded;
+				let quietSince = Date.now();
+				while (
+					Date.now() - quietSince < QUIET_SPELL_MS &&
+					Date.now() < settleDeadline
+				) {
 					await Bun.sleep(250);
+					const now = bridge.stats().forwarded;
+					if (now !== seen) {
+						seen = now;
+						quietSince = Date.now();
+					}
 				}
+				const before = bridge.stats().forwarded;
+				const sentAt = Date.now();
+				bridge.injectRefresh();
+				while (Date.now() - sentAt < REFRESH_REPLY_WINDOW_MS) {
+					if (bridge.stats().forwarded > before) {
+						refreshReplyMs = Date.now() - sentAt;
+						break;
+					}
+					await Bun.sleep(50);
+				}
+				await Bun.sleep(750); // let the datagram land + decode
+				controller.abort();
 			})();
 			const envelope = await discoverPromise;
 			await watcher;
+
+			expect(bridge.stats().connected).toBe(true);
+			expect(
+				refreshReplyMs,
+				`no announcement within ${REFRESH_REPLY_WINDOW_MS} ms of the injected refresh`,
+			).toBeDefined();
 
 			expect(envelope.ok).toBe(true);
 			if (!envelope.ok) return;
@@ -162,8 +214,10 @@ describeFast("discover over MNDP against CHR (socket-connect L2)", () => {
 
 			// Grounded wire map (#668): TLV 14 is the IPv6-enabled flag, TLV 18
 			// the running bitmask (7.20+), TLV 19 the TTL (7.24+). The header is
-			// kept raw: a u32 counter in the sender's byte order.
-			const routerOs = chr.state.version;
+			// kept raw: a u32 counter in the sender's byte order. TLV 14 tracks
+			// disable-ipv6 only on newer senders (7.17 always sends 01; 7.18–7.20
+			// only after a reboot), so this holds on the default config, which
+			// never toggles it.
 			const ipv6Settings = asRecord(await chr.rest("/ipv6/settings"));
 			expect(match.ipv6Enabled).toBe(ipv6Settings["disable-ipv6"] !== "true");
 			if (routerOsAtLeast(routerOs, MNDP_RUNNING_TLV_SINCE)) {
@@ -173,14 +227,11 @@ describeFast("discover over MNDP against CHR (socket-connect L2)", () => {
 				const discovery = asRecord(
 					await chr.rest("/ip/neighbor/discovery-settings"),
 				);
-				const interval = /^(\d+)s$/.exec(discovery["discover-interval"] ?? "");
-				if (interval) {
-					expect(match.ttlSeconds).toBe(
-						Math.min(Number(interval[1]) * 4 + 1, 255),
-					);
-				} else {
-					expect(match.ttlSeconds ?? 0).toBeGreaterThan(0);
-				}
+				const interval = routerOsDurationSeconds(
+					discovery["discover-interval"] ?? "",
+				);
+				expect(interval, "discover-interval").toBeDefined();
+				expect(match.ttlSeconds).toBe(Math.min((interval ?? 0) * 4 + 1, 255));
 			}
 			expect(match.headerHex).toMatch(/^[0-9a-f]{8}$/);
 

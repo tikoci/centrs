@@ -65,11 +65,18 @@ publish `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
   the raw `headerHex`. Type 13 is no longer read
   as a fallback board; it lands in `unknownTlvs`. The neighbor cache expires
   entries at the advertised TTL and drops them on a dying gasp (TTL 0).
+  Type 6 is the request flag (`request`).
   **Consumers** reading `sequence`, `ipv6` or the numeric `unpack` from the
   `discover` envelope or `MndpNeighbor` must move to the new fields.
 
 ### Fixed
 
+- `discover`'s refresh request gets a reply again. The 9-zero-byte refresh
+  ended with a trailing byte, and RouterOS drops a datagram whose TLVs do not
+  end exactly at its end, so no router answered it; `discover` only saw
+  periodic announcements. `mndpRefreshPacket()` now sends header `00000000`
+  plus an empty TLV 6 (8 bytes), which 6.49.23–7.26beta5 all answer within
+  ~2 s (tikoci/m2ir#5, #668).
 - `execute --via ssh` runs a multi-line script as one unit. RouterOS ended
   the SSH exec prompt at every LF, so each line ran on its own: menu context
   and `:local` values were lost, and a later line could exit 0 after an

@@ -12,8 +12,11 @@
  * The wire map below comes from the tikoci/m2ir MNDP grounding lab
  * (`work/2026-11-mndp-grounding/FINDINGS.md`, tikoci/m2ir#4): CHR labs on
  * 6.49.23, 7.24.6, 7.25 and 7.26beta5 changing one setting per step, plus a
- * field capture of 6.49–7.26beta5 on ARM, ARM64 and MIPSBE. The unit tests
- * lift that lab's captured payloads verbatim as fixtures.
+ * field capture of 6.49–7.26beta5 on ARM, ARM64 and MIPSBE. The follow-up
+ * "hub lab" (tikoci/m2ir#5) put 6.49.23, 7.17.2, 7.18.2, 7.20.8 and 7.26beta5
+ * on one segment to ground requests, TLV 14 by version, and the TLV 18
+ * bitmask. The unit tests lift the lab's captured payloads verbatim as
+ * fixtures.
  *
  * ## Packet layout
  *
@@ -25,7 +28,8 @@
  *   tells the two readings apart, so the codec keeps the raw bytes
  *   ({@link MndpNeighbor.headerHex}) and does not decode a counter. A caller
  *   that knows the sender's CPU can read it; the lab confirmed the order by
- *   checking that uptime ÷ counter ≈ discover-interval.
+ *   checking that uptime ÷ counter ≈ discover-interval. A header of
+ *   `00000000` also marks a request (see Requests below).
  * - **TLVs** follow at offset 4: `type` (`u16` big-endian), `length` (`u16`
  *   big-endian), then `length` value bytes. TLV order changes between
  *   RouterOS versions (7.24 moves 17/15 after 18/19 and puts 2–4/9 right
@@ -38,20 +42,22 @@
  * | 1 | `macAddress` | 6 bytes |
  * | 2, 3, 4 | `unpack` | Empty flags: 2 = `simple`, 2+3 = `uncompress-headers`, 2+3+4 = `uncompress-all`. Sent only when the sender's `/ip/packing` `unpacking` is not `none` |
  * | 5 | `identity` | UTF-8 |
+ * | 6 | `request` | Empty flag: the packet is a refresh request (see Requests). Never in an announcement |
  * | 7 | `version` | Text; format varies by version (see {@link MndpNeighbor.version}) |
  * | 8 | `platform` | Text: `MikroTik`, or the branding package's name |
  * | 9 | `aggregatedSize` | `/ip/packing` `aggregated-size`, `u32` little-endian (seen on x86; unverified on big-endian CPUs). Sent with TLV 2 |
  * | 10 | `uptimeSeconds` | `u32` little-endian, also on MIPSBE |
  * | 11 | `softwareId` | Text |
  * | 12 | `board` | Text, the short board id (`CHR`, `RB1100Dx4`) |
- * | 14 | `ipv6Enabled` | 1 byte: `01` IPv6 enabled, `00` disabled (`/ipv6/settings disable-ipv6`) |
+ * | 14 | `ipv6Enabled` | 1 byte, `01`/`00`; its meaning depends on the sender's version (see {@link MndpNeighbor.ipv6Enabled}) |
  * | 15 | `ipv6Addresses` | 16 bytes; **repeats** once per IPv6 address on the interface (global first, then link-local) |
  * | 16 | `interfaceName` | Text; `bridge/port` for a bridge port |
  * | 17 | `ipv4` | 4 bytes, network order |
- * | 18 | `running` | `u8` bitmask (7.20+): `01` CAPsMAN, `02` CMR controller; combined bits unobserved |
+ * | 18 | `running` | `u8` bitmask (7.20+): `01` CAPsMAN, `02` CMR controller, `03` both, `00` neither |
  * | 19 | `ttlSeconds` | `u8` (7.24+): `min(discover-interval × 4 + 1, 255)`; `00` is a dying gasp |
  *
- * Types 6, 13 and anything above 19 have appeared in no capture. Every TLV
+ * Type 6 appears only in requests; 13 and anything above 19 have appeared in
+ * no capture. Every TLV
  * type the codec does not interpret — and any known type whose value has an
  * unexpected length — is preserved verbatim in
  * {@link MndpNeighbor.unknownTlvs} and never causes a throw. Only a
@@ -65,6 +71,21 @@
  * listens on both should treat (MAC, header) as one announcement. A **dying
  * gasp** (7.24+, `dying-gasp=yes`) is a short announcement sent before a
  * graceful reboot or shutdown: header, then TLVs 1, 19 = `00`, 17, 15.
+ *
+ * ## Requests
+ *
+ * A packet is a refresh request when its header is `00000000` **or** it
+ * carries TLV 6. RouterOS drops a datagram whole when its TLVs do not end
+ * exactly at the end of the datagram, so a trailing byte (the old 9-zero-byte
+ * form) gets no reply. {@link mndpRefreshPacket} sends header `00000000` plus
+ * an empty TLV 6: every tested version (6.49.23–7.26beta5) answers it, and it
+ * does not add the requester to their neighbor tables (a bare `00000000` does
+ * on 7.x, with an empty identity). The reply is an ordinary announcement,
+ * broadcast from port 5678 to `255.255.255.255:5678` and `ff02::1:5678` 21 ms
+ * to ~2 s later, even when the request was unicast or sent over IPv6, so a
+ * requester must listen on 5678. On 7.x a burst of requests gets one reply.
+ * The first announcement after boot has header `00000000` (IPv4 copy only),
+ * so it doubles as a request; it carries a MAC and decodes as a neighbor.
  */
 
 import { CentrsError } from "../errors.ts";
@@ -81,6 +102,7 @@ export const mndpTlvType = {
 	unpackHeaders: 3,
 	unpackAll: 4,
 	identity: 5,
+	request: 6,
 	version: 7,
 	platform: 8,
 	aggregatedSize: 9,
@@ -95,7 +117,11 @@ export const mndpTlvType = {
 	ttl: 19,
 } as const;
 
-/** Bits of the TLV 18 `running` bitmask (7.20+). Combined bits are unobserved. */
+/**
+ * Bits of the TLV 18 `running` bitmask (7.20+). RouterOS prints them as
+ * `running=capsman`, `running=cmr` and `running=capsman,cmr` (`03`), and
+ * omits the field for `00`.
+ */
 export const mndpRunningBit = {
 	/** `/interface/wifi/capsman` is enabled. */
 	capsman: 0x01,
@@ -135,6 +161,11 @@ export interface MndpNeighbor {
 	/** TLV 5: identity; shared across all interfaces of one device. */
 	identity?: string;
 	/**
+	 * TLV 6: `true` when the packet is a refresh request. A request carries no
+	 * MAC, so the `discover` listener never caches one.
+	 */
+	request?: boolean;
+	/**
 	 * TLV 7: RouterOS version text. The format changes by version: 6.x
 	 * `6.49.21 (long-term)`, 7.6–7.13 `7.12.1 (stable) Nov/17/2023 11:38:45`,
 	 * 7.14–7.24 `7.24.6 (long-term) 2026-10-30 08:24:29`, and 7.25+
@@ -151,7 +182,15 @@ export interface MndpNeighbor {
 	softwareId?: string;
 	/** TLV 12: short board id, e.g. `RB4011iGS+5HacQ2HnD` or `CHR`. */
 	board?: string;
-	/** TLV 14: whether IPv6 is enabled (`/ipv6/settings disable-ipv6=no`). */
+	/**
+	 * TLV 14: `true` = IPv6 enabled. What that tracks depends on the sender's
+	 * version: before 7.18 it means IPv6 is present (6.x: the `ipv6` package
+	 * is enabled; 7.17 always sends `01`), not the setting; on 7.18–7.20 it
+	 * reflects `/ipv6/settings disable-ipv6` only as of the sender's last boot;
+	 * 7.26beta5 follows the setting at once. The live-update boundary is
+	 * probably 7.21 ("fixed MNDP IPv6 status reporting"); 7.21–7.25 were not
+	 * tested.
+	 */
 	ipv6Enabled?: boolean;
 	/**
 	 * TLV 15, repeated: the sending interface's IPv6 addresses in arrival
@@ -167,8 +206,8 @@ export interface MndpNeighbor {
 	/**
 	 * TLV 19 (7.24+): seconds a receiver should keep this neighbor,
 	 * `min(discover-interval × 4 + 1, 255)`. `0` is a dying gasp: the sender is
-	 * rebooting or shutting down. RouterOS treats it as a minimum lifetime and
-	 * may keep a silent neighbor up to ~20 s longer.
+	 * rebooting or shutting down. It is an approximate lifetime: RouterOS
+	 * removed a silent neighbor at about the TTL or up to ~20 s after it.
 	 */
 	ttlSeconds?: number;
 	/** TLV records the codec does not interpret, preserved in arrival order. */
@@ -341,6 +380,12 @@ function applyTlv(
 		case mndpTlvType.identity:
 			neighbor.identity = text();
 			return true;
+		case mndpTlvType.request:
+			if (value.length !== 0) {
+				return false;
+			}
+			neighbor.request = true;
+			return true;
 		case mndpTlvType.version:
 			neighbor.version = text();
 			return true;
@@ -497,8 +542,9 @@ const UNPACK_FLAG_TYPES: Record<MndpUnpack, readonly number[]> = {
 /**
  * Encode a {@link MndpNeighbor} (plus any extra raw TLVs) back into a wire
  * packet. Primarily a round-trip aid for tests and for crafting fixtures. The
- * header is `headerHex` (default all zeros); TLVs follow the 7.24.5+ order
- * except that IPv6 addresses are not encoded (pass TLV 15 in `extraTlvs`).
+ * header is `headerHex` (default all zeros); TLVs follow the 7.24.5+ order,
+ * led by TLV 6 when `request` is set, except that IPv6 addresses are not
+ * encoded (pass TLV 15 in `extraTlvs`).
  */
 export function encodeMndpPacket(
 	neighbor: Partial<MndpNeighbor>,
@@ -508,6 +554,9 @@ export function encodeMndpPacket(
 	const push = (type: number, value: Uint8Array): void => {
 		tlvs.push({ type, value });
 	};
+	if (neighbor.request === true) {
+		push(mndpTlvType.request, new Uint8Array(0));
+	}
 	if (neighbor.macAddress !== undefined) {
 		push(mndpTlvType.macAddress, macToBytes(neighbor.macAddress));
 	}
@@ -578,13 +627,15 @@ export function encodeMndpPacket(
 }
 
 /**
- * MNDP discovery request that prompts immediate replies. The reply trigger is
- * the leading zeroed 4-byte header (the same minimal form MAC-Telnet sends);
- * RouterOS accepts longer forms too, so this emits the 9-byte all-zero variant.
- * See the `routeros-mndp` skill "Refresh Packet" section.
+ * MNDP refresh request: header `00000000` plus an empty TLV 6, and no
+ * trailing bytes, since RouterOS drops a datagram whose TLVs do not end
+ * exactly at its end. Every RouterOS version from 6.49.23 to 7.26beta5
+ * answers it with a broadcast announcement to port 5678, and it does not add
+ * the requester to their neighbor tables. See the module doc's Requests
+ * section (tikoci/m2ir#5).
  */
 export function mndpRefreshPacket(): Uint8Array {
-	return new Uint8Array(9);
+	return Uint8Array.of(0, 0, 0, 0, 0, mndpTlvType.request, 0, 0);
 }
 
 /**

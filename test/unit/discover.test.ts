@@ -2,7 +2,11 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { createSocket, Socket } from "node:dgram";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { encodeMndpPacket, type MndpNeighbor } from "../../src/data/mndp.ts";
+import {
+	encodeMndpPacket,
+	type MndpNeighbor,
+	mndpRefreshPacket,
+} from "../../src/data/mndp.ts";
 import { MndpCache } from "../../src/data/mndp-cache.ts";
 import {
 	buildWinBoxCdbEntryRecord,
@@ -146,7 +150,9 @@ describe.skipIf(!MNDP_LOOPBACK)("listenMndp (loopback)", () => {
 			sendRefresh: false,
 			onBound: (port) => {
 				const sender = createSocket("udp4");
-				sender.send(new Uint8Array(9), port, "127.0.0.1", () => sender.close());
+				sender.send(mndpRefreshPacket(), port, "127.0.0.1", () =>
+					sender.close(),
+				);
 			},
 		});
 		expect(result.packetsReceived).toBe(1);

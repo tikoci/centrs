@@ -36,15 +36,24 @@ centrs discover [--timeout 15s] [--save] [--group discovered] \
 MNDP is UDP broadcast on port `5678`; each RouterOS interface answers a refresh
 with a TLV-encoded announcement (MAC, identity, version, platform, board,
 uptime, software-id, interface, IPv4/IPv6 addresses, IPv6-enabled, packing,
-running services, TTL). The wire map is grounded in the tikoci/m2ir MNDP lab
-(tikoci/m2ir#4) and documented TLV by TLV in `src/data/mndp.ts`. `discover`:
+running services, TTL). The wire map is grounded in the tikoci/m2ir MNDP labs
+(tikoci/m2ir#4, #5) and documented TLV by TLV in `src/data/mndp.ts`. `discover`:
 
 1. Binds a UDP socket (default `0.0.0.0:5678`) with address/port reuse so
    it can coexist with other MNDP listeners when the platform permits it.
-2. Broadcasts a refresh request **immediately**, then every 5s, and listens for
-   the `--timeout` window. Sending the first refresh up front (rather than after
-   the initial 5s tick) is what makes a short default window viable: responders
-   reply within a round-trip instead of waiting for their own ~60s passive cycle.
+   Binding 5678 is required, not a default of convenience: RouterOS answers a
+   request with an ordinary announcement broadcast to port 5678, never to the
+   requester's source port.
+2. Broadcasts a refresh request (header `00000000` plus an empty TLV 6, exactly
+   8 bytes) **immediately**, then every 5s, and listens for the `--timeout`
+   window. RouterOS replies 21 ms to ~2 s later, so sending the first refresh
+   up front (rather than after the initial 5s tick) is what makes a short
+   default window viable: responders do not wait for their own periodic
+   announcement (`discover-interval`, 30s by default). A 7.x router answers a
+   burst of requests once, so during the listen each router announces about
+   every 5s; each reply also advances its header counter. RouterOS drops a
+   request with trailing bytes, which is why the earlier 9-zero-byte refresh
+   got no reply.
 3. Decodes each datagram with the pure codec in `src/data/mndp.ts`, tolerating
    unknown TLV types and ignoring malformed datagrams and its own refresh echo.
 4. Stores neighbors in an in-memory TTL cache keyed by MAC. RouterOS sends each
@@ -89,12 +98,14 @@ writer" holds.
   process-local only — the CDB stays the single durable datastore.
 - **TTL:** an entry expires the sender's advertised TLV 19 TTL after it was
   last seen (7.24+: `min(discover-interval × 4 + 1, 255)` seconds). A sender
-  that advertises no TTL gets `180s` (three ~60s announce cycles), which
-  tolerates a couple of dropped broadcasts. A TTL of `0` is a dying gasp sent
+  that advertises no TTL gets `180s` (three of the older 60s announce cycles,
+  six of the 30s default since 7.16), which tolerates a couple of dropped
+  broadcasts. A TTL of `0` is a dying gasp sent
   before a graceful reboot or shutdown; it removes the entry at once rather
   than replacing the full announcement with its four-TLV packet. RouterOS's own
-  `/ip/neighbor` treats the TTL as a minimum and may keep a silent neighbor up
-  to ~20 s longer, so the two tables can briefly disagree. Re-observing a
+  `/ip/neighbor` treats the TTL as approximate: it removed a silent neighbor at
+  about the TTL or up to ~20 s after it, so the two tables can briefly
+  disagree. Re-observing a
   neighbor refreshes `lastSeenAt` and keeps `firstSeenAt`. The clock is
   injectable for deterministic tests.
 
@@ -164,8 +175,10 @@ Linux/CI). Grounding: quickchr `docs/mndp.md`, `examples/mndp/`,
 `test/lab/mndp/REPORT.md`.
 
 `test/integration/discover.test.ts` exercises this end to end on RouterOS CHR
-7.23.1: it boots `["user", { type: "socket-connect", port }]`, captures a real
-MNDP announcement, decodes it with centrs's codec, cross-checks
+7.23.1: it boots `["user", { type: "socket-connect", port }]`, waits for the
+announcements its own setup triggered to drain (on 7.24+ it also sets
+`discover-interval=10m` so no periodic one interferes), injects exactly one
+refresh and requires a reply within 3 s, captures that real MNDP announcement, decodes it with centrs's codec, cross-checks
 `identity`/`platform`/`board`/`version`/`mac` against REST, checks the #668
 wire map (`ipv6Enabled` against `/ipv6/settings`, `running` on 7.20+,
 `ttlSeconds` against `discover-interval` on 7.24+, the raw `headerHex`;

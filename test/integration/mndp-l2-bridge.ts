@@ -25,6 +25,7 @@
 
 import { createSocket, type Socket as UdpSocket } from "node:dgram";
 import net from "node:net";
+import { mndpRefreshPacket } from "../../src/data/mndp.ts";
 
 const MNDP_PORT = 5678;
 /** QEMU's legacy `-netdev socket` stream caps a frame well under this. */
@@ -104,7 +105,7 @@ export interface MndpL2Bridge {
 }
 
 export interface MndpL2BridgeOptions {
-	/** MNDP refresh payload to inject (defaults to the 9-byte zero refresh). */
+	/** MNDP refresh payload to inject (defaults to {@link mndpRefreshPacket}). */
 	refreshPayload?: Uint8Array;
 	/** Auto-inject a refresh every N ms while connected. `0` disables. */
 	autoRefreshMs?: number;
@@ -120,7 +121,7 @@ export interface MndpL2BridgeOptions {
 export async function startMndpL2Bridge(
 	options: MndpL2BridgeOptions = {},
 ): Promise<MndpL2Bridge> {
-	const refreshPayload = options.refreshPayload ?? new Uint8Array(9);
+	const refreshPayload = options.refreshPayload ?? mndpRefreshPacket();
 	const autoRefreshMs = options.autoRefreshMs ?? 0;
 
 	let conn: net.Socket | undefined;

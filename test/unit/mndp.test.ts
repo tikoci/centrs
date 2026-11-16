@@ -289,11 +289,13 @@ describe("parseMndpPacket", () => {
 				header(1),
 				tlv(mndpTlvType.ttl, Uint8Array.from([0, 1])),
 				tlv(mndpTlvType.unpackSimple, Uint8Array.from([1])),
+				tlv(mndpTlvType.request, Uint8Array.from([1])),
 			),
 		);
 		expect(neighbor.ttlSeconds).toBeUndefined();
 		expect(neighbor.unpack).toBeUndefined();
-		expect(neighbor.unknownTlvs.map((item) => item.type)).toEqual([19, 2]);
+		expect(neighbor.request).toBeUndefined();
+		expect(neighbor.unknownTlvs.map((item) => item.type)).toEqual([19, 2, 6]);
 	});
 
 	test("preserves an unknown TLV type without throwing", () => {
@@ -340,10 +342,18 @@ describe("parseMndpPacket", () => {
 		expect((caught as CentrsError).code).toBe("mndp/malformed");
 	});
 
-	test("treats the 9-byte refresh packet as a MAC-less neighbor", () => {
-		const neighbor = parseMndpPacket(mndpRefreshPacket());
-		expect(neighbor.macAddress).toBeUndefined();
-		expect(neighbor.headerHex).toBe("00000000");
+	test("the refresh packet is header 0 plus an empty TLV 6, with no trailing bytes", () => {
+		// m2ir#5: RouterOS drops a request whose TLVs do not end exactly at the
+		// end of the datagram (9 zero bytes: 0 replies in 11 sends).
+		const packet = mndpRefreshPacket();
+		expect(Array.from(packet)).toEqual([0, 0, 0, 0, 0, 6, 0, 0]);
+		const neighbor = parseMndpPacket(packet);
+		expect(neighbor).toEqual({
+			headerHex: "00000000",
+			request: true,
+			unknownTlvs: [],
+		});
+		expect(encodeMndpPacket({ request: true })).toEqual(packet);
 	});
 });
 
@@ -351,6 +361,8 @@ describe("mndpRunningNames", () => {
 	test("names the grounded bits and keeps unknown bits visible", () => {
 		expect(mndpRunningNames(0)).toEqual([]);
 		expect(mndpRunningNames(0x02)).toEqual(["cmr"]);
+		// m2ir#5: `03` prints as `running=capsman,cmr`.
+		expect(mndpRunningNames(0x03)).toEqual(["capsman", "cmr"]);
 		expect(mndpRunningNames(0x07)).toEqual(["capsman", "cmr", "bit2"]);
 	});
 });
