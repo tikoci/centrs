@@ -456,6 +456,10 @@ done or declined. A nit that needs more explanation is an issue.
 - The MAC-Telnet L2 integration files hang now and then on macOS, a different
   one per full run, and pass on a rerun (#659). They passed with no hang on
   Linux (2026-11-12).
+- `discover`: an announcement without TLV 17 (common right after boot) has no
+  `ipv4`; RouterOS takes `address4` from the IP source then (tikoci/m2ir#5),
+  and `discover` could too. Not done in #669: the CHR harness sees source
+  `127.0.0.1`, so it needs a different live proof.
 - `.github/instructions/`: trim Copilot-era verbosity when the TIKOCI-wide
   files are collected in `tikoci.github.io`.
 - `test/integration/api-stream-command.test.ts` fails intermittently in the
