@@ -46,7 +46,8 @@ running services, TTL). The wire map is grounded in the tikoci/m2ir MNDP labs
    requester's source port.
 2. Broadcasts a refresh request (header `00000000` plus an empty TLV 6, exactly
    8 bytes) **immediately**, then every 5s, and listens for the `--timeout`
-   window. RouterOS replies 21 ms to ~2 s later, so sending the first refresh
+   window. Tested routers replied 11 ms to 1.96 s later (an observed range,
+   not a bound), so sending the first refresh
    up front (rather than after the initial 5s tick) is what makes a short
    default window viable: responders do not wait for their own periodic
    announcement (`discover-interval`, 30s by default). A 7.x router answers a
@@ -56,13 +57,13 @@ running services, TTL). The wire map is grounded in the tikoci/m2ir MNDP labs
    got no reply.
 3. Decodes each datagram with the pure codec in `src/data/mndp.ts`, tolerating
    unknown TLV types and ignoring malformed datagrams (including trailing
-   bytes that are not a whole TLV, which RouterOS drops too) and its own
-   refresh echo.
+   bytes that are not a whole TLV, which RouterOS drops too), its own refresh
+   echo, and any request (TLV 6), even one that carries a MAC.
 4. Stores neighbors in an in-memory TTL cache keyed by MAC. RouterOS sends
    every announcement as an IPv4 broadcast and most also as an IPv6 `ff02::1`
-   multicast with the same payload. The IPv6 copy is missing for the first
-   announcements after boot and while IPv6 is disabled, so the listener binds
-   IPv4 only and sees one copy of each announcement.
+   multicast with the same payload. The IPv6 copy was missing for 0 to 2
+   announcements after some boots and for every one while IPv6 was disabled,
+   so the listener binds IPv4 only and sees one copy of each announcement.
 5. Returns a canonical envelope whose `data.neighbors` is sorted by MAC.
 
 The codec is pure and the socket layer is thin and injectable, so both are

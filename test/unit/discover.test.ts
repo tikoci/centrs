@@ -162,6 +162,40 @@ describe.skipIf(!MNDP_LOOPBACK)("listenMndp (loopback)", () => {
 		expect(result.warnings).toHaveLength(0);
 	});
 
+	test("ignores a request that carries a MAC but still decodes a boot announcement", async () => {
+		const result = await listenMndp({
+			host: "127.0.0.1",
+			port: 0,
+			timeoutMs: 300,
+			sendRefresh: false,
+			onBound: (port) => {
+				const sender = createSocket("udp4");
+				// Another scanner's request: TLV 6 plus a MAC and identity.
+				const request = encodeMndpPacket({
+					request: true,
+					macAddress: "02:00:00:00:00:01",
+					identity: "scanner",
+				});
+				// A boot announcement: header 0, a MAC, no TLV 6.
+				const boot = encodeMndpPacket({
+					headerHex: "00000000",
+					macAddress: "02:00:00:00:00:02",
+					identity: "r1",
+				});
+				sender.send(request, port, "127.0.0.1", () => {
+					sender.send(boot, port, "127.0.0.1", () => sender.close());
+				});
+			},
+		});
+		expect(result.packetsReceived).toBe(2);
+		expect(result.packetsRejected).toBe(1);
+		expect(result.packetsDecoded).toBe(1);
+		expect(
+			result.cache.entries().map((entry) => entry.neighbor.macAddress),
+		).toEqual(["02:00:00:00:00:02"]);
+		expect(result.warnings).toHaveLength(0);
+	});
+
 	test("surfaces a malformed datagram as an aggregated mndp/malformed warning", async () => {
 		const result = await listenMndp({
 			host: "127.0.0.1",

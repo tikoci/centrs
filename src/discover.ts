@@ -249,8 +249,11 @@ export function listenMndp(
 			packetsReceived += 1;
 			try {
 				const neighbor = parseMndpPacket(new Uint8Array(message));
-				if (!neighbor.macAddress) {
-					// Self-echo of our own refresh, or a MAC-less announcement.
+				if (!neighbor.macAddress || neighbor.request === true) {
+					// Self-echo of our own refresh, another scanner's request
+					// (TLV 6, even one carrying a MAC: RouterOS does not learn a
+					// neighbor from it either), or a MAC-less announcement. A boot
+					// announcement (header 0, no TLV 6) still decodes.
 					packetsRejected += 1;
 					return;
 				}

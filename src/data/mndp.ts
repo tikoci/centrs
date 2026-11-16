@@ -84,12 +84,16 @@
  * carries TLV 6. RouterOS drops a datagram whole when its TLVs do not end
  * exactly at the end of the datagram, so a trailing byte (the old 9-zero-byte
  * form) gets no reply. {@link mndpRefreshPacket} sends header `00000000` plus
- * an empty TLV 6: every tested version (6.49.23–7.26beta5) answers it, and it
- * does not add the requester to their neighbor tables (a bare `00000000` does
- * on 7.x, with an empty identity). The reply is an ordinary announcement,
- * broadcast from port 5678 to `255.255.255.255:5678` and `ff02::1:5678` 21 ms
- * to ~2 s later, even when the request was unicast or sent over IPv6, so a
- * requester must listen on 5678. On 7.x a burst of requests gets one reply.
+ * an empty TLV 6: every tested version (6.49.23, 7.17.2, 7.18.2, 7.20.8,
+ * 7.26beta5) answered it, and it did not add the requester to the tested 7.x
+ * routers' neighbor tables (6.49.23's was not read; a bare `00000000` does add
+ * it on 7.x, with an empty identity). The reply is an ordinary announcement,
+ * broadcast from port 5678 to `255.255.255.255:5678`, and usually also to
+ * `ff02::1:5678`, even when the request was unicast or sent over IPv6, so a
+ * requester must listen on 5678. Observed delays were 21 ms–1.96 s on 7.x and
+ * 11 ms–1.87 s on 6.49.23; no upper bound was measured. On 7.x a burst of
+ * requests gets one reply. The `discover` listener ignores any packet with
+ * TLV 6, even one that carries a MAC, as RouterOS does.
  * The first announcement after boot has header `00000000`, so it doubles as
  * a request; it carries a MAC and decodes as a neighbor. It goes out 2–18 s
  * into uptime, so TLVs 15 and 17 are often missing, and it was IPv4 only in
@@ -169,8 +173,8 @@ export interface MndpNeighbor {
 	/** TLV 5: identity; shared across all interfaces of one device. */
 	identity?: string;
 	/**
-	 * TLV 6: `true` when the packet is a refresh request. A request carries no
-	 * MAC, so the `discover` listener never caches one.
+	 * TLV 6: `true` when the packet is a refresh request. The `discover`
+	 * listener never caches one, even when it carries a MAC.
 	 */
 	request?: boolean;
 	/**
@@ -646,9 +650,10 @@ export function encodeMndpPacket(
 /**
  * MNDP refresh request: header `00000000` plus an empty TLV 6, and no
  * trailing bytes, since RouterOS drops a datagram whose TLVs do not end
- * exactly at its end. Every RouterOS version from 6.49.23 to 7.26beta5
- * answers it with a broadcast announcement to port 5678, and it does not add
- * the requester to their neighbor tables. See the module doc's Requests
+ * exactly at its end. Every tested RouterOS version (6.49.23–7.26beta5)
+ * answered it with a broadcast announcement to port 5678, and the tested 7.x
+ * routers did not add the requester to their neighbor tables. See the module
+ * doc's Requests
  * section (tikoci/m2ir#5).
  */
 export function mndpRefreshPacket(): Uint8Array {

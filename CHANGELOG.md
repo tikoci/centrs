@@ -75,8 +75,10 @@ publish `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
   ended with a trailing byte, and RouterOS drops a datagram whose TLVs do not
   end exactly at its end, so no router answered it; `discover` only saw
   periodic announcements. `mndpRefreshPacket()` now sends header `00000000`
-  plus an empty TLV 6 (8 bytes), which 6.49.23–7.26beta5 all answer within
-  ~2 s (tikoci/m2ir#5, #668).
+  plus an empty TLV 6 (8 bytes). Every tested version from 6.49.23 to
+  7.26beta5 answered it, within 2 s in the lab (tikoci/m2ir#5, #668).
+  `discover` now ignores any packet carrying TLV 6, so another scanner's
+  request is never listed as a neighbor.
 - `execute --via ssh` runs a multi-line script as one unit. RouterOS ended
   the SSH exec prompt at every LF, so each line ran on its own: menu context
   and `:local` values were lost, and a later line could exit 0 after an

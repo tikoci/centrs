@@ -2,7 +2,7 @@
  * In-memory MNDP neighbor cache with a TTL/expiry policy.
  *
  * MNDP devices announce themselves every `discover-interval` (30s by default
- * since 7.16, 60s before) and reply within ~2s to a refresh, so the natural shape is a short-lived cache keyed by
+ * since 7.16, 60s before) and reply to a refresh within about 2s (lab-observed), so the natural shape is a short-lived cache keyed by
  * MAC that forgets neighbors which stop announcing. This is a process-local
  * cache only — the CDB remains the single durable datastore (see
  * `docs/CONSTITUTION.md`); nothing here is persisted.
