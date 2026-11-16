@@ -29,7 +29,7 @@ import {
 	mndpRunningNames,
 	parseMndpPacket,
 } from "./data/mndp.ts";
-import { MndpCache, type MndpCacheEntry } from "./data/mndp-cache.ts";
+import { MndpCache } from "./data/mndp-cache.ts";
 import { type WinBoxCdbEntry, winBoxCdbRecordType } from "./data/winbox-cdb.ts";
 import type { WriteWinBoxCdbOptions } from "./data/winbox-cdb-write.ts";
 import {
@@ -245,14 +245,10 @@ export function listenMndp(
 		};
 
 		socket.on("error", fail);
-		socket.on("message", (message: Buffer, remote: { address: string }) => {
+		socket.on("message", (message: Buffer) => {
 			packetsReceived += 1;
 			try {
-				const decoded = parseMndpPacket(new Uint8Array(message));
-				const { neighbor, ipv4FromSource } = withSourceIpv4(
-					decoded,
-					remote.address,
-				);
+				const neighbor = parseMndpPacket(new Uint8Array(message));
 				if (!neighbor.macAddress || neighbor.request === true) {
 					// Self-echo of our own refresh, another scanner's request
 					// (TLV 6, even one carrying a MAC: RouterOS does not learn a
@@ -261,7 +257,7 @@ export function listenMndp(
 					packetsRejected += 1;
 					return;
 				}
-				cache.observe(neighbor, undefined, { ipv4FromSource });
+				cache.observe(neighbor);
 				packetsDecoded += 1;
 			} catch {
 				// Malformed datagram on the port; count and ignore (never throw
@@ -317,37 +313,6 @@ export function listenMndp(
 	});
 }
 
-/**
- * Fill a missing TLV 17 from the datagram's IP source, as RouterOS does for
- * `/ip/neighbor` `address4` (tikoci/m2ir#5): an announcement sent before the
- * interface had an IPv4 address (often right after boot) omits TLV 17. Only a
- * unicast-looking IPv4 source is used. `0.0.0.0/8`, loopback (a local relay,
- * such as the CHR test bridge, not the router) and `224.0.0.0` and above
- * are not.
- */
-export function withSourceIpv4(
-	neighbor: MndpNeighbor,
-	sourceAddress: string | undefined,
-): { neighbor: MndpNeighbor; ipv4FromSource: boolean } {
-	if (neighbor.ipv4 !== undefined || sourceAddress === undefined) {
-		return { neighbor, ipv4FromSource: false };
-	}
-	const address = sourceAddress.startsWith("::ffff:")
-		? sourceAddress.slice("::ffff:".length)
-		: sourceAddress;
-	const octets = address.split(".").map((part) => Number(part));
-	const isIpv4 =
-		octets.length === 4 &&
-		octets.every(
-			(octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255,
-		);
-	const first = octets[0] ?? 0;
-	if (!isIpv4 || first === 0 || first === 127 || first >= 224) {
-		return { neighbor, ipv4FromSource: false };
-	}
-	return { neighbor: { ...neighbor, ipv4: address }, ipv4FromSource: true };
-}
-
 /** A neighbor projected for the discover envelope: JSON/YAML-safe, no bytes. */
 export interface DiscoverNeighborRecord {
 	mac?: string;
@@ -358,10 +323,7 @@ export interface DiscoverNeighborRecord {
 	uptimeSeconds?: number;
 	softwareId?: string;
 	interfaceName?: string;
-	/** TLV 17, or the datagram's IP source when TLV 17 was absent (see `ipv4FromSource`). */
 	ipv4?: string;
-	/** `true` when `ipv4` came from the IP source because TLV 17 was absent. */
-	ipv4FromSource?: true;
 	ipv6Addresses?: readonly string[];
 	ipv6Enabled?: boolean;
 	unpack?: MndpUnpack;
@@ -412,8 +374,11 @@ export type DiscoverEnvelope = CentrsEnvelope<
 	DiscoverOperationMeta
 >;
 
-function toDiscoverNeighbor(entry: MndpCacheEntry): DiscoverNeighborRecord {
-	const { neighbor, firstSeenAt, lastSeenAt } = entry;
+function toDiscoverNeighbor(
+	neighbor: MndpNeighbor,
+	firstSeenAt: number,
+	lastSeenAt: number,
+): DiscoverNeighborRecord {
 	const record: DiscoverNeighborRecord = {
 		headerHex: neighbor.headerHex,
 		unknownTlvs: neighbor.unknownTlvs.map((tlv) => ({
@@ -449,9 +414,6 @@ function toDiscoverNeighbor(entry: MndpCacheEntry): DiscoverNeighborRecord {
 	}
 	if (neighbor.ipv4 !== undefined) {
 		record.ipv4 = neighbor.ipv4;
-	}
-	if (entry.ipv4FromSource === true) {
-		record.ipv4FromSource = true;
 	}
 	if (neighbor.ipv6Addresses !== undefined) {
 		record.ipv6Addresses = [...neighbor.ipv6Addresses];
@@ -748,7 +710,9 @@ export async function discover(
 	}
 
 	const entries = result.cache.entries();
-	const neighbors = entries.map(toDiscoverNeighbor);
+	const neighbors = entries.map((entry) =>
+		toDiscoverNeighbor(entry.neighbor, entry.firstSeenAt, entry.lastSeenAt),
+	);
 	const operation: DiscoverOperationMeta = {
 		command: "discover",
 		timeoutMs,

@@ -65,9 +65,7 @@ publish `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
   the raw `headerHex`. Type 13 is no longer read
   as a fallback board; it lands in `unknownTlvs`. The neighbor cache expires
   entries at the advertised TTL and drops them on a dying gasp (TTL 0).
-  Type 6 is the request flag (`request`). An announcement without TLV 17
-  gets `ipv4` from the datagram's IP source, as RouterOS does, and the
-  envelope marks it `ipv4FromSource: true`.
+  Type 6 is the request flag (`request`).
   **Consumers** reading `sequence`, `ipv6` or the numeric `unpack` from the
   `discover` envelope or `MndpNeighbor` must move to the new fields.
 
