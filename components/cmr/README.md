@@ -64,7 +64,8 @@ Each split is a constant in `test/integration/chr.ts` (`CMR_*_SINCE`), and
 passes on 7.26beta1, 7.26beta3, 7.26beta4 and 7.26beta5 (2026-11-11), and on
 7.26beta1 and 7.26beta5 again with the confirm-first pairing (2026-11-12). The
 complete `bun run test:integration` tier passed on the 7.26beta5 default on
-2026-11-12: 278 pass, 0 fail.
+2026-11-20, after the pending-row wait and the stricter paired check: 283 pass,
+0 fail, no half-pair repair needed.
 
 The lab defaults to 7.26beta5. `CMR_SINCE` remains the capability floor
 (7.26beta1), and `CENTRS_CMR_VERSION` selects a historical build for triage.
