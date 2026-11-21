@@ -85,8 +85,9 @@ CHR acceptance evidence:
   clarifies that IPv6-only networks are supported; when both addresses are
   reachable, IPv4 is preferred. This lab uses IPv4 and does not verify IPv6.
 - [Sergejs on caller policy](https://forum.mikrotik.com/t/7-26beta-development-is-released/273582/139)
-  places the read-group refusal in beta2. beta2 was never published; beta3
-  is the first build with it, so the boundary above is exact.
+  places the read-group refusal in beta2. beta2 was never published, so beta3
+  is the first build anyone can boot with it: the boundary above is exact for
+  published builds, not for MikroTik's internal ones.
 - [Sergejs on port selectors](https://forum.mikrotik.com/t/7-26beta-development-is-released/273582/188)
   warns that empty or unset VLAN `port-labels` can include the uplink and
   disconnect clients. CMR17 tests a disabled add, not enabled provisioning

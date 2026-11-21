@@ -244,8 +244,9 @@ export async function startCmrLab(prefix: string): Promise<CmrLab> {
 			);
 			await controller.run(`/cmr/device/pair ${findClient}`);
 		}
-		// Paired means more than connected: the controller's row has no pending
-		// `state` left, so `run-script` can select it.
+		// Paired means more than connected: the controller's row is neither
+		// `pending` nor `remote-pending` and has no `state` left, so `run-script`
+		// can select it (quickchr's `verdict()` reads the row the same way).
 		const waitConnected = async (timeoutMs = 120_000) => {
 			await until(
 				`${client.identity} paired and connected`,
@@ -255,6 +256,8 @@ export async function startCmrLab(prefix: string): Promise<CmrLab> {
 					return (
 						status === "paired,connected" &&
 						row?.["connected"] === "true" &&
+						row["pending"] !== "true" &&
+						row["remote-pending"] !== "true" &&
 						(row["state"] ?? "") === ""
 					);
 				},
