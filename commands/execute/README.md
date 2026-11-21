@@ -457,9 +457,12 @@ when the target is itself a CMR client.
   visible inside the script (CMR11, CMR11b, CMR-D7). On 7.26beta5, quickchr's
   policy study measured more: from a controller login with only
   `read,write,reboot,test,api,rest-api`, a script added a `group=full` user and
-  a user group, printed a PPP secret in plaintext, saved a backup and started
-  the sniffer; only `/export file=` was refused
-  ([FINDINGS.md → run-script and policy](https://github.com/tikoci/quickchr/blob/feat/cmr-grounding-lab/examples/cmr/FINDINGS.md#run-script-and-policy)).
+  a user group, printed a PPP secret in plaintext and saved an unencrypted
+  backup, and `/tool/sniffer/start` returned success (whether the sniffer ran
+  was not read back); only `/export file=` was refused
+  ([FINDINGS.md → run-script and policy](https://github.com/tikoci/quickchr/blob/9bce9f237a1815cb5ae25cfde71b29cd45272073/examples/cmr/FINDINGS.md#run-script-and-policy)).
+  So a `write`+`reboot` controller login is close to full control of every
+  client it selects, whatever else its group lacks.
   `cmr/policy-denied` still describes an actual runtime permission refusal,
   not a promise that any of these fail.
 - **Unknown outcomes:** a CMR timeout (`timed out (6)`, `std failure: timeout
@@ -470,8 +473,9 @@ when the target is itself a CMR client.
 - **Validation metadata** reports what ran: `source: ":put [:parse ...] via cmr
   run-script"`, the same claim the console gate makes. There is no client
   `/console/inspect` stage.
-- **No progress stream.** `run-script` returns a client's output only when its
-  script ends, and no `/cmr` menu records a running script. To watch a long
+- **No progress stream.** On 7.26beta1, `run-script` returned a client's
+  output only when its script ended, and no `/cmr` menu recorded a running
+  script (not re-checked on a later build). To watch a long
   CMR job, follow what it changes on a client:
   `centrs retrieve <client> /ip/address --follow` while
   `execute <controller> --cmr` adds addresses. That only works when the client
