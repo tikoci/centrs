@@ -195,8 +195,22 @@ export async function startCmrLab(prefix: string): Promise<CmrLab> {
 		const devices = async () => controller.read("/cmr/device");
 		const quote = (value: string) =>
 			`"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("$", "\\$")}"`;
-		const clientRow = async () =>
-			(await devices()).find((row) => row["identity"] === client.identity);
+		// Several rows can exist briefly after a reconnect; read the connected
+		// one, as quickchr's lab does.
+		const clientRow = async () => {
+			const rows = (await devices()).filter(
+				(row) => row["identity"] === client.identity,
+			);
+			return rows.find((row) => row["connected"] === "true") ?? rows[0];
+		};
+		// Paired means more than connected: the controller's row is neither
+		// `pending` nor `remote-pending` and has no `state` left, so `run-script`
+		// can select it (quickchr's `verdict()` reads the row the same way).
+		const rowPaired = (row: Record<string, string> | undefined) =>
+			row?.["connected"] === "true" &&
+			row["pending"] !== "true" &&
+			row["remote-pending"] !== "true" &&
+			(row["state"] ?? "") === "";
 		// Pair only once the connected row is pending, as quickchr's
 		// `waitPending()` does: a row that merely exists can still be settling.
 		// The client is enabled right after its link address is added, which on
@@ -232,34 +246,30 @@ export async function startCmrLab(prefix: string): Promise<CmrLab> {
 		// Keep the repair so a regression still finishes the lab, but say so:
 		// a lab that needed it is evidence for quickchr's FINDINGS.md.
 		const halfPaired = "pair: device:ok, cmr:ok";
+		// Poll for a verdict, paired or half-paired; a row missing for a moment
+		// is neither, so keep polling rather than read it as paired.
 		const settle = Date.now() + 10_000;
-		let state = (await clientRow())?.["state"] ?? "";
-		while (state !== "" && Date.now() < settle) {
+		let row = await clientRow();
+		while (
+			!rowPaired(row) &&
+			row?.["state"] !== halfPaired &&
+			Date.now() < settle
+		) {
 			await Bun.sleep(1_000);
-			state = (await clientRow())?.["state"] ?? "";
+			row = await clientRow();
 		}
-		if (state === halfPaired) {
+		if (row?.["state"] === halfPaired) {
 			console.warn(
 				`CMR lab: ${client.identity} half-paired after confirm-first pairing on ${controller.version}; finishing with a bare pair (#527)`,
 			);
 			await controller.run(`/cmr/device/pair ${findClient}`);
 		}
-		// Paired means more than connected: the controller's row is neither
-		// `pending` nor `remote-pending` and has no `state` left, so `run-script`
-		// can select it (quickchr's `verdict()` reads the row the same way).
 		const waitConnected = async (timeoutMs = 120_000) => {
 			await until(
 				`${client.identity} paired and connected`,
 				async () => {
 					const status = (await client.read("/cmr/client"))[0]?.["status"];
-					const row = await clientRow();
-					return (
-						status === "paired,connected" &&
-						row?.["connected"] === "true" &&
-						row["pending"] !== "true" &&
-						row["remote-pending"] !== "true" &&
-						(row["state"] ?? "") === ""
-					);
+					return status === "paired,connected" && rowPaired(await clientRow());
 				},
 				timeoutMs,
 			);
