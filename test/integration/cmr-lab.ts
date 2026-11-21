@@ -8,13 +8,13 @@
  * example traced its 90 s stalls to exactly this).
  *
  * CMR exists from 7.26beta1, so the lab pins its own version and ignores
- * `CENTRS_CHR_CHANNEL`. `CENTRS_CMR_VERSION` overrides it for a later beta.
+ * `CENTRS_CHR_CHANNEL`. `CENTRS_CMR_VERSION` overrides it for reproductions.
  */
 
 import { CMR_SINCE, routerOsAtLeast, splitQuickChrAuth } from "./chr.ts";
 
 export const CMR_LAB_VERSION =
-	Bun.env["CENTRS_CMR_VERSION"]?.trim() || CMR_SINCE;
+	Bun.env["CENTRS_CMR_VERSION"]?.trim() || "7.26beta5";
 
 type Row = Record<string, string>;
 
@@ -134,9 +134,9 @@ async function wrap(
 }
 
 /**
- * Boot, link and pair the lab. The controller pairs the client with the client's
- * own RouterOS login (`/cmr/device/pair … username= password=`), the normal
- * flow; neither side's pairing requirement is relaxed to `none`.
+ * Boot, link and pair the lab. Neither side's pairing requirement is relaxed
+ * to `none`: the controller approves its side, then pairs the client with the
+ * client's own RouterOS login (`/cmr/device/pair … username= password=`).
  */
 export async function startCmrLab(prefix: string): Promise<CmrLab> {
 	const { QuickCHR } = await quickChr();
@@ -193,23 +193,83 @@ export async function startCmrLab(prefix: string): Promise<CmrLab> {
 			"/cmr/client/set enabled=yes controller-addresses=192.0.2.1",
 		);
 		const devices = async () => controller.read("/cmr/device");
-		await until(`controller sees ${client.identity}`, async () =>
-			(await devices()).some((row) => row["identity"] === client.identity),
-		);
 		const quote = (value: string) =>
 			`"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("$", "\\$")}"`;
-		await controller.run(
-			`/cmr/device/pair [find identity=${quote(client.identity)}] username=${quote(client.username)} password=${quote(client.password)}`,
+		// Several rows can exist briefly after a reconnect; read the connected
+		// one, as quickchr's lab does.
+		const clientRow = async () => {
+			const rows = (await devices()).filter(
+				(row) => row["identity"] === client.identity,
+			);
+			return rows.find((row) => row["connected"] === "true") ?? rows[0];
+		};
+		// Paired means more than connected: the controller's row is neither
+		// `pending` nor `remote-pending` and has no `state` left, so `run-script`
+		// can select it (quickchr's `verdict()` reads the row the same way).
+		const rowPaired = (row: Record<string, string> | undefined) =>
+			row?.["connected"] === "true" &&
+			row["pending"] !== "true" &&
+			row["remote-pending"] !== "true" &&
+			(row["state"] ?? "") === "";
+		// Pair only once the connected row is pending, as quickchr's
+		// `waitPending()` does: a row that merely exists can still be settling.
+		// The client is enabled right after its link address is added, which on
+		// 7.26beta5 made the first connect take ~85 s (FINDINGS.md → First
+		// connect), hence the longer bound.
+		await until(
+			`controller sees ${client.identity} pending`,
+			async () => {
+				const row = await clientRow();
+				return (
+					row?.["connected"] === "true" &&
+					(row["pending"] === "true" ||
+						row["remote-pending"] === "true" ||
+						(row["state"] ?? "").startsWith("pair:"))
+				);
+			},
+			180_000,
 		);
+		const findClient = `[find identity=${quote(client.identity)}]`;
+		// Pairing follows tikoci/quickchr examples/cmr (FINDINGS.md → Pairing,
+		// `pairClient()` in tool/pairing.ts), the grounding lab for CMR:
+		// commit the controller's own `confirm` approval with a bare `pair`
+		// first, then satisfy the client's `password` requirement. The manual's
+		// single credentialed `pair` can end half-paired from 7.26beta3 on: the
+		// command's last table reads `device:ok, cmr:ok` instead of `paired`,
+		// the client says `paired,connected`, but the row keeps
+		// `state="pair: device:ok, cmr:ok"`, `run-script` never selects it, and
+		// a CMR restart shows the controller never saved its approval (#527).
+		await controller.run(`/cmr/device/pair ${findClient}`);
+		await controller.run(
+			`/cmr/device/pair ${findClient} username=${quote(client.username)} password=${quote(client.password)}`,
+		);
+		// Keep the repair so a regression still finishes the lab, but say so:
+		// a lab that needed it is evidence for quickchr's FINDINGS.md.
+		const halfPaired = "pair: device:ok, cmr:ok";
+		// Poll for a verdict, paired or half-paired; a row missing for a moment
+		// is neither, so keep polling rather than read it as paired.
+		const settle = Date.now() + 10_000;
+		let row = await clientRow();
+		while (
+			!rowPaired(row) &&
+			row?.["state"] !== halfPaired &&
+			Date.now() < settle
+		) {
+			await Bun.sleep(1_000);
+			row = await clientRow();
+		}
+		if (row?.["state"] === halfPaired) {
+			console.warn(
+				`CMR lab: ${client.identity} half-paired after confirm-first pairing on ${controller.version}; finishing with a bare pair (#527)`,
+			);
+			await controller.run(`/cmr/device/pair ${findClient}`);
+		}
 		const waitConnected = async (timeoutMs = 120_000) => {
 			await until(
 				`${client.identity} paired and connected`,
 				async () => {
 					const status = (await client.read("/cmr/client"))[0]?.["status"];
-					const row = (await devices()).find(
-						(r) => r["identity"] === client.identity,
-					);
-					return status === "paired,connected" && row?.["connected"] === "true";
+					return status === "paired,connected" && rowPaired(await clientRow());
 				},
 				timeoutMs,
 			);

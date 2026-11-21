@@ -404,7 +404,9 @@ when the target is itself a CMR client.
   command and its error says so (`context.dispatched: false`). The per-member
   read is host-side, not atomic with the call: on 7.26beta1 a client script
   cannot check its own key (`/cmr/client get local-id` reads `*****` inside
-  `run-script`) and `numbers=` does not take `ids`. After dispatch, a sent result is reported
+  `run-script`) and `numbers=` does not take `ids`. From beta4, `local-id` is visible
+  inside the script (CMR-D7), but centrs still uses host-side binding; this
+  is not an atomic client-side key check. After dispatch, a sent result is reported
   as `cmr/outcome-unknown` if the key changed during the call, or if the
   inventory cannot be re-read (cancelled or unreadable) to confirm which client
   answered. A CMR `skipped` stays `cmr/client-disconnected`, because nothing was
@@ -421,8 +423,9 @@ when the target is itself a CMR client.
   both. So a "reader" login on a 7.26beta1 controller is not read-only, and
   centrs' write gate (and `mcp=ro` on MCP) is the only gate. MikroTik
   [says](https://forum.mikrotik.com/t/7-26beta-development-is-released/273582/139) 7.26beta2 refuses this for a `read` group; #527 now carries
-  direct 7.26beta3 evidence that a restricted caller is refused, with the
-  first refusing release still unbracketed. For a write,
+  direct beta3–beta5 evidence that `run-script` needs both `write` and
+  `reboot`. beta2 was never published, so beta3 is the first build that has
+  it; MikroTik places the change in beta2. For a write,
   centrs reads the login's own `/user` row and `/user/group` once (both are
   readable with just `read` + `api`). When the login lacks `write`, `test` or
   `reboot`, the result and the confirmation error carry
@@ -443,15 +446,26 @@ when the target is itself a CMR client.
   that error says the command already ran (`context.dispatched: true`). A `failed` runtime
   error maps through the usual `routeros/*` table. `skipped` →
   `cmr/client-disconnected`.
-- **What a client script may do:** CMR runs it with only the `read`, `write`,
+- **What a client script may do:** On 7.26beta1, CMR runs it with only the `read`, `write`,
   `test` and `reboot` policies and no user session. A command that needs
   another policy (`/user add`, `/tool sniffer`) passes `:parse` on the client
   and is refused when it runs: `cmr/policy-denied`. The script stops at that
   statement, but statements before it already ran and are not rolled back;
-  their output is in `context.output`. Sensitive
+  their output is in `context.output`. On 7.26beta1 sensitive
   values read back as `*` or empty. Multi-line commands run every line (the
   manual says single-line; 7.26beta1 ran both LF and CRLF scripts in full), and
-  `/export` works.
+  `/export` works. From beta4, `/user/add` succeeds and `local-id` is
+  visible inside the script (CMR11, CMR11b, CMR-D7). On 7.26beta5, quickchr's
+  policy study measured more: from a controller login with only
+  `read,write,reboot,test,api,rest-api`, a script added a `group=full` user and
+  a user group, printed a PPP secret in plaintext and saved an unencrypted
+  backup, and `/tool/sniffer/start` returned success (whether the sniffer ran
+  was not read back); only `/export file=` was refused
+  ([FINDINGS.md → run-script and policy](https://github.com/tikoci/quickchr/blob/9bce9f237a1815cb5ae25cfde71b29cd45272073/examples/cmr/FINDINGS.md#run-script-and-policy)).
+  So a `write`+`reboot` controller login is close to full control of every
+  client it selects, whatever else its group lacks.
+  `cmr/policy-denied` still describes an actual runtime permission refusal,
+  not a promise that any of these fail.
 - **Unknown outcomes:** a CMR timeout (`timed out (6)`, `std failure: timeout
   (13)`), a local deadline, a cancellation, or a lost call after sending all
   give `cmr/outcome-unknown`. A cancellation before anything is sent, including
@@ -460,8 +474,9 @@ when the target is itself a CMR client.
 - **Validation metadata** reports what ran: `source: ":put [:parse ...] via cmr
   run-script"`, the same claim the console gate makes. There is no client
   `/console/inspect` stage.
-- **No progress stream.** `run-script` returns a client's output only when its
-  script ends, and no `/cmr` menu records a running script. To watch a long
+- **No progress stream.** On 7.26beta1, `run-script` returned a client's
+  output only when its script ended, and no `/cmr` menu recorded a running
+  script (not re-checked on a later build). To watch a long
   CMR job, follow what it changes on a client:
   `centrs retrieve <client> /ip/address --follow` while
   `execute <controller> --cmr` adds addresses. That only works when the client
