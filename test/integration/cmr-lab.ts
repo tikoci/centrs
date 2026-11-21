@@ -193,13 +193,28 @@ export async function startCmrLab(prefix: string): Promise<CmrLab> {
 			"/cmr/client/set enabled=yes controller-addresses=192.0.2.1",
 		);
 		const devices = async () => controller.read("/cmr/device");
-		await until(`controller sees ${client.identity}`, async () =>
-			(await devices()).some((row) => row["identity"] === client.identity),
-		);
 		const quote = (value: string) =>
 			`"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("$", "\\$")}"`;
 		const clientRow = async () =>
 			(await devices()).find((row) => row["identity"] === client.identity);
+		// Pair only once the connected row is pending, as quickchr's
+		// `waitPending()` does: a row that merely exists can still be settling.
+		// The client is enabled right after its link address is added, which on
+		// 7.26beta5 made the first connect take ~85 s (FINDINGS.md → First
+		// connect), hence the longer bound.
+		await until(
+			`controller sees ${client.identity} pending`,
+			async () => {
+				const row = await clientRow();
+				return (
+					row?.["connected"] === "true" &&
+					(row["pending"] === "true" ||
+						row["remote-pending"] === "true" ||
+						(row["state"] ?? "").startsWith("pair:"))
+				);
+			},
+			180_000,
+		);
 		const findClient = `[find identity=${quote(client.identity)}]`;
 		// Pairing follows tikoci/quickchr examples/cmr (FINDINGS.md → Pairing,
 		// `pairClient()` in tool/pairing.ts), the grounding lab for CMR:
