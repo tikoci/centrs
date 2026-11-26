@@ -7,8 +7,9 @@ and where it was set; the contents are never shown.
 
 A password file outranks CDB records, as `--password` and `CENTRS_PASSWORD`
 do. So when one is named and cannot be read, centrs stops rather than log in
-with the record's password. Paths that use no password read no file:
-interactive `terminal` over ssh, and `btest server --no-authenticate`.
+with the record's password. Paths that send no password read no file: ssh
+(`execute --via ssh`, sftp and scp transfers, and the interactive `terminal`),
+and `btest server --no-authenticate`.
 
 ## Typical triggers
 

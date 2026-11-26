@@ -455,6 +455,8 @@ export async function resolveExecuteRequest(
 					password: request.password,
 					passwordFile: request.passwordFile,
 					sshKey: request.sshKey,
+					// Batch ssh (`BatchMode=yes`) sends no password (PR #674).
+					sendsNoPassword: via.value === "ssh",
 				},
 				env,
 				cdbResolution,

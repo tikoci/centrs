@@ -42,9 +42,11 @@ const NO_ENV_FILE = "--no-env-file";
 
 /**
  * Every `.env` file name Bun 1.4.4 may auto-load from the working directory:
- * `.env`, `.env.<mode>`, `.env.<mode>.local` and `.env.local`, for every
- * mode. All of them, whatever `NODE_ENV` says now: a file can change
- * `NODE_ENV` after Bun has picked the set.
+ * `.env`, `.env.<mode>`, `.env.<mode>.local` and `.env.local`. Bun has three
+ * modes, `development`, `production` and `test`; any other `NODE_ENV`
+ * (`staging`) loads the `development` files, never `.env.staging` (measured
+ * on Bun 1.4.5). All three are scanned, whatever `NODE_ENV` says now: a file
+ * can change `NODE_ENV` after Bun has picked the set.
  */
 export const BUN_DOTENV_FILE_NAMES: readonly string[] = [
 	".env",

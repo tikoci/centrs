@@ -465,6 +465,16 @@ export function resolveAuth(
 		/** `--password-file`; conflicts with `password` (#672). */
 		passwordFile?: string;
 		sshKey?: string;
+		/**
+		 * The protocol never sends a target password (ssh: batch `execute`
+		 * and sftp/scp run with `BatchMode=yes`; the interactive terminal
+		 * leaves the prompt to OpenSSH). The source is still chosen, so a
+		 * conflict is an error and "a password was given but not sent" tips
+		 * can name it, but a password file is not read: one it cannot read,
+		 * such as an image-wide `CENTRS_PASSWORD_FILE`, cannot stop a key or
+		 * agent login (PR #674 review).
+		 */
+		sendsNoPassword?: boolean;
 	},
 	env: Record<string, string | undefined>,
 	cdb?: CdbResolution,
@@ -509,7 +519,10 @@ export function resolveAuth(
 			? undefined
 			: passwordChoice.kind === "file"
 				? {
-						value: readSecretFile(TARGET_PASSWORD_SECRET, passwordChoice),
+						value:
+							credentials.sendsNoPassword === true
+								? ""
+								: readSecretFile(TARGET_PASSWORD_SECRET, passwordChoice),
 						source: {
 							kind: "file",
 							key: passwordChoice.source.key ?? "--password-file",

@@ -1098,6 +1098,8 @@ export async function resolveTransferRequest(
 					password: request.password,
 					passwordFile: request.passwordFile,
 					sshKey: request.sshKey,
+					// sftp/scp run batch ssh, which sends no password (PR #674).
+					sendsNoPassword: protocol === "ssh",
 				},
 				env,
 				cdbResolution,

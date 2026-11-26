@@ -28,7 +28,8 @@ publish `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
   rotating or deleting it takes effect at the next call. A file that cannot
   give a password is `cdb/password-unavailable` or `auth/password-unavailable`;
   an unneeded CDB key file is not read, and a missing one is only the
-  `cdb/password-not-needed` warning. Value and file in one tier is
+  `cdb/password-not-needed` warning. ssh (execute, sftp/scp, terminal) sends
+  no password, so it reads no password file. Value and file in one tier is
   `usage/conflicting-flags`. `meta.settings` reports `{kind:"file", key}`.
   Only flags and the process environment may name a file: `settings set`
   refuses the keys and the `centrs.env` loader drops them.

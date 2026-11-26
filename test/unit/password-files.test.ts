@@ -13,6 +13,7 @@ import { runDevicesCli } from "../../src/cli/devices.ts";
 import { parseExplainCliArgs } from "../../src/cli/explain.ts";
 import { discover } from "../../src/discover.ts";
 import { CentrsError } from "../../src/errors.ts";
+import { resolveExecuteRequest } from "../../src/execute.ts";
 import {
 	addDevice,
 	initCdb,
@@ -33,6 +34,7 @@ import {
 	TARGET_PASSWORD_SECRET,
 } from "../../src/resolver/secret-source.ts";
 import { settingsPrint } from "../../src/settings.ts";
+import { resolveTransferRequest } from "../../src/transfer.ts";
 import { closedPort } from "./closed-port.ts";
 import { HERMETIC_ENV } from "./hermetic-env.ts";
 
@@ -533,5 +535,54 @@ describe("review follow-ups (#674)", () => {
 		};
 		expect(envelope.ok).toBe(false);
 		expect(envelope.error.code).toBe("usage/conflicting-flags");
+	});
+});
+
+// PR #674 review: batch ssh (`execute --via ssh`, sftp/scp transfers) never
+// sends a password, so a password file it cannot read must not stop a key
+// login. The source is still named (the "password not sent" tips use it);
+// a password transport still fails on the missing file.
+describe("batch ssh reads no password file", () => {
+	const env = {
+		...HERMETIC_ENV,
+		CENTRS_USERNAME: "admin",
+		CENTRS_PASSWORD_FILE: "/nonexistent/centrs-batch-ssh-pw",
+	};
+
+	test("execute --via ssh resolves; --via rest-api fails on the file", async () => {
+		const request = {
+			targetInput: "192.0.2.10",
+			command: "/system/identity/print",
+		};
+		const ssh = await resolveExecuteRequest({ ...request, via: "ssh" }, env, {
+			config: {},
+		});
+		expect(ssh.auth.passwordProvided).toBe(true);
+		expect(ssh.auth.passwordSource).toEqual({
+			kind: "file",
+			key: "CENTRS_PASSWORD_FILE",
+		});
+		await expect(
+			resolveExecuteRequest({ ...request, via: "rest-api" }, env, {
+				config: {},
+			}),
+		).rejects.toMatchObject({ code: "auth/password-unavailable" });
+	});
+
+	test("sftp transfer resolves; a rest transfer fails on the file", async () => {
+		const request = {
+			verb: "download" as const,
+			targetInput: "192.0.2.10",
+			remote: "flash/x.rsc",
+			local: "-",
+		};
+		const sftp = await resolveTransferRequest({ ...request, via: "sftp" }, env);
+		expect(sftp.auth.passwordSource).toEqual({
+			kind: "file",
+			key: "CENTRS_PASSWORD_FILE",
+		});
+		await expect(
+			resolveTransferRequest({ ...request, via: "rest" }, env),
+		).rejects.toMatchObject({ code: "auth/password-unavailable" });
 	});
 });
