@@ -12,6 +12,9 @@ import {
 import contextMatrixSlice from "../fixtures/explain/context-matrix.slice.json" with {
 	type: "json",
 };
+import echoCaptures from "../fixtures/mac-telnet-console-echo.json" with {
+	type: "json",
+};
 import fixtureSource from "../fixtures/parse-oracle.json" with { type: "json" };
 
 type FixtureEntry = {
@@ -515,6 +518,9 @@ describe("extractCommandOutput — #575 trailing-newline and non-ASCII sends (CH
 		["I7-unicode-session", 0, "hllo574"],
 		["I8-bom-session", 0, "bom574"],
 		["I1-nl-scope-session-split", 2, "a="],
+		// Multi-line sends: every line's echo is removed, every line's output kept.
+		["I1-nl-scope-session", 0, "syntax error (line 1 column 6)\na="],
+		["I4-braces-multi-session", 0, "a=2"],
 	];
 	for (const [cell, index, expected] of cases) {
 		test(`${cell}[${index}] keeps "${expected}"`, () => {
@@ -527,4 +533,21 @@ describe("extractCommandOutput — #575 trailing-newline and non-ASCII sends (CH
 		const { bytes, raw } = submission("I5-global-session-split", 0);
 		expect(extractCommandOutput(raw, bytes)).toBe("");
 	});
+});
+
+/**
+ * #575 review captures (CHR 7.24.5, 512 columns): TAB completion lists, a
+ * trailing space, BOM and non-ASCII input, backspace, multi-line and block
+ * sends, and echoes at and past the terminal width. `expected` is what the
+ * screen shows as output; the source note in the fixture explains the one
+ * leading blank line that is kept.
+ */
+describe("extractCommandOutput — console echo captures (#575 review)", () => {
+	for (const capture of echoCaptures.captures) {
+		test(capture.label, () => {
+			expect(extractCommandOutput(capture.raw, capture.command)).toBe(
+				capture.expected,
+			);
+		});
+	}
 });

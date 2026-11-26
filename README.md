@@ -43,8 +43,9 @@ product; without them this would just be a worse `curl`.
 > encrypted-CDB reads and writes are supported.
 > `docs/MATRIX.md` is the single source of truth for what works today — treat
 > anything not green there as not-yet-shipped.
-> The [known issues](CHANGELOG.md#known-issues) cover MAC-Telnet output loss
-> (#575) and the MCP authorization race during concurrent CDB edits (#604).
+> The [known issues](CHANGELOG.md#known-issues) cover the MCP authorization
+> race during concurrent CDB edits (#604) and CMR clients RouterOS will not
+> select (#657).
 
 ## What it talks to, and how
 
