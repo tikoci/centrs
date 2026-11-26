@@ -570,6 +570,9 @@ describe("extractCommandOutput — control characters and screen edits (#575 rev
 		["padding spaces are trimmed", "a   ", "a"],
 		["BS after a TAB lands inside its span", "\t\bX", "\tX"],
 		["a TAB overwritten by CR leaves spaces", "\tab\rX", `X${" ".repeat(7)}ab`],
+		// cspell:ignore ABCDEFGHZ
+		["a TAB after CR moves past text", "ABCDEFGH\r\tZ", "ABCDEFGHZ"],
+		["a TAB after CR fills only blank cells", "ABC\r\tZ", "ABC\tZ"],
 	];
 	for (const [label, row, expected] of cases) {
 		test(label, () => {
@@ -578,4 +581,10 @@ describe("extractCommandOutput — control characters and screen edits (#575 rev
 			);
 		});
 	}
+	test("a TAB at the wrap edge takes no column (16 columns)", () => {
+		const row = `${"x".repeat(16)}\t\bY`;
+		expect(extractCommandOutput(withOutput(row), ascii.command, 16)).toBe(
+			`${"x".repeat(15)}Y\t`,
+		);
+	});
 });

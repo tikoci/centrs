@@ -269,84 +269,84 @@ function framedOutput(raw: string, cols: number): string[] | undefined {
 function outputLines(text: string, cols: number): string[] {
 	const parts = text.split(/(\r?\n)/);
 	const lines: string[] = [];
-	let position = 0;
-	let nextWrap = cols + 1;
+	const at: ConsolePosition = { position: 0, nextWrap: cols + 1, cols };
 	let continuing = false;
 	for (let i = 0; i < parts.length; i += 2) {
-		const raw = parts[i] ?? "";
 		const brk = parts[i + 1];
-		const plain = raw.replace(ANSI_CSI, "");
-		for (let j = 0; j < plain.length; j++) {
-			const code = plain.charCodeAt(j);
-			if (code === 0x0d) {
-				position = 0;
-				nextWrap = cols + 1;
-			} else if (code === 0x1b) j++;
-			else if (code === 0x09) {
-				if (position < nextWrap - 2)
-					position = (Math.floor(position / 8) + 1) * 8;
-			} else if (code === 0x08) position = Math.max(0, position - 1);
-			else if (code === 0x01 || (code >= 0x20 && code !== 0x7f)) {
-				if (code >= 0xd800 && code <= 0xdbff) j++;
-				position += 1;
-			}
-		}
-		const row = rowText(raw);
+		const row = screenRow(parts[i] ?? "", at);
 		if (continuing) lines[lines.length - 1] += row;
 		else lines.push(row);
 		if (continuing && row.length === 0 && brk === undefined) lines.push("");
-		if (brk === "\r\n" && position >= nextWrap) {
+		if (brk === "\r\n" && at.position >= at.nextWrap) {
 			continuing = true;
-			nextWrap += cols;
+			at.nextWrap += cols;
 		} else {
 			continuing = false;
 			if (brk === "\r\n") {
-				position = 0;
-				nextWrap = cols + 1;
+				at.position = 0;
+				at.nextWrap = cols + 1;
 			}
 		}
 	}
-	// Only the console's padding spaces are trimmed: a trailing TAB, VT or FF is
-	// the command's output.
+	// Trailing ASCII spaces are trimmed, whether the console padded them or the
+	// value printed them; a trailing TAB, VT or FF is kept.
 	return lines.map((line) => line.replace(/ +$/, ""));
 }
 
+/** The console's position in the printed value, as `outputLines` describes. */
+type ConsolePosition = { position: number; nextWrap: number; cols: number };
+
 /**
- * One output row as text: colors and ESC sequences removed, CR and BS applied
- * as the screen would, every other character (TAB and C0 controls included)
- * kept, since it is the command's output.
+ * One output row as text, advancing the console position `at` over it.
+ * Colors and ESC sequences are removed, CR and BS are applied as the screen
+ * would, and every other character (TAB and C0 controls included) is kept,
+ * since it is the command's output. Cells are placed by the same position
+ * that decides the wraps, so a later BS or CR lands where the console's did.
  */
-function rowText(raw: string): string {
-	const clean = raw.replace(ANSI_CSI, "").replace(ANSI_ESC2, "");
+function screenRow(raw: string, at: ConsolePosition): string {
+	const plain = raw.replace(ANSI_CSI, "");
+	let rowStart = at.position;
 	const cells: string[] = [];
-	// Zero-width controls (BEL, VT, FF, DEL and the unmeasured C0 bytes, as
-	// `outputLines` counts them) are kept at the column they were printed in,
-	// without taking a cell, so a later BS or CR lands where the console's did.
+	// Zero-width controls (BEL, VT, FF, DEL, the unmeasured C0 bytes and a TAB
+	// at the wrap edge) are kept at the cell they were printed at, without
+	// taking it.
 	const zeroWidth: string[] = [];
-	// A TAB keeps its byte in its own cell and owns the cells up to the next
-	// multiple of 8, as `outputLines` counts it. Those cells print nothing while
-	// the TAB is still on screen, and a space once it has been overwritten.
+	// A TAB keeps its byte and owns the blank cells it skips up to its stop.
+	// Those cells print nothing while the TAB is still on screen, and a space
+	// once it has been overwritten. Cells that already hold text are left alone.
 	const tabOwner: (number | undefined)[] = [];
-	const put = (at: number, ch: string, owner?: number) => {
-		cells[at] = ch;
-		tabOwner[at] = owner;
+	const put = (cell: number, ch: string, owner?: number) => {
+		cells[cell] = ch;
+		tabOwner[cell] = owner;
 	};
-	let col = 0;
-	for (const ch of clean) {
+	const cell = () => Math.max(0, at.position - rowStart);
+	for (let j = 0; j < plain.length; j++) {
+		const ch = plain[j] as string;
 		const code = ch.charCodeAt(0);
-		if (code === 0x0d) col = 0;
-		else if (code === 0x08) col = Math.max(0, col - 1);
-		else if (code === 0x1b) continue;
-		else if (code === 0x7f || (code < 0x20 && code !== 0x01 && code !== 0x09))
-			zeroWidth[col] = (zeroWidth[col] ?? "") + ch;
-		else if (code === 0x09) {
-			const stop = (Math.floor(col / 8) + 1) * 8;
-			put(col, ch);
-			for (let k = col + 1; k < stop; k++) put(k, "", col);
-			col = stop;
+		if (code === 0x0d) {
+			at.position = 0;
+			at.nextWrap = at.cols + 1;
+			rowStart = 0;
+		} else if (code === 0x1b) j++;
+		else if (code === 0x08) at.position = Math.max(0, at.position - 1);
+		else if (code === 0x09 && at.position < at.nextWrap - 2) {
+			const from = cell();
+			at.position = (Math.floor(at.position / 8) + 1) * 8;
+			const stop = cell();
+			let first = stop;
+			while (first > from && cells[first - 1] === undefined) first--;
+			if (first < stop) {
+				put(first, ch);
+				for (let k = first + 1; k < stop; k++) put(k, "", first);
+			}
+		} else if (code === 0x01 || (code >= 0x20 && code !== 0x7f)) {
+			const wide = code >= 0xd800 && code <= 0xdbff;
+			put(cell(), wide ? ch + (plain[j + 1] ?? "") : ch);
+			if (wide) j++;
+			at.position += 1;
 		} else {
-			put(col, ch);
-			col += 1;
+			const c = cell();
+			zeroWidth[c] = (zeroWidth[c] ?? "") + ch;
 		}
 	}
 	let row = "";

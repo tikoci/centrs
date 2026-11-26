@@ -113,9 +113,8 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
 - **Print width / column wrapping (JG-04).** RouterOS wraps `print` output to the
   terminal width, so each transport handles width differently. **mac-telnet** is
   the only one that negotiates a size: `src/protocols/mac-telnet-console.ts`
-  answers the device's terminal-size probe with a deliberately tall/wide screen,
-  so captured columns are neither paginated nor wrapped *at the negotiated
-  width*. Two things still depend on that width. RouterOS lays out `print`
+  answers the device's terminal-size probe with a deliberately tall/wide screen
+  (512 columns by default). Two things still depend on that width. RouterOS lays out `print`
   (tables, `detail` continuation lines) and `export` (its trailing-`\`
   folding) for `cols − 1` columns, the same as SSH at a matching width
   (`user+<cols>w`); that layout is RouterOS output and is kept. Separately,

@@ -65,9 +65,15 @@ const READER_CASES: [string, string, string][] = [
 	["block", '{\n:put "one"\n}\n', "one"],
 	["prompt-like output", ':put "[u@h] >"\n:put "next"', "[u@h] >\nnext"],
 	["empty line kept", ':put ""\n:put "after"', "\nafter"],
-	// cspell:ignore Bafter beforeafter -- the printed escape runs into the words
+	// cspell:ignore Bafter beforeafter ABCDEFGHZ -- printed controls run into the words
 	["printed ESC[9999B", ':put "before\\1B[9999Bafter"', "beforeafter"],
 	["TAB kept", ':put "a\\tb"', "a\tb"],
+	["TAB after CR moves past text", ':put "ABCDEFGH\\r\\tZ"', "ABCDEFGHZ"],
+	[
+		"TAB at the wrap edge, then BS",
+		`${repeated("x", 512)}; :put ($s . "\\t\\08Y")`,
+		`${"x".repeat(511)}Y\t`,
+	],
 	["1025-character line", `${repeated("x", 1025)}; :put $s`, "x".repeat(1025)],
 	[
 		"wide line after an embedded newline",
