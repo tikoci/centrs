@@ -553,3 +553,24 @@ describe("extractCommandOutput — console echo captures (#575 review)", () => {
 		});
 	}
 });
+
+describe("extractCommandOutput — zero-width controls and backspace (#575 review)", () => {
+	// A real CHR 7.24.5 reply for `:put "plain"`, with its output row replaced.
+	const ascii = echoCaptures.captures.find((c) => c.label === "ascii");
+	if (!ascii) throw new Error("fixture has no `ascii` capture");
+	const withOutput = (row: string) =>
+		ascii.raw.replace("\r\n\rplain\r\n", `\r\n\r${row}\r\n`);
+	const cases: [string, string, string][] = [
+		["BS overwrites the previous character", "ab\bX", "aX"],
+		["BEL takes no column before a BS", "a\u0007\bX", "X\u0007"],
+		["BEL between characters is kept", "a\u0007b", "a\u0007b"],
+		["DEL takes no column before a CR", "ab\u007f\rX", "Xb\u007f"],
+	];
+	for (const [label, row, expected] of cases) {
+		test(label, () => {
+			expect(extractCommandOutput(withOutput(row), ascii.command)).toBe(
+				expected,
+			);
+		});
+	}
+});

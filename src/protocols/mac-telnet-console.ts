@@ -317,18 +317,29 @@ function outputLines(text: string, cols: number): string[] {
 function rowText(raw: string): string {
 	const clean = raw.replace(ANSI_CSI, "").replace(ANSI_ESC2, "");
 	const cells: string[] = [];
+	// Zero-width controls (BEL, VT, FF, DEL and the unmeasured C0 bytes, as
+	// `outputLines` counts them) are kept at the column they were printed in,
+	// without taking a cell, so a later BS or CR lands where the console's did.
+	const zeroWidth: string[] = [];
 	let col = 0;
 	for (const ch of clean) {
 		const code = ch.charCodeAt(0);
 		if (code === 0x0d) col = 0;
 		else if (code === 0x08) col = Math.max(0, col - 1);
 		else if (code === 0x1b) continue;
+		else if (code === 0x7f || (code < 0x20 && code !== 0x01 && code !== 0x09))
+			zeroWidth[col] = (zeroWidth[col] ?? "") + ch;
 		else {
 			cells[col] = ch;
 			col += 1;
 		}
 	}
-	return Array.from(cells, (c) => c ?? " ").join("");
+	let row = "";
+	for (let i = 0; i < Math.max(cells.length, zeroWidth.length); i++) {
+		row += zeroWidth[i] ?? "";
+		if (i < cells.length) row += cells[i] ?? " ";
+	}
+	return row;
 }
 
 /** The pre-#575 rule: skip as many screen columns as the command is long. */

@@ -65,6 +65,7 @@ const READER_CASES: [string, string, string][] = [
 	["block", '{\n:put "one"\n}\n', "one"],
 	["prompt-like output", ':put "[u@h] >"\n:put "next"', "[u@h] >\nnext"],
 	["empty line kept", ':put ""\n:put "after"', "\nafter"],
+	// cspell:ignore Bafter beforeafter -- the printed escape runs into the words
 	["printed ESC[9999B", ':put "before\\1B[9999Bafter"', "beforeafter"],
 	["TAB kept", ':put "a\\tb"', "a\tb"],
 	["1025-character line", `${repeated("x", 1025)}; :put $s`, "x".repeat(1025)],

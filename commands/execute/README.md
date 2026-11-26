@@ -122,7 +122,8 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
   the console breaks any output line it is printing when its position reaches
   `cols + 1`, then every `cols`, always with a CRLF; the position resets at
   the end of each printed value but not at a newline inside it, and a TAB
-  advances it to the next multiple of 8. The reader rejoins those breaks, so
+  advances it to the next multiple of 8 unless the position is within two
+  columns of the next break. The reader rejoins those breaks, so
   a long line comes back whole (CHR 7.23.8 and 7.24.5 at 512, 200 and 80
   columns). **SSH execute** runs *without* a pseudo-tty (`src/protocols/ssh.ts`),
   so no width is negotiated, and RouterOS lays out `print` and `export` for 80
