@@ -117,7 +117,7 @@ type Waiter = {
  * right-trimmed. This collapses the console's CR-based prompt redraws and
  * space-padding into the single line a user would see.
  */
-export function emulateScreen(text: string): string[] {
+export function emulateScreen(text: string, trim = true): string[] {
 	const clean = text.replace(ANSI_CSI, "").replace(ANSI_ESC2, "");
 	const lines: string[][] = [[]];
 	let row = 0;
@@ -138,39 +138,266 @@ export function emulateScreen(text: string): string[] {
 			col += 1;
 		}
 	}
-	return lines.map((line) =>
-		Array.from(line, (c) => c ?? " ")
-			.join("")
-			.replace(/\s+$/, ""),
-	);
+	return lines.map((line) => {
+		const row = Array.from(line, (c) => c ?? " ").join("");
+		return trim ? row.replace(/\s+$/, "") : row;
+	});
 }
 
 /**
  * Extract the command's clean output from its raw console response: drop the
- * echoed-command line(s) and any trailing prompt / blank lines.
+ * echoed command and any trailing prompt / blank lines.
  *
- * The echo is `[prompt] > <command>`. With a normal-length command it is one
- * line, but a command longer than the terminal width wraps onto further lines.
- * When `command` is supplied, consume exactly as many echoed lines as the command
- * spans (so a wrapped echo — e.g. a long `:put [:parse "…"]` — does not leak into
- * the output); otherwise fall back to dropping the single first line.
+ * The console frames its reply (CHR 7.24.5, #575). Each submitted line is
+ * echoed (typed text, then a highlighted redraw, wrapped with bare CRLFs at the
+ * terminal width), and the echo ends with CRLF + CR; the line's output follows.
+ * Each new prompt is drawn after `ESC[9999B`: `ESC[9999B ESC[K` once a line has
+ * run, and `ESC[9999B` alone when the console redraws the same input after a
+ * TAB completion list. So the reply splits into one segment per prompt, a
+ * segment that ends in a redraw is a completion list and is dropped, and each
+ * other segment's output is whatever follows its first CRLF + CR. The command
+ * text is not compared: the echo differs from the bytes sent (non-ASCII,
+ * trailing spaces, backspace, TAB completion), and printed text can look like
+ * an echo or a prompt.
+ *
+ * A reply without that framing falls back to the screen: the first line is the
+ * echo, or, with `command`, as many screen columns as the command is long.
  */
-export function extractCommandOutput(raw: string, command?: string): string {
+export function extractCommandOutput(
+	raw: string,
+	command?: string,
+	cols = 512,
+): string {
+	const framed = framedOutput(raw, cols);
+	if (framed !== undefined) return framed.join("\n");
 	const lines = emulateScreen(raw);
-	let start = 1;
-	if (command !== undefined && lines.length > 0) {
-		const first = lines[0] ?? "";
-		const promptMatch = first.match(/^\[[^\]\r\n]*\][^\r\n]*?>\s?/);
-		const echoedOnFirst = promptMatch
-			? first.slice(promptMatch[0].length)
-			: first;
-		let consumed = echoedOnFirst.length;
-		while (consumed < command.length && start < lines.length) {
-			consumed += (lines[start] ?? "").length;
-			start += 1;
+	const body =
+		command === undefined ? lines.slice(1) : countedEcho(lines, command);
+	return trimTrailingPrompts(body).join("\n");
+}
+
+/** `ESC[9999B` (cursor to the last row) starts every prompt the console draws. */
+const PROMPT_MARK = `${ESC}[9999B`;
+/** After a line has run, the prompt is drawn on a cleared row. */
+const CLEAR_ROW = `${ESC}[K`;
+/** An echo ends with CRLF + CR; a wrap inside it is a bare CRLF. */
+const ECHO_END = "\r\n\r";
+
+type PromptMark = { at: number; fresh: boolean };
+
+/**
+ * A drawn prompt, once colors are stripped: `[user@host] > `, a menu prompt
+ * such as `[user@host] /ip/address> `, or a `{... ` continuation.
+ */
+const DRAWN_PROMPT_RE =
+	/^(?:\[[^\]\r\n]*@[^\]\r\n]*\][^>\r\n]*>|[{(["]+\.\.\.)/;
+
+/**
+ * The next prompt the console drew. A real one follows a CR and is followed
+ * by a drawn prompt ({@link DRAWN_PROMPT_RE}), after `ESC[K` when the prompt is
+ * fresh. The framing is in-band and has no escaping: printed text keeps its
+ * place unless it reproduces CR + `ESC[9999B` + a whole drawn prompt
+ * (`:put "\1B[9999B"` and `[not-a-prompt` stay output).
+ */
+function nextPromptMark(raw: string, from: number): PromptMark | undefined {
+	let at = raw.indexOf(PROMPT_MARK, from);
+	while (at !== -1) {
+		let after = at + PROMPT_MARK.length;
+		const fresh = raw.startsWith(CLEAR_ROW, after);
+		if (fresh) after += CLEAR_ROW.length;
+		if (at > 0 && raw[at - 1] === "\r" && isDrawnPrompt(raw, after))
+			return { at, fresh };
+		at = raw.indexOf(PROMPT_MARK, at + 1);
+	}
+	return undefined;
+}
+
+function isDrawnPrompt(raw: string, at: number): boolean {
+	const lineEnd = raw.slice(at).search(/[\r\n]/);
+	const drawn = raw.slice(at, lineEnd === -1 ? undefined : at + lineEnd);
+	return DRAWN_PROMPT_RE.test(
+		drawn.replace(ANSI_CSI, "").replace(ANSI_ESC2, ""),
+	);
+}
+
+function framedOutput(raw: string, cols: number): string[] | undefined {
+	if (!raw.includes(ECHO_END)) return undefined;
+	const out: string[] = [];
+	let from = 0;
+	while (from < raw.length) {
+		const mark = nextPromptMark(raw, from);
+		const segment = raw.slice(from, mark?.at ?? raw.length);
+		// A redraw without `ESC[K` follows a TAB completion list: same input.
+		if (mark === undefined || mark.fresh) {
+			const echoEnd = segment.indexOf(ECHO_END);
+			if (echoEnd !== -1) {
+				// Every output line ends with CRLF, so the last row is the
+				// leftover before the next prompt; a blank line before it is output
+				// (`:put ""`). A reply cut off before its next prompt keeps the old
+				// trailing-prompt trim.
+				const rows = outputLines(
+					segment.slice(echoEnd + ECHO_END.length),
+					cols,
+				);
+				if (mark === undefined) out.push(...trimTrailingPrompts(rows));
+				else {
+					if (rows[rows.length - 1] === "") rows.pop();
+					out.push(...rows);
+				}
+			}
+		}
+		if (mark === undefined) break;
+		from = mark.at + PROMPT_MARK.length;
+	}
+	return out;
+}
+
+/**
+ * The output lines of one segment, with the console's width wraps rejoined.
+ *
+ * The console keeps one position per printed record. It resets at the
+ * record's CRLF and at any CR; a newline inside the printed value (a bare LF)
+ * ends the line but keeps the position. The console sends a wrap (always CRLF)
+ * when the position reaches `cols + 1`, then every `cols` after that, so a
+ * record that ends exactly on a wrap point leaves an empty row. Every
+ * character, UTF-8 included, and 0x01 take one position; TAB moves to the next
+ * multiple of 8 unless it is within 2 of the next wrap point; BS takes one
+ * back; BEL, VT, FF, DEL and ESC sequences take none. Measured on CHR 7.24.5
+ * and 7.23.8 at 512, 200 and 80 columns (#575). The last row is the leftover
+ * before the next prompt.
+ */
+function outputLines(text: string, cols: number): string[] {
+	const parts = text.split(/(\r?\n)/);
+	const lines: string[] = [];
+	const at: ConsolePosition = { position: 0, nextWrap: cols + 1, cols };
+	let continuing = false;
+	for (let i = 0; i < parts.length; i += 2) {
+		const brk = parts[i + 1];
+		const row = screenRow(parts[i] ?? "", at);
+		if (continuing) lines[lines.length - 1] += row;
+		else lines.push(row);
+		if (continuing && row.length === 0 && brk === undefined) lines.push("");
+		if (brk === "\r\n" && at.position >= at.nextWrap) {
+			continuing = true;
+			at.nextWrap += cols;
+		} else {
+			continuing = false;
+			if (brk === "\r\n") {
+				at.position = 0;
+				at.nextWrap = cols + 1;
+			}
 		}
 	}
-	const body = lines.slice(start);
+	// Trailing ASCII spaces are trimmed, whether the console padded them or the
+	// value printed them; a trailing TAB, VT or FF is kept.
+	return lines.map((line) => line.replace(/ +$/, ""));
+}
+
+/**
+ * The index of the last character of the escape sequence that starts at
+ * `plain[at]` (CSI sequences are already removed): ESC, any intermediates
+ * (0x20–0x2F), then a final character (0x30–0x7E). A bare ESC followed by
+ * anything else is dropped alone, so a TAB, control or Unicode character
+ * after it stays output.
+ */
+function escapeEnd(plain: string, at: number): number {
+	let k = at + 1;
+	while (
+		k < plain.length &&
+		plain.charCodeAt(k) >= 0x20 &&
+		plain.charCodeAt(k) <= 0x2f
+	)
+		k++;
+	const final = plain.charCodeAt(k);
+	return final >= 0x30 && final <= 0x7e ? k : at;
+}
+
+/** The console's position in the printed value, as `outputLines` describes. */
+type ConsolePosition = { position: number; nextWrap: number; cols: number };
+
+/**
+ * One output row as text, advancing the console position `at` over it.
+ * Colors and ESC sequences are removed, CR and BS are applied as the screen
+ * would, and every other character (TAB and C0 controls included) is kept,
+ * since it is the command's output. Cells are placed by the same position
+ * that decides the wraps, so a later BS or CR lands where the console's did.
+ */
+function screenRow(raw: string, at: ConsolePosition): string {
+	const plain = raw.replace(ANSI_CSI, "");
+	let rowStart = at.position;
+	const cells: string[] = [];
+	// Zero-width controls (BEL, VT, FF, DEL, the unmeasured C0 bytes and a TAB
+	// at the wrap edge) are kept at the cell they were printed at, without
+	// taking it.
+	const zeroWidth: string[] = [];
+	// A TAB keeps its byte and owns the blank cells it skips up to its stop.
+	// Those cells print nothing while the TAB is still on screen, and a space
+	// once it has been overwritten. Cells that already hold text are left alone.
+	const tabOwner: (number | undefined)[] = [];
+	const put = (cell: number, ch: string, owner?: number) => {
+		cells[cell] = ch;
+		tabOwner[cell] = owner;
+	};
+	const cell = () => Math.max(0, at.position - rowStart);
+	for (let j = 0; j < plain.length; j++) {
+		const ch = plain[j] as string;
+		const code = ch.charCodeAt(0);
+		if (code === 0x0d) {
+			at.position = 0;
+			at.nextWrap = at.cols + 1;
+			rowStart = 0;
+		} else if (code === 0x1b) j = escapeEnd(plain, j);
+		else if (code === 0x08) {
+			// BS takes one position back; on screen it stops at the row's first
+			// column, so the row's start follows it down.
+			at.position = Math.max(0, at.position - 1);
+			rowStart = Math.min(rowStart, at.position);
+		} else if (code === 0x09 && at.position < at.nextWrap - 2) {
+			const from = cell();
+			at.position = (Math.floor(at.position / 8) + 1) * 8;
+			const stop = cell();
+			let first = stop;
+			while (first > from && cells[first - 1] === undefined) first--;
+			if (first < stop) {
+				put(first, ch);
+				for (let k = first + 1; k < stop; k++) put(k, "", first);
+			}
+		} else if (code === 0x01 || (code >= 0x20 && code !== 0x7f)) {
+			const wide = code >= 0xd800 && code <= 0xdbff;
+			put(cell(), wide ? ch + (plain[j + 1] ?? "") : ch);
+			if (wide) j++;
+			at.position += 1;
+		} else {
+			const c = cell();
+			zeroWidth[c] = (zeroWidth[c] ?? "") + ch;
+		}
+	}
+	let row = "";
+	for (let i = 0; i < Math.max(cells.length, zeroWidth.length); i++) {
+		row += zeroWidth[i] ?? "";
+		if (i >= cells.length) continue;
+		const owner = tabOwner[i];
+		if (owner === undefined) row += cells[i] ?? " ";
+		else if (cells[owner] !== "\t" || tabOwner[owner] !== undefined) row += " ";
+	}
+	return row;
+}
+
+/** The pre-#575 rule: skip as many screen columns as the command is long. */
+function countedEcho(lines: string[], command: string): string[] {
+	let start = 1;
+	const first = lines[0] ?? "";
+	const prompt = first.match(/^\[[^\]\r\n]*\][^\r\n]*?>\s?/);
+	let consumed = prompt ? first.length - prompt[0].length : first.length;
+	while (consumed < command.length && start < lines.length) {
+		consumed += (lines[start] ?? "").length;
+		start += 1;
+	}
+	return lines.slice(start);
+}
+
+function trimTrailingPrompts(lines: string[]): string[] {
+	const body = [...lines];
 	while (body.length > 0) {
 		const last = body[body.length - 1] as string;
 		if (last.length === 0 || ROUTEROS_PROMPT_RE.test(last)) {
@@ -179,7 +406,7 @@ export function extractCommandOutput(raw: string, command?: string): string {
 		}
 		break;
 	}
-	return body.join("\n");
+	return body;
 }
 
 /**
@@ -318,7 +545,10 @@ export class MacTelnetConsole {
 			`running over mac-telnet: ${cli}`,
 		);
 		const raw = this.buffer;
-		return { output: extractCommandOutput(raw, cli), raw };
+		return {
+			output: extractCommandOutput(raw, cli, this.options.cols),
+			raw,
+		};
 	}
 
 	/**

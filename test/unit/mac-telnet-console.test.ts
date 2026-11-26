@@ -9,6 +9,12 @@ import {
 	ROUTEROS_PROMPT_RE,
 } from "../../src/protocols/mac-telnet-console.ts";
 
+import contextMatrixSlice from "../fixtures/explain/context-matrix.slice.json" with {
+	type: "json",
+};
+import echoCaptures from "../fixtures/mac-telnet-console-echo.json" with {
+	type: "json",
+};
 import fixtureSource from "../fixtures/parse-oracle.json" with { type: "json" };
 
 type FixtureEntry = {
@@ -123,8 +129,9 @@ describe("extractCommandOutput — real CHR 7.23.1 captures", () => {
 		const part1 = cmd.slice(0, split);
 		const part2 = cmd.slice(split);
 		const raw = `${P}${part1}\r\n${part2}\r\n${TAIL}`;
-		// Without the command, the wrapped tail leaks; with it the echo is stripped.
-		expect(extractCommandOutput(raw)).toBe(part2);
+		// The echo ends at CRLF + CR, so the wrap's bare CRLF stays inside it,
+		// with or without the command (#575).
+		expect(extractCommandOutput(raw)).toBe("");
 		expect(extractCommandOutput(raw, cmd)).toBe("");
 	});
 
@@ -482,4 +489,120 @@ describe("parse-oracle.json (GH#230 frozen fixtures, CHR 7.23.3)", () => {
 			});
 		});
 	}
+});
+
+// cspell:ignore héllo hllo
+/**
+ * #575: committed CHR 7.24.5 raw screens from the #574 context-matrix slice,
+ * replayed with the exact bytes `run()` was given. A trailing newline, or a
+ * non-ASCII character the console drops at input, made the echo count run one
+ * line long and swallow the output.
+ */
+describe("extractCommandOutput — #575 trailing-newline and non-ASCII sends (CHR 7.24.5)", () => {
+	type SliceSubmission = { bytes: string; raw?: string };
+	type SliceCell = { cell: string; submissions: SliceSubmission[] };
+	const cells = (contextMatrixSlice as { cells: SliceCell[] }).cells;
+	const submission = (cell: string, index: number) => {
+		const found = cells.find((c) => c.cell === cell)?.submissions[index];
+		if (!found?.raw)
+			throw new Error(`slice has no raw screen for ${cell}[${index}]`);
+		return {
+			bytes: found.bytes,
+			raw: (JSON.parse(found.raw) as { raw: string }).raw,
+		};
+	};
+
+	const cases: [string, number, string][] = [
+		["I2-semi-scope-session", 0, "a=2"],
+		["I3-braces-1line-session", 0, "a=2"],
+		["I5-global-session-split", 1, "g=11"],
+		["I7-unicode-session", 0, "hllo574"],
+		["I8-bom-session", 0, "bom574"],
+		["I1-nl-scope-session-split", 2, "a="],
+		// Multi-line sends: every line's echo is removed, every line's output kept.
+		["I1-nl-scope-session", 0, "syntax error (line 1 column 6)\na="],
+		["I4-braces-multi-session", 0, "a=2"],
+	];
+	for (const [cell, index, expected] of cases) {
+		test(`${cell}[${index}] keeps "${expected}"`, () => {
+			const { bytes, raw } = submission(cell, index);
+			expect(extractCommandOutput(raw, bytes)).toBe(expected);
+		});
+	}
+
+	test("a send with no output still extracts as empty", () => {
+		const { bytes, raw } = submission("I5-global-session-split", 0);
+		expect(extractCommandOutput(raw, bytes)).toBe("");
+	});
+});
+
+/**
+ * #575 review captures (CHR 7.24.5, 512 columns): TAB completion lists, a
+ * trailing space, BOM and non-ASCII input, backspace, multi-line and block
+ * sends, and echoes at and past the terminal width. `expected` is what the
+ * screen shows as output; the source note in the fixture explains the one
+ * leading blank line that is kept.
+ */
+describe("extractCommandOutput — console echo captures (#575 review)", () => {
+	for (const capture of echoCaptures.captures) {
+		test(capture.label, () => {
+			const { cols } = capture as { cols?: number };
+			expect(extractCommandOutput(capture.raw, capture.command, cols)).toBe(
+				capture.expected,
+			);
+		});
+	}
+});
+
+describe("extractCommandOutput — control characters and screen edits (#575 review)", () => {
+	// A real CHR 7.24.5 reply for `:put "plain"`, with its output row replaced.
+	const ascii = echoCaptures.captures.find((c) => c.label === "ascii");
+	if (!ascii) throw new Error("fixture has no `ascii` capture");
+	const withOutput = (row: string) =>
+		ascii.raw.replace("\r\n\rplain\r\n", `\r\n\r${row}\r\n`);
+	const cases: [string, string, string][] = [
+		["BS overwrites the previous character", "ab\bX", "aX"],
+		["BEL takes no column before a BS", "a\u0007\bX", "X\u0007"],
+		["BEL between characters is kept", "a\u0007b", "a\u0007b"],
+		["DEL takes no column before a CR", "ab\u007f\rX", "Xb\u007f"],
+		["a trailing TAB is kept", "a\t", "a\t"],
+		["a trailing VT is kept", "a\u000b", "a\u000b"],
+		["padding spaces are trimmed", "a   ", "a"],
+		["BS after a TAB lands inside its span", "\t\bX", "\tX"],
+		["a TAB overwritten by CR leaves spaces", "\tab\rX", `X${" ".repeat(7)}ab`],
+		// cspell:ignore ABCDEFGHZ
+		["a TAB after CR moves past text", "ABCDEFGH\r\tZ", "ABCDEFGHZ"],
+		["a TAB after CR fills only blank cells", "ABC\r\tZ", "ABC\tZ"],
+		["BS at the start of a row after LF", "abc\n\bXY", "abc\nXY"],
+		[
+			"a bare ESC before a TAB drops only the ESC",
+			"before\u001b\tZ",
+			"before\tZ",
+		],
+		[
+			"a bare ESC before a surrogate pair",
+			"before\u001b\u{1d11e}after",
+			"before\u{1d11e}after",
+		],
+		["a two-character escape is dropped whole", "a\u001byb", "ab"],
+	];
+	for (const [label, row, expected] of cases) {
+		test(label, () => {
+			expect(extractCommandOutput(withOutput(row), ascii.command)).toBe(
+				expected,
+			);
+		});
+	}
+	test("BS at the start of a wrapped row (16 columns)", () => {
+		const row = `${"x".repeat(17)}\r\n\bYZ`;
+		expect(extractCommandOutput(withOutput(row), ascii.command, 16)).toBe(
+			`${"x".repeat(17)}YZ`,
+		);
+	});
+	test("a TAB at the wrap edge takes no column (16 columns)", () => {
+		const row = `${"x".repeat(16)}\t\bY`;
+		expect(extractCommandOutput(withOutput(row), ascii.command, 16)).toBe(
+			`${"x".repeat(15)}Y\t`,
+		);
+	});
 });

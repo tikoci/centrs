@@ -98,6 +98,26 @@ publish `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
 
 ### Fixed
 
+- `execute --via mac-telnet` returns the command's output without its echo
+  (#575). The reader skipped as many screen columns as the command was long,
+  but the console's echo differs from the bytes sent: it drops a trailing
+  newline, trailing spaces and non-ASCII characters, applies backspace, lists
+  TAB completions and redraws the prompt. A single-line `:put` could come back
+  `""`, and a multi-line script kept its echo (`[user@host] > …`, `{... }`)
+  and lost the output of all but its last line. The reader now follows the
+  console's own framing instead of the command text: each line's echo ends
+  with CRLF + CR, each new prompt starts with `ESC[9999B`, and a TAB
+  completion list is a redraw without `ESC[K`. A prompt marker counts only
+  after a CR and before a whole drawn prompt (`[user@host] …>` or `{...`), so
+  printed text that looks like a command, a prompt or a continuation stays
+  output, and a printed `ESC[9999B` no longer discards the text around it
+  (terminal escape sequences themselves are stripped, as before); only output
+  that reproduces CR + `ESC[9999B` + a drawn prompt is read as one. Output
+  lines longer than the 512-column console come back whole instead of split
+  at the width, and TAB and other control characters in output are kept
+  instead of dropped. Grounded on CHR 7.23.1,
+  7.23.8 and 7.24.5 console captures at 512, 200 and 80 columns
+  (`test/fixtures/mac-telnet-console-echo.json`).
 - `discover`'s refresh request gets a reply again. The 9-zero-byte refresh
   ended with a trailing byte, and RouterOS drops a datagram whose TLVs do not
   end exactly at its end, so no router answered it; `discover` only saw
@@ -221,10 +241,6 @@ publish `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
 Confirmed, pre-existing defects carried into these previews; none is a
 regression from 0.1.10.
 
-- [#575](https://github.com/tikoci/centrs/issues/575): `execute --via
-  mac-telnet` can silently drop `:put` output from single-line commands with
-  a trailing newline. Use REST, native API, or SSH when reliable captured
-  output is required.
 - [#604](https://github.com/tikoci/centrs/issues/604): MCP authorization and
   dialing read the CDB separately, so a concurrent record edit can change the
   target, credentials or write policy in between. Avoid CDB edits during MCP
