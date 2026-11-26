@@ -19,6 +19,16 @@ MCP results and resources always redact them. `--password-stdin` on
 `devices add`/`set` keeps record passwords out of process arguments.
 See the [devices contract](commands/devices/README.md#record-password-in-output).
 
+Since 0.2.0, `--password-file` / `CENTRS_PASSWORD_FILE` and
+`--cdb-password-file` / `CENTRS_CDB_PASSWORD_FILE` read the target password
+and the CDB key from a file, such as a container's `/run/secrets/<name>`, so
+neither has to sit in process arguments or the environment (#672). Only flags
+and the process environment may name such a file: `settings set` refuses the
+keys and the `centrs.env` loader drops them. `meta.settings` reports the file
+source, never its contents. A working-directory `.env` no longer reaches
+centrs: Bun auto-loads it, so the CLI and `centrs mcp` re-launch without it and
+warn `settings/dotenv-ignored` (#666).
+
 CDB encryption is explicit: `devices init --encrypt` creates an encrypted
 registry, and `devices encrypt` converts an existing open CDB. Conversion
 retains existing backups and creates a plaintext snapshot unless
