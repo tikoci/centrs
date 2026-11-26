@@ -191,7 +191,10 @@ maintainer adds it here.
    `CENTRS_CDB_PASSWORD_FILE`, `--password-file` / `CENTRS_PASSWORD_FILE`),
    as a container's `/run/secrets` provides. It goes ahead of
    [Auth and secrets](#auth-and-secrets) because only flags and the process
-   environment may name the file.
+   environment may name the file. That rule needs #666 first: until then a
+   cloned repo's `.env` reaches the process environment through Bun. A
+   record password keeps `devices add|set --password-stdin < <file>`; #672's
+   `devices --password-file` was dropped.
 
 ## Parked themes
 
