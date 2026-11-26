@@ -9,6 +9,7 @@ import { encodeOpenWinBoxCdb } from "../../src/data/winbox-cdb.ts";
 import { addDevice, loadCdb } from "../../src/devices.ts";
 import { resolveMcpConfig } from "../../src/mcp/config.ts";
 import { createCentrsMcpServer } from "../../src/mcp/server.ts";
+import { HERMETIC_ENV } from "../unit/hermetic-env.ts";
 import {
 	exampleIds,
 	isChrIntegrationEnabled,
@@ -67,7 +68,7 @@ describeFast("centrs MCP server against CHR", () => {
 			);
 
 			await writeFile(cdbFile, encodeOpenWinBoxCdb([]));
-			let cdb = await loadCdb({ cdbFile, env: {} });
+			let cdb = await loadCdb({ cdbFile, env: HERMETIC_ENV });
 			await addDevice({
 				cdb,
 				target: chr.restUrl,
@@ -76,7 +77,7 @@ describeFast("centrs MCP server against CHR", () => {
 				comment: "identity=mcp-lab mcp=rw via=rest-api",
 				savedPassword: true,
 			});
-			cdb = await loadCdb({ cdbFile, env: {} });
+			cdb = await loadCdb({ cdbFile, env: HERMETIC_ENV });
 			await addDevice({
 				cdb,
 				target: "ro-only",
@@ -86,7 +87,7 @@ describeFast("centrs MCP server against CHR", () => {
 				savedPassword: true,
 			});
 
-			const config = resolveMcpConfig({ cdbFile, env: {} });
+			const config = resolveMcpConfig({ cdbFile, env: HERMETIC_ENV });
 			const server = createCentrsMcpServer(config);
 			const [clientTransport, serverTransport] =
 				InMemoryTransport.createLinkedPair();

@@ -26,6 +26,7 @@ import {
 	sha256,
 } from "../../src/protocols/ec-srp5.ts";
 import vectors from "../fixtures/ec-srp5.json";
+import { HERMETIC_ENV } from "../unit/hermetic-env.ts";
 import {
 	isChrIntegrationEnabled,
 	recordIntegrationEvidence,
@@ -148,7 +149,7 @@ describeFast("EC-SRP5 minimal-length RouterOS discriminators (#565)", () => {
 							timeout: 55_000,
 							yes: true,
 						},
-						{},
+						HERMETIC_ENV,
 					).then((result) => {
 						if (!result.ok)
 							throw new Error(`${result.error.code}: ${result.error.summary}`);

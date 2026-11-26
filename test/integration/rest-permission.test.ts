@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { executeEnvelope } from "../../src/execute.ts";
 import { retrieveEnvelope } from "../../src/retrieve.ts";
+import { HERMETIC_ENV } from "../unit/hermetic-env.ts";
 import {
 	isChrIntegrationEnabled,
 	REST_API_WITHOUT_API_POLICY_SINCE,
@@ -242,7 +243,7 @@ describeFast("REST permission refusals (routeros/permission-denied)", () => {
 
 			const p3 = await retrieveEnvelope(
 				{ ...rest(users.noApi[0]), path: "/system/resource" },
-				{},
+				HERMETIC_ENV,
 			);
 			if (
 				routerOsAtLeast(chr.state.version, REST_API_WITHOUT_API_POLICY_SINCE)
@@ -255,7 +256,7 @@ describeFast("REST permission refusals (routeros/permission-denied)", () => {
 
 			const p4 = await retrieveEnvelope(
 				{ ...rest(users.ro[0], "centrs-wrong"), path: "/system/resource" },
-				{},
+				HERMETIC_ENV,
 			);
 			expect(p4.ok).toBe(false);
 			if (!p4.ok) expect(p4.error.code).toBe("transport/auth-failed");

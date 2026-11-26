@@ -3,6 +3,7 @@ import { executeEnvelope } from "../../src/execute.ts";
 import { resolveMcpConfig } from "../../src/mcp/config.ts";
 import { handleExecute } from "../../src/mcp/tools.ts";
 import { retrieve } from "../../src/retrieve.ts";
+import { HERMETIC_ENV } from "../unit/hermetic-env.ts";
 import { makeMcpTestCdb } from "../unit/mcp-cdb-fixture.ts";
 import {
 	isChrIntegrationEnabled,
@@ -48,7 +49,7 @@ describeFast("output-file write gates against CHR", () => {
 				);
 				const note = await retrieve(
 					{ targetInput: chr.restUrl, path: "/system/note", ...auth },
-					{},
+					HERMETIC_ENV,
 				);
 				expect(note.ok).toBe(true);
 				expect((note.data as { note?: string }).note).toBe("");
@@ -61,7 +62,10 @@ describeFast("output-file write gates against CHR", () => {
 					},
 				]);
 				cleanupCdb = cdb.cleanup;
-				const config = resolveMcpConfig({ cdbFile: cdb.path, env: {} });
+				const config = resolveMcpConfig({
+					cdbFile: cdb.path,
+					env: HERMETIC_ENV,
+				});
 				for (const via of ["rest-api", "native-api"] as const) {
 					const base = {
 						targetInput: via === "rest-api" ? chr.restUrl : "127.0.0.1",
@@ -79,7 +83,7 @@ describeFast("output-file write gates against CHR", () => {
 								: `/system identity export fi${separator}"${name}"`;
 						const refused = await executeEnvelope(
 							{ ...base, command, stdinIsTty: false },
-							{},
+							HERMETIC_ENV,
 						);
 						expect(refused.ok ? undefined : refused.error.code).toBe(
 							"usage/confirmation-required",
@@ -93,7 +97,10 @@ describeFast("output-file write gates against CHR", () => {
 								"cdb/write-not-permitted",
 							);
 						}
-						const before = await retrieve({ ...base, path: "/file" }, {});
+						const before = await retrieve(
+							{ ...base, path: "/file" },
+							HERMETIC_ENV,
+						);
 						expect(before.ok).toBe(true);
 						expect(Array.isArray(before.data)).toBe(true);
 						expect(
@@ -106,13 +113,16 @@ describeFast("output-file write gates against CHR", () => {
 						// This keeps a parser rejection from masquerading as a safe gate.
 						const confirmed = await executeEnvelope(
 							{ ...base, command, yes: true },
-							{},
+							HERMETIC_ENV,
 						);
 						expect(confirmed).toMatchObject({
 							ok: true,
 							meta: { validation: { result: "passed" } },
 						});
-						const after = await retrieve({ ...base, path: "/file" }, {});
+						const after = await retrieve(
+							{ ...base, path: "/file" },
+							HERMETIC_ENV,
+						);
 						expect(after.ok).toBe(true);
 						expect(
 							(after.data as { name?: string }[]).some(
@@ -167,7 +177,7 @@ describeFast("bare menu path reads against CHR (W6)", () => {
 				// read that answers.
 				const nav = await executeEnvelope(
 					{ ...base, command: "/system/identity", stdinIsTty: false },
-					{},
+					HERMETIC_ENV,
 				);
 				expect(nav.ok).toBe(false);
 				if (!nav.ok) {
@@ -181,12 +191,12 @@ describeFast("bare menu path reads against CHR (W6)", () => {
 				// stays behind the confirmation gate.
 				const read = await executeEnvelope(
 					{ ...base, command: "/system/identity/print", stdinIsTty: false },
-					{},
+					HERMETIC_ENV,
 				);
 				expect(read.ok).toBe(true);
 				const gated = await executeEnvelope(
 					{ ...base, command: "/system/reboot", stdinIsTty: false },
-					{},
+					HERMETIC_ENV,
 				);
 				expect(gated.ok ? undefined : gated.error.code).toBe(
 					"usage/confirmation-required",

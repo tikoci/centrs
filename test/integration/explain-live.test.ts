@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { explainCommand } from "../../src/explain.ts";
 import { explainLiveEnvelope } from "../../src/explain-live.ts";
 import { retrieveEnvelope } from "../../src/retrieve.ts";
+import { HERMETIC_ENV } from "../unit/hermetic-env.ts";
 import {
 	isChrIntegrationEnabled,
 	recordIntegrationEvidence,
@@ -21,14 +22,14 @@ describeFast("explain live foundation (#491)", () => {
 				if (packages === undefined) {
 					const result = await retrieveEnvelope(
 						{ ...connection, path: "/system/package" },
-						{},
+						HERMETIC_ENV,
 					);
 					expect(result.ok).toBe(true);
 					if (result.ok) packages = result.data;
 				}
 				const before = await retrieveEnvelope(
 					{ ...connection, path: "/system/identity" },
-					{},
+					HERMETIC_ENV,
 				);
 				const inputs = [
 					"/ip/address add address=bogus interface=",
@@ -45,7 +46,7 @@ describeFast("explain live foundation (#491)", () => {
 					const result = await explainLiveEnvelope(
 						{ ...connection, input },
 						{},
-						{},
+						HERMETIC_ENV,
 					);
 					expect(result.ok).toBe(true);
 					if (!result.ok) throw new Error(JSON.stringify(result));
@@ -142,7 +143,7 @@ describeFast("explain live foundation (#491)", () => {
 				const oversized = await explainLiveEnvelope(
 					{ ...connection, input: `#${"x".repeat(32767)}` },
 					{},
-					{},
+					HERMETIC_ENV,
 				);
 				expect(oversized.ok).toBe(true);
 				if (oversized.ok) {
@@ -155,7 +156,7 @@ describeFast("explain live foundation (#491)", () => {
 				}
 				const after = await retrieveEnvelope(
 					{ ...connection, path: "/system/identity" },
-					{},
+					HERMETIC_ENV,
 				);
 				expect(after.ok).toBe(true);
 				if (before.ok && after.ok) expect(after.data).toEqual(before.data);
