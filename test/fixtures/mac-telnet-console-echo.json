@@ -1,5 +1,5 @@
 {
-	"_source": "CHR 7.24.5 x86 MAC-Telnet console screens, captured 2026-11-26 over the L2 bridge (test/integration/mactelnet-l2-bridge.ts) with MacTelnetConsole.run() at the default 512 columns, during the review of #676 (#575). `command` is the exact text passed to run(); `raw` is the console's reply; `expected` is the command's output as the screen shows it (verified by hand: the echo, TAB completion lists and prompt redraws removed). `wrap short output 473` keeps a leading blank line: its echo row is exactly 512 columns wide, and the blank row after it is not distinguishable from output.",
+	"_source": "CHR 7.24.5 x86 MAC-Telnet console screens, captured 2026-11-26 over the L2 bridge (test/integration/mactelnet-l2-bridge.ts) with MacTelnetConsole.run() at the default 512 columns, during the review of #676 (#575). `command` is the exact text passed to run(); `raw` is the console's reply; `expected` is the command's output as the screen shows it (verified by hand: the echo, TAB completion lists and prompt redraws removed). In `wrap short output 473` and `474` the redraw fills the 512-column row, so the console wraps once more before the CRLF + CR that ends the echo; read on the screen alone, that wrap looked like a blank output line. Entries labelled `re-check:` are a second CHR 7.24.5 session (2026-11-26, same bridge and width) for the second review of #676: printed text that looks like the next command, ends with the command's own tail, looks like a prompt or a `{... ` continuation; repeated silent lines; a TAB-only line; a tail repeated at the wrap boundary; and `:put \"\"`. Their `expected` is the device output, set before the capture.",
 	"captures": [
 		{
 			"label": "ascii",
@@ -190,13 +190,13 @@
 		{
 			"label": "wrap short output 473",
 			"command": ":local x \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"; :put \"ok\"\n",
-			"expected": "\nok",
+			"expected": "ok",
 			"raw": ":local x \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"; :put \"ok\"\r\n\u001b[A[\u001b[m\u001b[36mmtreview\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \u001b[m\u001b[36m:\u001b[m\u001b[35mlocal\u001b[m \u001b[m\u001b[32;1mx\u001b[m \u001b[m\u001b[33m\"\u001b[mxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\u001b[m\u001b[33m\";\u001b[m \u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[mok\u001b[m\u001b[33m\"\r\n\u001b[m\r\n\rok\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtreview\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \r\n\r\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtreview\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > "
 		},
 		{
 			"label": "wrap short output 474",
 			"command": ":local x \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"; :put \"ok\"\n",
-			"expected": "\nok",
+			"expected": "ok",
 			"raw": ":local x \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"; :put \"ok\r\n\"\u001b[A\u001b[m\u001b[36mmtreview\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \u001b[m\u001b[36m:\u001b[m\u001b[35mlocal\u001b[m \u001b[m\u001b[32;1mx\u001b[m \u001b[m\u001b[33m\"\u001b[mxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\u001b[m\u001b[33m\";\u001b[m \u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[mok\u001b[m\u001b[33m\"\r\n\u001b[m\r\n\rok\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtreview\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \r\n\r\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtreview\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > "
 		},
 		{
@@ -210,6 +210,108 @@
 			"command": ":local x \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"; :put \"ok\"\n",
 			"expected": "ok",
 			"raw": ":local x \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\r\n\"; :put \"ok\"\u001b[A\u001b[m\u001b[32mR\u001b[m] > \u001b[m\u001b[36m:\u001b[m\u001b[35mlocal\u001b[m \u001b[m\u001b[32;1mx\u001b[m \u001b[m\u001b[33m\"\u001b[mxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\u001b[m\u001b[33m\"\r\n;\u001b[m \u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[mok\u001b[m\u001b[33m\"\u001b[m\r\n\rok\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtreview\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \r\n\r\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtreview\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > "
+		},
+		{
+			"label": "re-check: head",
+			"command": ":put \":put \\\"next\\\"\"\n:put \"next\"",
+			"expected": ":put \"next\"\nnext",
+			"raw": ":put \":put \\\"next\\\"\"\r[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[m:put \u001b[m\u001b[34;1m\\\"\u001b[mnext\u001b[m\u001b[34;1m\\\"\u001b[m\u001b[33m\"\u001b[m\r\n\r:put \"next\"\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > :put \"next\"\u001b[11D\u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[mnext\u001b[m\u001b[33m\"\u001b[m\r\n\rnext\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > "
+		},
+		{
+			"label": "re-check: tail",
+			"command": ":put \"012345678901234567890123\"; # 012345678901234567890123",
+			"expected": "012345678901234567890123",
+			"raw": ":put \"012345678901234567890123\"; # 012345678901234567890123\r[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[m012345678901234567890123\u001b[m\u001b[33m\";\u001b[m \u001b[37;44m# 012345678901234567890123\u001b[m\r\n\r012345678901234567890123\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > "
+		},
+		{
+			"label": "re-check: tailLF",
+			"command": ":put \"012345678901234567890123\"; # 012345678901234567890123\n",
+			"expected": "012345678901234567890123",
+			"raw": ":put \"012345678901234567890123\"; # 012345678901234567890123\r[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[m012345678901234567890123\u001b[m\u001b[33m\";\u001b[m \u001b[37;44m# 012345678901234567890123\u001b[m\r\n\r012345678901234567890123\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \r\n\r\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > "
+		},
+		{
+			"label": "re-check: prompt-like output",
+			"command": ":put \"[u@h] >\"\n:put \"next\"",
+			"expected": "[u@h] >\nnext",
+			"raw": ":put \"[u@h] >\"\u001b[14D\u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[m[u@h] >\u001b[m\u001b[33m\"\u001b[m\r\n\r[u@h] >\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > :put \"next\"\u001b[11D\u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[mnext\u001b[m\u001b[33m\"\u001b[m\r\n\rnext\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > "
+		},
+		{
+			"label": "re-check: literal continuation",
+			"command": ":put \"{... :put \\\"next\\\"\"\n:put \"next\"",
+			"expected": "{... :put \"next\"\nnext",
+			"raw": ":put \"{... :put \\\"next\\\"\"\r[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[m{... :put \u001b[m\u001b[34;1m\\\"\u001b[mnext\u001b[m\u001b[34;1m\\\"\u001b[m\u001b[33m\"\u001b[m\r\n\r{... :put \"next\"\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > :put \"next\"\u001b[11D\u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[mnext\u001b[m\u001b[33m\"\u001b[m\r\n\rnext\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > "
+		},
+		{
+			"label": "re-check: only TAB between",
+			"command": ":put \"before\"\n\t\n:put \"after\"",
+			"expected": "before\nafter",
+			"raw": ":put \"before\"\u001b[13D\u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[mbefore\u001b[m\u001b[33m\"\u001b[m\r\n\rbefore\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \r\n\u001b[m\u001b[35;1mping\u001b[m     \u001b[m\u001b[36mcertificate\u001b[m     \u001b[m\u001b[36mconsole\u001b[m     \u001b[m\u001b[36mdisk\u001b[m     \u001b[m\u001b[36mfile\u001b[m     \u001b[m\u001b[36minterface\u001b[m     \u001b[m\u001b[36mip\u001b[m     \u001b[m\u001b[36mipv6\u001b[m     \u001b[m\u001b[36mlog\u001b[m     \u001b[m\u001b[36mmpls\u001b[m     \u001b[m\u001b[36mport\u001b[m     \u001b[m\u001b[36mppp\u001b[m     \u001b[m\u001b[36mqueue\u001b[m     \u001b[m\u001b[36mradius\u001b[m     \u001b[m\u001b[36mrouting\u001b[m     \u001b[m\u001b[36msafe-mode\u001b[m     \u001b[m\u001b[36msnmp\u001b[m     \u001b[m\u001b[36mspecial-login\u001b[m     \u001b[m\u001b[36msystem\u001b[m     \u001b[m\u001b[36mtask\u001b[m     \u001b[m\u001b[36mtool\u001b[m     \u001b[m\u001b[36muser\u001b[m     \u001b[m\u001b[35mbeep\u001b[m     \u001b[m\u001b[35mexport\u001b[m     \u001b[m\u001b[35mimport\u001b[m     \u001b[m\u001b[35mpassword\u001b[m     \u001b[m\u001b[35mquit\u001b[m     \u001b[m\u001b[35mredo\u001b[m     \u001b[m\u001b[35mundo\u001b[m   \r\n\r\u001b[9999B[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \u001b[K\r\n\r\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > :put \"after\"\u001b[12D\u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[mafter\u001b[m\u001b[33m\"\u001b[m\r\n\rafter\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > "
+		},
+		{
+			"label": "re-check: repeated silent locals",
+			"command": ":put \"before\"\n:local x 1\n:local x 1\n:put \"after\"",
+			"expected": "before\nafter",
+			"raw": ":put \"before\"\u001b[13D\u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[mbefore\u001b[m\u001b[33m\"\u001b[m\r\n\rbefore\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > :local x 1\u001b[10D\u001b[m\u001b[36m:\u001b[m\u001b[35mlocal\u001b[m \u001b[m\u001b[32;1mx\u001b[m 1\r\n\r\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > :local x 1\u001b[10D\u001b[m\u001b[36m:\u001b[m\u001b[35mlocal\u001b[m \u001b[m\u001b[32;1mx\u001b[m 1\r\n\r\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > :put \"after\"\u001b[12D\u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[mafter\u001b[m\u001b[33m\"\u001b[m\r\n\rafter\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > "
+		},
+		{
+			"label": "re-check: early tail at wrap",
+			"command": ":put \"ok\"; # zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz012345678901234567890123-middle-012345678901234567890123",
+			"expected": "ok",
+			"raw": ":put \"ok\"; # zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz012345678901234567890123-\r\nmiddle-012345678901234567890123\u001b[A\u001b[15D\u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[mok\u001b[m\u001b[33m\";\u001b[m \u001b[37;44m# zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz012345678901234567890123-m\r\niddle-012345678901234567890123\u001b[m\r\n\rok\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > "
+		},
+		{
+			"label": "re-check: TAB 4 LF",
+			"command": ":put\t\"test\"\n",
+			"expected": "test",
+			"raw": ":put \r\n\u001b[m\u001b[32mmessage\u001b[m\r\n\r\u001b[9999B[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > :put \u001b[K\"test\"\u001b[11D\u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[mtest\u001b[m\u001b[33m\"\u001b[m\r\n\rtest\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \r\n\r\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > "
+		},
+		{
+			"label": "re-check: trailing space LF",
+			"command": ":put \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\" \n",
+			"expected": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+			"raw": ":put \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\" \r[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[mxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\u001b[m\u001b[33m\"\u001b[m \r\n\rxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \r\n\r\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > "
+		},
+		{
+			"label": "re-check: unicode LF",
+			"command": ":put \"héllo→574\"\n",
+			"expected": "hllo574",
+			"raw": ":put \"hllo574\"\u001b[14D\u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[mhllo574\u001b[m\u001b[33m\"\u001b[m\r\n\rhllo574\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \r\n\r\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > "
+		},
+		{
+			"label": "re-check: multiline",
+			"command": ":put \"one\"\n:put \"two\"\n",
+			"expected": "one\ntwo",
+			"raw": ":put \"one\"\u001b[10D\u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[mone\u001b[m\u001b[33m\"\u001b[m\r\n\rone\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > :put \"two\"\u001b[10D\u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[mtwo\u001b[m\u001b[33m\"\u001b[m\r\n\rtwo\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \r\n\r\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > "
+		},
+		{
+			"label": "re-check: block",
+			"command": "{\n:put \"one\"\n}\n",
+			"expected": "one",
+			"raw": "{\b\u001b[m\u001b[33m{\u001b[m\r\n\r\r\r\r\u001b[9999B\u001b[K{... :put \"one\"\r{... \u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[mone\u001b[m\u001b[33m\"\u001b[m\r\n\r\r\r\r\u001b[9999B\u001b[K{... }\b\u001b[m\u001b[33m}\u001b[m\r\n\rone\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \r\n\r\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > "
+		},
+		{
+			"label": "re-check: wrap 473",
+			"command": ":local x \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"; :put \"ok\"\n",
+			"expected": "ok",
+			"raw": ":local x \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"; :put \"ok\"\r[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \u001b[m\u001b[36m:\u001b[m\u001b[35mlocal\u001b[m \u001b[m\u001b[32;1mx\u001b[m \u001b[m\u001b[33m\"\u001b[mxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\u001b[m\u001b[33m\";\u001b[m \u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[mok\u001b[m\u001b[33m\"\u001b[m\r\n\rok\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \r\n\r\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > "
+		},
+		{
+			"label": "re-check: wrap 474",
+			"command": ":local x \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"; :put \"ok\"\n",
+			"expected": "ok",
+			"raw": ":local x \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"; :put \"ok\"\r\n\u001b[A[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \u001b[m\u001b[36m:\u001b[m\u001b[35mlocal\u001b[m \u001b[m\u001b[32;1mx\u001b[m \u001b[m\u001b[33m\"\u001b[mxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\u001b[m\u001b[33m\";\u001b[m \u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[mok\u001b[m\u001b[33m\"\r\n\u001b[m\r\n\rok\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \r\n\r\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > "
+		},
+		{
+			"label": "re-check: leading TAB",
+			"command": "\t:put \"tab first\"",
+			"expected": "tab first",
+			"raw": "\r\n\u001b[m\u001b[35;1mping\u001b[m     \u001b[m\u001b[36mcertificate\u001b[m     \u001b[m\u001b[36mconsole\u001b[m     \u001b[m\u001b[36mdisk\u001b[m     \u001b[m\u001b[36mfile\u001b[m     \u001b[m\u001b[36minterface\u001b[m     \u001b[m\u001b[36mip\u001b[m     \u001b[m\u001b[36mipv6\u001b[m     \u001b[m\u001b[36mlog\u001b[m     \u001b[m\u001b[36mmpls\u001b[m     \u001b[m\u001b[36mport\u001b[m     \u001b[m\u001b[36mppp\u001b[m     \u001b[m\u001b[36mqueue\u001b[m     \u001b[m\u001b[36mradius\u001b[m     \u001b[m\u001b[36mrouting\u001b[m     \u001b[m\u001b[36msafe-mode\u001b[m     \u001b[m\u001b[36msnmp\u001b[m     \u001b[m\u001b[36mspecial-login\u001b[m     \u001b[m\u001b[36msystem\u001b[m     \u001b[m\u001b[36mtask\u001b[m     \u001b[m\u001b[36mtool\u001b[m     \u001b[m\u001b[36muser\u001b[m     \u001b[m\u001b[35mbeep\u001b[m     \u001b[m\u001b[35mexport\u001b[m     \u001b[m\u001b[35mimport\u001b[m     \u001b[m\u001b[35mpassword\u001b[m     \u001b[m\u001b[35mquit\u001b[m     \u001b[m\u001b[35mredo\u001b[m     \u001b[m\u001b[35mundo\u001b[m   \r\n\r\u001b[9999B[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > \u001b[K:put \"tab first\"\u001b[16D\u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[mtab first\u001b[m\u001b[33m\"\u001b[m\r\n\rtab first\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > "
+		},
+		{
+			"label": "re-check: empty put",
+			"command": ":put \"\"\n:put \"after\"",
+			"expected": "\nafter",
+			"raw": ":put \"\"\u001b[7D\u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\"\u001b[m\r\n\r\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > :put \"after\"\u001b[12D\u001b[m\u001b[36m:\u001b[m\u001b[35mput\u001b[m \u001b[m\u001b[33m\"\u001b[mafter\u001b[m\u001b[33m\"\u001b[m\r\n\rafter\r\n\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mmtcheck\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > "
 		}
 	]
 }

@@ -104,9 +104,12 @@ publish `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
   newline, trailing spaces and non-ASCII characters, applies backspace, lists
   TAB completions and redraws the prompt. A single-line `:put` could come back
   `""`, and a multi-line script kept its echo (`[user@host] > …`, `{... }`)
-  and lost the output of all but its last line. The reader now finds and
-  removes each command line's echo and keeps every line's output, grounded on
-  CHR 7.24.5 console captures.
+  and lost the output of all but its last line. The reader now follows the
+  console's own framing instead of the command text: each line's echo ends
+  with CRLF + CR, each new prompt starts with `ESC[9999B`, and a TAB
+  completion list is a redraw without `ESC[K`. Printed text that looks like a
+  command, a prompt or a `{...` continuation stays output. Grounded on CHR
+  7.24.5 console captures (`test/fixtures/mac-telnet-console-echo.json`).
 - `discover`'s refresh request gets a reply again. The 9-zero-byte refresh
   ended with a trailing byte, and RouterOS drops a datagram whose TLVs do not
   end exactly at its end, so no router answered it; `discover` only saw

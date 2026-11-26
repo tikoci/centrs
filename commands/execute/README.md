@@ -115,7 +115,9 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
   the only one that negotiates a size: `src/protocols/mac-telnet-console.ts`
   answers the device's terminal-size probe with a deliberately tall/wide screen,
   so captured columns are neither paginated nor wrapped *at the negotiated
-  width*. **SSH execute** runs *without* a pseudo-tty (`src/protocols/ssh.ts`),
+  width*. One output line longer than those 512 columns still comes back split
+  at column 512: the console wraps it with the same bare CRLF it uses between
+  lines, so the reader cannot rejoin it (CHR 7.24.5). **SSH execute** runs *without* a pseudo-tty (`src/protocols/ssh.ts`),
   so no width is negotiated at all. **REST/native-api** are not consoles, so a
   terminal width never applies (they return structured records, or a string
   `ret` for script-mode). There is therefore no per-call `--width` knob today —

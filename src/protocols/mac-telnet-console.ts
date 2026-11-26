@@ -149,29 +149,81 @@ export function emulateScreen(text: string): string[] {
  * Extract the command's clean output from its raw console response: drop the
  * echoed command and any trailing prompt / blank lines.
  *
- * Without `command`, the first screen line is taken as the echo. With it, each
- * command line's echo is found on the screen and removed, so the output of
- * every line is kept, including the lines between the echoes of a multi-line
- * script. An echo starts at the first line that (after a `[user@host] … > ` or
- * `{... ` prompt) begins with the command line's text, and ends at the first
- * line where the echo so far ends with the command line's tail; a redraw that
- * repeats that tail right after it is echo too. The console's echo differs from
- * the bytes sent, so both are compared as the console shows them (see
- * {@link consoleEchoLines}). Recorded on CHR 7.24.5 (#575): a typed echo
- * followed by a prompt redraw, TAB completion lists, wrapped long lines, and
- * `{... ` block continuation.
+ * The console frames its reply (CHR 7.24.5, #575). Each submitted line is
+ * echoed (typed text, then a highlighted redraw, wrapped with bare CRLFs at the
+ * terminal width), and the echo ends with CRLF + CR; the line's output follows.
+ * Each new prompt is drawn after `ESC[9999B`: `ESC[9999B ESC[K` once a line has
+ * run, and `ESC[9999B` alone when the console redraws the same input after a
+ * TAB completion list. So the reply splits into one segment per prompt, a
+ * segment that ends in a redraw is a completion list and is dropped, and each
+ * other segment's output is whatever follows its first CRLF + CR. The command
+ * text is not compared: the echo differs from the bytes sent (non-ASCII,
+ * trailing spaces, backspace, TAB completion), and printed text can look like
+ * an echo or a prompt.
  *
- * When an echo cannot be found, it falls back to counting the command's
- * length in screen columns from the first line, as before #575.
+ * A reply without that framing falls back to the screen: the first line is the
+ * echo, or, with `command`, as many screen columns as the command is long.
  */
 export function extractCommandOutput(raw: string, command?: string): string {
+	const framed = framedOutput(raw);
+	if (framed !== undefined) return framed.join("\n");
 	const lines = emulateScreen(raw);
-	let body: string[];
-	if (command === undefined) {
-		body = lines.slice(1);
-	} else {
-		body = stripEchoes(lines, command) ?? countedEcho(lines, command);
+	const body =
+		command === undefined ? lines.slice(1) : countedEcho(lines, command);
+	return trimTrailingPrompts(body).join("\n");
+}
+
+/** `ESC[9999B` (cursor to the last row) starts every prompt the console draws. */
+const PROMPT_MARK = `${ESC}[9999B`;
+/** After a line has run, the prompt is drawn on a cleared row. */
+const FRESH_PROMPT = `${PROMPT_MARK}${ESC}[K`;
+/** An echo ends with CRLF + CR; a wrap inside it is a bare CRLF. */
+const ECHO_END = "\r\n\r";
+
+function framedOutput(raw: string): string[] | undefined {
+	if (!raw.includes(ECHO_END)) return undefined;
+	const out: string[] = [];
+	let from = 0;
+	while (from < raw.length) {
+		const mark = raw.indexOf(PROMPT_MARK, from);
+		const segment = raw.slice(from, mark === -1 ? raw.length : mark);
+		const completionList = mark !== -1 && !raw.startsWith(FRESH_PROMPT, mark);
+		if (!completionList) {
+			const echoEnd = segment.indexOf(ECHO_END);
+			if (echoEnd !== -1) {
+				// Every output line ends with CRLF, so the last row is the
+				// leftover before the next prompt; a blank line before it is output
+				// (`:put ""`). A reply cut off before its next prompt keeps the old
+				// trailing-prompt trim.
+				const rows = emulateScreen(segment.slice(echoEnd + ECHO_END.length));
+				if (mark === -1) out.push(...trimTrailingPrompts(rows));
+				else {
+					if (rows[rows.length - 1] === "") rows.pop();
+					out.push(...rows);
+				}
+			}
+		}
+		if (mark === -1) break;
+		from = mark + PROMPT_MARK.length;
 	}
+	return out;
+}
+
+/** The pre-#575 rule: skip as many screen columns as the command is long. */
+function countedEcho(lines: string[], command: string): string[] {
+	let start = 1;
+	const first = lines[0] ?? "";
+	const prompt = first.match(/^\[[^\]\r\n]*\][^\r\n]*?>\s?/);
+	let consumed = prompt ? first.length - prompt[0].length : first.length;
+	while (consumed < command.length && start < lines.length) {
+		consumed += (lines[start] ?? "").length;
+		start += 1;
+	}
+	return lines.slice(start);
+}
+
+function trimTrailingPrompts(lines: string[]): string[] {
+	const body = [...lines];
 	while (body.length > 0) {
 		const last = body[body.length - 1] as string;
 		if (last.length === 0 || ROUTEROS_PROMPT_RE.test(last)) {
@@ -180,88 +232,7 @@ export function extractCommandOutput(raw: string, command?: string): string {
 		}
 		break;
 	}
-	return body.join("\n");
-}
-
-/** `[user@host] > `, `[user@host] /ip/address> `, or a `{... ` continuation. */
-const ECHO_PROMPT_RE = /^(?:\[[^\]\r\n]*\][^\r\n>]*>\s?|[{(["]*\.\.\. ?)/;
-/** How much of a command line's start and end identifies its echo. */
-const ECHO_ANCHOR_CHARS = 24;
-
-function stripEchoes(lines: string[], command: string): string[] | undefined {
-	const commandLines = consoleEchoLines(command);
-	if (commandLines.length === 0) return undefined;
-	const kept: string[] = [];
-	let cursor = 0;
-	for (const commandLine of commandLines) {
-		const head = commandLine.split("\t")[0]?.slice(0, ECHO_ANCHOR_CHARS) ?? "";
-		const tail = (commandLine.split("\t").pop() ?? "").slice(
-			-ECHO_ANCHOR_CHARS,
-		);
-		let begin = cursor;
-		while (
-			begin < lines.length &&
-			!afterPrompt(lines[begin] ?? "").startsWith(head)
-		)
-			begin += 1;
-		if (begin >= lines.length) return undefined;
-		let end = begin;
-		let echoed = afterPrompt(lines[begin] ?? "");
-		while (!echoed.endsWith(tail)) {
-			end += 1;
-			if (end >= lines.length) return undefined;
-			echoed += lines[end] ?? "";
-		}
-		while (
-			end + 1 < lines.length &&
-			afterPrompt(lines[end + 1] ?? "").endsWith(tail)
-		)
-			end += 1;
-		kept.push(...lines.slice(cursor, begin).filter((l) => !isBarePrompt(l)));
-		cursor = end + 1;
-	}
-	kept.push(...lines.slice(cursor));
-	return kept;
-}
-
-/** The pre-#575 rule: skip as many screen columns as the command is long. */
-function countedEcho(lines: string[], command: string): string[] {
-	let start = 1;
-	const first = lines[0] ?? "";
-	let consumed = afterPrompt(first).length;
-	while (consumed < command.length && start < lines.length) {
-		consumed += (lines[start] ?? "").length;
-		start += 1;
-	}
-	return lines.slice(start);
-}
-
-function afterPrompt(line: string): string {
-	const prompt = line.match(ECHO_PROMPT_RE);
-	return prompt ? line.slice(prompt[0].length) : line;
-}
-
-function isBarePrompt(line: string): boolean {
-	return ROUTEROS_PROMPT_RE.test(line) && afterPrompt(line).trim() === "";
-}
-
-/**
- * The command's lines as the console echoes them: split on CR or LF, BS/DEL
- * applied, non-ASCII dropped (the console drops it at input), trailing spaces
- * trimmed (the screen shows none), and blank lines left out.
- */
-function consoleEchoLines(command: string): string[] {
-	return command
-		.split(/\r\n|\r|\n/)
-		.map((line) => {
-			const out: string[] = [];
-			for (const ch of line) {
-				if (ch === "\b" || ch === "\x7f") out.pop();
-				else if (ch === "\t" || (ch >= " " && ch <= "~")) out.push(ch);
-			}
-			return out.join("").trimEnd();
-		})
-		.filter((line) => line.length > 0);
+	return body;
 }
 
 /**

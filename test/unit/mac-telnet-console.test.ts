@@ -129,8 +129,9 @@ describe("extractCommandOutput — real CHR 7.23.1 captures", () => {
 		const part1 = cmd.slice(0, split);
 		const part2 = cmd.slice(split);
 		const raw = `${P}${part1}\r\n${part2}\r\n${TAIL}`;
-		// Without the command, the wrapped tail leaks; with it the echo is stripped.
-		expect(extractCommandOutput(raw)).toBe(part2);
+		// The echo ends at CRLF + CR, so the wrap's bare CRLF stays inside it,
+		// with or without the command (#575).
+		expect(extractCommandOutput(raw)).toBe("");
 		expect(extractCommandOutput(raw, cmd)).toBe("");
 	});
 
