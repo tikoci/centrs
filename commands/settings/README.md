@@ -238,8 +238,11 @@ keys ignored (never their values). A cloned repo therefore cannot turn on
 `XDG_CONFIG_HOME` somewhere, or switch on Bun's fetch logging. On Linux the
 child gets exactly the exec-time environment (`/proc/self/environ`), and the
 re-launch happens only when Bun changed it. Elsewhere, every key a Bun `.env`
-file names is dropped except the variables the OS always sets (`PATH`,
-`HOME`, …); a shell export of a dropped key is lost too, which fails safe.
+file names is dropped except `PATH` and the Windows system variables
+(`PATHEXT`, `SYSTEMROOT`, `WINDIR`, `COMSPEC`), which the OS always sets. A
+shell export of a dropped key is lost too, which fails safe. That includes
+`HOME`: it picks `centrs.env`, and a Windows shell often has none, so a
+dropped `HOME` falls back to the account's home directory (`os.homedir()`).
 The shebang stays `env bun` (no `env -S bun --no-env-file`): BusyBox `env`
 (Alpine, `oven/bun:alpine`) has no `-S`. A library caller passes its own
 `env`.

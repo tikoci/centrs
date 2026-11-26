@@ -24,8 +24,8 @@
  * exec-time environment, which Bun's load does not touch: the child gets
  * exactly that, and the re-launch happens only when the two differ.
  * Elsewhere, every key that a `.env` file Bun may load names is dropped,
- * except the variables the OS always sets (`PATH`, `HOME`, …), whose shell
- * value already beats the file's. Keys are matched by name, never by parsing
+ * except `PATH` and the Windows system variables, which the OS always sets
+ * and whose shell value already beats the file's. Keys are matched by name, never by parsing
  * values, so no `.env` parser here can drift from Bun's.
  *
  * A changed shebang (`env -S bun --no-env-file`) would do this without a
@@ -57,31 +57,21 @@ export const BUN_DOTENV_FILE_NAMES: readonly string[] = [
 ];
 
 /**
- * Variables the OS or login shell always sets. A `.env` naming one cannot
- * change it (the shell's value wins), and a child without it may not run.
+ * Variables a `.env` may name that the fallback still keeps: the OS always
+ * sets them (so the shell's value wins over the file's), and a child process
+ * may not start or find `ssh` without them. Nothing else is kept, not even
+ * `HOME`, `USERPROFILE` or `APPDATA`: without `/proc` there is no telling a
+ * launch-time value from a file's, a Windows shell often has no `HOME`, and
+ * `HOME` picks which `centrs.env` is read. A dropped one falls back to the
+ * account's home directory (`os.homedir()`).
  */
-const OS_ESSENTIAL_KEYS: ReadonlySet<string> = new Set(
-	[
-		"PATH",
-		"HOME",
-		"USER",
-		"USERNAME",
-		"LOGNAME",
-		"SHELL",
-		"TMPDIR",
-		"TEMP",
-		"TMP",
-		"USERPROFILE",
-		"HOMEDRIVE",
-		"HOMEPATH",
-		"APPDATA",
-		"LOCALAPPDATA",
-		"SYSTEMROOT",
-		"WINDIR",
-		"COMSPEC",
-		"PATHEXT",
-	].map((key) => key.toUpperCase()),
-);
+const KEPT_OS_KEYS: ReadonlySet<string> = new Set([
+	"PATH",
+	"PATHEXT",
+	"SYSTEMROOT",
+	"WINDIR",
+	"COMSPEC",
+]);
 
 const KEY_LINE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_.-]*)\s*[=:]/;
 
@@ -171,7 +161,7 @@ export function planDotenvRelaunch(
 		(key) =>
 			env[key] !== undefined &&
 			named.has(key) &&
-			!OS_ESSENTIAL_KEYS.has(key.toUpperCase()),
+			!KEPT_OS_KEYS.has(key.toUpperCase()),
 	);
 	if (dropped.length === 0) return undefined;
 	const childEnv: Record<string, string> = {};

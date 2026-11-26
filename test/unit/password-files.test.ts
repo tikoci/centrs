@@ -4,11 +4,12 @@
  * `--password-file` / `CENTRS_PASSWORD_FILE`), as `/run/secrets` provides.
  */
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { btestServer } from "../../src/btest.ts";
+import { runDevicesCli } from "../../src/cli/devices.ts";
 import { parseExplainCliArgs } from "../../src/cli/explain.ts";
 import { discover } from "../../src/discover.ts";
 import { CentrsError } from "../../src/errors.ts";
@@ -426,5 +427,35 @@ describe("review follow-ups (#674)", () => {
 		expect(printed.warnings.map((warning) => warning.code)).toContain(
 			"cdb/password-not-needed",
 		);
+	});
+
+	test("devices: a key-source conflict still prints a JSON envelope", async () => {
+		const dir = await sandbox();
+		const errors: string[] = [];
+		const spy = spyOn(console, "error").mockImplementation((line) => {
+			errors.push(String(line));
+		});
+		try {
+			const code = await runDevicesCli([
+				"list",
+				"--cdb-file",
+				join(dir, "winbox.cdb"),
+				"--cdb-password",
+				"v",
+				"--cdb-password-file",
+				join(dir, "k"),
+				"--format",
+				"json",
+			]);
+			expect(code).toBe(1);
+		} finally {
+			spy.mockRestore();
+		}
+		const envelope = JSON.parse(errors.join("\n")) as {
+			ok: boolean;
+			error: { code: string };
+		};
+		expect(envelope.ok).toBe(false);
+		expect(envelope.error.code).toBe("usage/conflicting-flags");
 	});
 });

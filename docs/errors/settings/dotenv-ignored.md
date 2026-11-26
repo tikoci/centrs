@@ -18,13 +18,19 @@ warning names the keys and files, never the values.
   whose `.env`, `.env.local` or `.env.development` sets `CENTRS_*` *(code)*.
 - On macOS or Windows, a key the shell exported that a `.env` file also
   names. Only Linux can tell the two apart, so elsewhere it is dropped too
-  *(code)*. `PATH`, `HOME` and other variables the OS always sets are kept.
+  *(code)*. Only `PATH` and the Windows system variables are kept; a dropped
+  `HOME` falls back to the account's home directory.
 
 ## Fix
 
-- Export the key in the shell or pass its flag for the run that needs it.
+- Pass the key's flag for the run that needs it. On Linux, exporting the key
+  in the shell works too. On macOS and Windows an export is dropped while a
+  `.env` file names the key, so remove that line from the `.env` first.
 - For a lasting preference, use `centrs settings set <key> <value>`, which
-  writes the user-global `centrs.env`.
+  writes the user-global `centrs.env`. It refuses credentials and the
+  password-file keys (`CENTRS_PASSWORD_FILE`, `CENTRS_CDB_PASSWORD_FILE`);
+  name a file with `--password-file` / `--cdb-password-file`, or export the
+  key in the shell or container environment.
 - Or remove the `CENTRS_*` lines from the project's `.env`.
 
 ## Related

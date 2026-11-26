@@ -22,6 +22,7 @@ import {
 	type DevicesCommand,
 	type DevicesEnvelope,
 	type DevicesOutputFormat,
+	type DevicesSettings,
 	type DevicesWhereClause,
 	describeCentrs,
 	devicesOutputFormats,
@@ -44,6 +45,7 @@ import {
 	showDevice,
 	winBoxCdbRecordType,
 } from "../index.ts";
+import { CDB_PASSWORD_SECRET } from "../resolver/secret-source.ts";
 import {
 	type CliCommandMetadata,
 	expandEqualsArgs,
@@ -1055,12 +1057,12 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 	} catch (error) {
 		const format = parsed?.format ?? inferDevicesFormat(args);
 		const subcommand: DevicesCommand = parsed?.subcommand ?? "list";
-		const settings = resolveDevicesSettings({
-			cdbFile: parsed?.cdbFile,
-			cdbPassword: parsed?.cdbPassword,
-			cdbPasswordFile: parsed?.cdbPasswordFile,
-			env: envSnapshot ?? Bun.env,
-		});
+		const settings = errorEnvelopeSettings(
+			parsed?.cdbFile,
+			parsed?.cdbPassword,
+			parsed?.cdbPasswordFile,
+			envSnapshot ?? Bun.env,
+		);
 		const centrsError = asCentrsError(error, {
 			code: "input/invalid-command",
 			summary: error instanceof Error ? error.message : String(error),
@@ -1079,6 +1081,34 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 			console.error(formatCentrsErrorText(centrsError));
 		}
 		return 1;
+	}
+}
+
+/**
+ * The settings an error envelope reports. Choosing the key source can throw
+ * (value and file together), and the error being reported may be exactly
+ * that, so a second failure falls back to the settings without a key source.
+ */
+function errorEnvelopeSettings(
+	cdbFile: string | undefined,
+	cdbPassword: string | undefined,
+	cdbPasswordFile: string | undefined,
+	env: Record<string, string | undefined>,
+): DevicesSettings {
+	try {
+		return resolveDevicesSettings({
+			cdbFile,
+			cdbPassword,
+			cdbPasswordFile,
+			env,
+		});
+	} catch {
+		const {
+			[CDB_PASSWORD_SECRET.envKey]: _value,
+			[CDB_PASSWORD_SECRET.fileEnvKey]: _file,
+			...rest
+		} = env;
+		return resolveDevicesSettings({ cdbFile, env: rest });
 	}
 }
 

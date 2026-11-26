@@ -19,8 +19,10 @@ password was ignored. `ok` and `error` say how the command itself went.
   encrypted CDB is expected later; it never converts an open CDB.
 - To encrypt this CDB instead, run `centrs devices encrypt` with the new
   password in `--cdb-password` or `CENTRS_CDB_PASSWORD`, or in the file
-  `--cdb-password-file` or `CENTRS_CDB_PASSWORD_FILE` names. It refuses an
-  empty one with [`cdb/password-required`](password-required.md).
+  `--cdb-password-file` or `CENTRS_CDB_PASSWORD_FILE` names. An empty value
+  fails with [`cdb/password-required`](password-required.md); an empty file
+  (or one holding only a newline) fails with
+  [`cdb/password-unavailable`](password-unavailable.md).
 
 ## Related
 

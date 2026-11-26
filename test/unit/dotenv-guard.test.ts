@@ -116,6 +116,28 @@ describe("planDotenvRelaunch without it (macOS, Windows)", () => {
 		expect(plan?.env).toEqual({ PATH: "/usr/bin", CENTRS_VIA: "ssh" });
 	});
 
+	// PR #674 review: `HOME` picks `centrs.env`, and a Windows shell often has
+	// none, so a repo's `HOME=.` plus `.config/tikoci/centrs.env` must not
+	// steer it. Without `/proc` a launch `HOME` looks the same, so it goes
+	// too, and the child falls back to the account's home (`os.homedir()`).
+	test("a .env HOME is dropped, with or without a launch HOME", async () => {
+		await writeFile(join(dir, ".env"), "HOME=.\nAPPDATA=.\n");
+		for (const launchHome of [undefined, "/Users/ops"]) {
+			const plan = planDotenvRelaunch({
+				env: {
+					PATH: "/usr/bin",
+					HOME: launchHome ?? ".",
+					APPDATA: ".",
+				},
+				cwd: dir,
+				execArgv: [],
+				initialEnviron: null,
+			});
+			expect(plan?.dropped).toEqual(["APPDATA", "HOME"]);
+			expect(plan?.env).toEqual({ PATH: "/usr/bin" });
+		}
+	});
+
 	test("no .env files: run in place", () => {
 		expect(
 			planDotenvRelaunch({
