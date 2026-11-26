@@ -7,9 +7,11 @@
  * Control whitespace (`\t`/`\r`/`\n`) is escaped so the decoded string
  * carries the caller's original bytes. This is defensive: RouterOS 7.20
  * changelog says "replace TAB characters with spaces when editing scripts
- * and added `tab-width` in `/console/settings`" — version-gated (absent
- * before 7.20), width-configurable via `tab-width`, and scoped to the
- * script editor, not grounded as string-literal expansion (see #276).
+ * and added `tab-width` in `/console/settings`" (absent before 7.20).
+ * Measured on CHR 7.23.8 and 7.24.5 for #676: `tab-width` defaults to 4, a
+ * value stored over REST keeps its literal TAB (SSH returns it), and the
+ * console still advances a TAB to the next multiple of 8. Whether a TAB
+ * inside a string literal is expanded is not measured (see #276).
  * Escaping preserves the caller's bytes whether the device expands or
  * preserves a raw tab.
  */

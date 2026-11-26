@@ -483,6 +483,10 @@ done or declined. A nit that needs more explanation is an issue.
 - `execute --via ssh` sends a multi-line script as one prompt (CR line breaks,
   #576). An opt-in line-by-line mode (one prompt per line, as the console
   would run typed lines) could come later if a caller needs it.
+- `execute --via ssh`: with no pseudo-tty, RouterOS lays out `print` for 80
+  columns, and a wide table prints `Columns: -- (terminal too narrow)` instead
+  of its rows. Logging in as `user+<cols>w` (honored by non-interactive SSH
+  since 7.22; measured on CHR 7.23.8 and 7.24.5 for #676) keeps the columns.
 - `.github/instructions/`: trim Copilot-era verbosity when the TIKOCI-wide
   files are collected in `tikoci.github.io`.
 - Error fields: `docs/CONSTITUTION.md` → Error model specifies `message` and
