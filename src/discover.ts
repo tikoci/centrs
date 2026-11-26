@@ -643,6 +643,7 @@ export interface DiscoverOptions {
 	cdbFile?: string;
 	/** CDB password for `--save` against an encrypted CDB. */
 	cdbPassword?: string;
+	cdbPasswordFile?: string;
 	/** Environment snapshot for CDB resolution. */
 	env?: Record<string, string | undefined>;
 	/** Clock injection for the cache and provenance timestamps. */
@@ -666,6 +667,7 @@ function discoverMeta(
 	const settings = resolveDevicesSettings({
 		cdbFile: options.cdbFile,
 		cdbPassword: options.cdbPassword,
+		cdbPasswordFile: options.cdbPasswordFile,
 		env: options.env ?? {},
 	});
 	return {
@@ -729,6 +731,7 @@ export async function discover(
 				loadOptions: {
 					cdbFile: options.cdbFile,
 					cdbPassword: options.cdbPassword,
+					cdbPasswordFile: options.cdbPasswordFile,
 					env: options.env,
 				},
 				neighbors: entries.map((entry) => entry.neighbor),

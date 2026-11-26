@@ -8,6 +8,7 @@ import {
 	encodeOpenWinBoxCdb,
 	winBoxCdbRecordType,
 } from "../../src/data/winbox-cdb.ts";
+import { encryptCdb } from "../../src/devices.ts";
 import {
 	exampleIds,
 	isChrIntegrationEnabled,
@@ -543,6 +544,77 @@ describeFast("REST retrieve against CHR", () => {
 				"not reached: transport/connection-refused",
 			);
 
+			// 16d. The CDB key from a file (#672): an encrypted CDB, unlocked by
+			// --cdb-password-file and then by CENTRS_CDB_PASSWORD_FILE.
+			const secretsDir = await mkdtemp(join(tmpdir(), "centrs-retrieve-key-"));
+			const keyFile = join(secretsDir, "cdb_key");
+			const cdbKey = "retrieve-cdb-key-from-file";
+			await writeFile(keyFile, `${cdbKey}\n`);
+			const encryptedCdb = join(secretsDir, "winbox.cdb");
+			await writeFile(encryptedCdb, await Bun.file(cdbPath).bytes());
+			await encryptCdb({ cdbFile: encryptedCdb, cdbPasswordFile: keyFile });
+			const keyedByFlag = await expectRetrieveSuccess(consoleCapture, [
+				"retrieve",
+				chr.restUrl,
+				"/system/resource",
+				"--cdb-file",
+				encryptedCdb,
+				"--cdb-password-file",
+				keyFile,
+			]);
+			expect(keyedByFlag.meta.settings.password?.kind).toBe("cdb");
+			expect(JSON.stringify(keyedByFlag)).not.toContain(cdbKey);
+			const previousKeyFile = process.env["CENTRS_CDB_PASSWORD_FILE"];
+			process.env["CENTRS_CDB_PASSWORD_FILE"] = keyFile;
+			try {
+				const keyedByEnv = await expectRetrieveSuccess(consoleCapture, [
+					"retrieve",
+					chr.restUrl,
+					"/system/resource",
+					"--cdb-file",
+					encryptedCdb,
+				]);
+				expect(keyedByEnv.meta.target.source?.kind).toBe("cdb");
+			} finally {
+				if (previousKeyFile === undefined)
+					delete process.env["CENTRS_CDB_PASSWORD_FILE"];
+				else process.env["CENTRS_CDB_PASSWORD_FILE"] = previousKeyFile;
+			}
+
+			// 16e. The router password from a file (#672), with no CDB. The lab's
+			// admin password may be empty, which a password file refuses, so read
+			// as a dedicated user that has one.
+			const fileUser = "file-reader";
+			const filePassword = "routeros-pw-from-file";
+			const addUser = await fetch(`${chr.restUrl}/rest/user`, {
+				method: "PUT",
+				headers: {
+					authorization: `Basic ${Buffer.from(`${auth.username}:${auth.password}`).toString("base64")}`,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					name: fileUser,
+					group: "read",
+					password: filePassword,
+				}),
+			});
+			expect(addUser.ok).toBe(true);
+			const passwordFile = join(secretsDir, "routeros_pw");
+			await writeFile(passwordFile, `${filePassword}\n`);
+			const passwordByFile = await expectRetrieveSuccess(consoleCapture, [
+				"retrieve",
+				chr.restUrl,
+				"/system/resource",
+				"--username",
+				fileUser,
+				"--password-file",
+				passwordFile,
+			]);
+			expect(passwordByFile.meta.settings.password).toMatchObject({
+				kind: "file",
+			});
+			expect(JSON.stringify(passwordByFile)).not.toContain(filePassword);
+
 			// 16c. The gate passed and a later step failed (GH#435): a byte budget
 			// smaller than the answer fails after a validated read, and the
 			// envelope reports the gate that passed.
@@ -644,7 +716,7 @@ describeFast("REST retrieve against CHR", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: [...exampleIds(20), "16b", "16c"],
+				exampleIds: [...exampleIds(20), "16b", "16c", "16d", "16e"],
 			});
 		} finally {
 			consoleCapture.restore();

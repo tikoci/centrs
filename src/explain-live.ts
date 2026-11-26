@@ -52,10 +52,12 @@ export interface ExplainLiveRequest
 			| "port"
 			| "username"
 			| "password"
+			| "passwordFile"
 			| "insecure"
 			| "timeout"
 			| "cdbFile"
 			| "cdbPassword"
+			| "cdbPasswordFile"
 			| "resolve"
 		>,
 		ExplainLiveFacets {

@@ -154,6 +154,8 @@ export interface TransferRequest {
 	port?: number;
 	username?: string;
 	password?: string;
+	/** A file holding the password (`--password-file`); conflicts with `password` (#672). */
+	passwordFile?: string;
 	/** SSH private-key path for sftp/scp (`--ssh-key`). Path only. */
 	sshKey?: string;
 	/** Accept self-signed TLS / new SSH host keys (`--insecure`). Default false. */
@@ -172,6 +174,7 @@ export interface TransferRequest {
 	name?: string;
 	cdbFile?: string;
 	cdbPassword?: string;
+	cdbPasswordFile?: string;
 	/**
 	 * `--match` selector for a `<router>` several CDB records share
 	 * (`user=<name>`, `target=<addr>`, or a record type): the same selector
@@ -1016,6 +1019,7 @@ export async function resolveTransferRequest(
 					targetInput: request.targetInput,
 					cdbFile: request.cdbFile,
 					cdbPassword: request.cdbPassword,
+					cdbPasswordFile: request.cdbPasswordFile,
 					match: request.match,
 				},
 				env,
@@ -1092,6 +1096,7 @@ export async function resolveTransferRequest(
 				{
 					username: request.username,
 					password: request.password,
+					passwordFile: request.passwordFile,
 					sshKey: request.sshKey,
 				},
 				env,

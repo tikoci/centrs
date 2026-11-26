@@ -282,6 +282,21 @@ A working directory's `.env` is not a tier. Bun auto-loads it into
 `process.env`, so the CLI and MCP entries strip the `CENTRS_*` keys it supplied
 before resolving anything (#666; mechanics in `commands/settings/README.md`).
 
+**Secrets come as a value or a file** (#672). The CDB key
+(`--cdb-password` / `CENTRS_CDB_PASSWORD`) and the target password
+(`--password` / `CENTRS_PASSWORD`) each also have a file form
+(`--cdb-password-file` / `CENTRS_CDB_PASSWORD_FILE`, `--password-file` /
+`CENTRS_PASSWORD_FILE`), for a container's `/run/secrets`. Within one tier the
+forms are one choice; setting both is `usage/conflicting-flags`, and flags
+still outrank the environment. Only a flag or the process environment may
+name a `*_FILE` path, never `centrs.env` or a workspace file, so a cloned
+config cannot point it at another file. A file is read when its secret is
+needed (each encrypted-CDB load; each target password resolution), one
+trailing newline stripped as for `--password-stdin`. A file that cannot give
+a password is `cdb/password-unavailable` or `auth/password-unavailable`,
+naming the path, never the contents; an unneeded CDB key file is not read.
+One resolver serves CLI, MCP and the library (`src/resolver/secret-source.ts`).
+
 ### Identity and CDB
 
 The `<router>` argument may be an IP, a DNS name, a MAC, or an **identity**

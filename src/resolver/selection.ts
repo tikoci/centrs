@@ -88,6 +88,7 @@ export interface TargetSelection {
 export interface SelectionResolveInput {
 	cdbFile?: string;
 	cdbPassword?: string;
+	cdbPasswordFile?: string;
 	/** CLI: true (literal positionals allowed). MCP: false (CDB is the allowlist). */
 	allowAdhoc: boolean;
 }
@@ -176,12 +177,14 @@ export async function expandSelection(
 	const settings = resolveDevicesSettings({
 		cdbFile: input.cdbFile,
 		cdbPassword: input.cdbPassword,
+		cdbPasswordFile: input.cdbPasswordFile,
 		env,
 		config,
 	});
 	const explicitCdb =
 		input.cdbFile !== undefined ||
 		input.cdbPassword !== undefined ||
+		input.cdbPasswordFile !== undefined ||
 		env[ENV_CDB_FILE] !== undefined ||
 		env[ENV_CDB_PASSWORD] !== undefined ||
 		config[ENV_CDB_FILE] !== undefined;
@@ -202,6 +205,7 @@ export async function expandSelection(
 			cdb = await loadCdb({
 				cdbFile: input.cdbFile,
 				cdbPassword: input.cdbPassword,
+				cdbPasswordFile: input.cdbPasswordFile,
 				env,
 				config,
 			});

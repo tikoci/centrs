@@ -251,6 +251,36 @@ Exit 1, `transport/connection-refused`. `meta.via="rest-api"`, and
 nowhere. `meta.validation` has no `result`; its device stage is `skipped` with
 `reason: "not reached: transport/connection-refused"` (GH#435).
 
+### 16d. The CDB key from a file (#672)
+
+`$KEY_FILE` holds the password of the encrypted CDB `$ENC_CDB`, as a
+container's `/run/secrets/<name>` does. One trailing newline is ignored.
+
+```bash
+centrs retrieve $R /system/resource --cdb-file $ENC_CDB --cdb-password-file $KEY_FILE --json
+CENTRS_CDB_PASSWORD_FILE=$KEY_FILE centrs retrieve $R /system/resource --cdb-file $ENC_CDB --json
+```
+
+Both succeed with the record's credentials (`meta.settings.password.kind="cdb"`).
+The key appears nowhere in the envelope. The file is read on each CDB load, so
+after it is deleted the next call fails with `cdb/password-unavailable`.
+Giving `--cdb-password` too is `usage/conflicting-flags`. With an open CDB the
+file is not read: the run succeeds with a `cdb/password-not-needed` warning
+that says whether the file exists.
+
+### 16e. The router password from a file (#672)
+
+```bash
+centrs retrieve $R /system/resource --username $U --password-file $PW_FILE --json
+```
+
+`ok: true`; `meta.settings.password={kind:"file",key:"--password-file"}`. Like
+`--password` and `CENTRS_PASSWORD`, a password file outranks every CDB record,
+and a missing one is `auth/password-unavailable`, never a fall back to the
+record. So set `CENTRS_PASSWORD_FILE` per invocation, or keep router
+passwords in the CDB; in a container-wide environment it replaces every
+record's password.
+
 ### 16c. The gate passed, then a later step failed (GH#435)
 
 ```bash

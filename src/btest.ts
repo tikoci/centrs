@@ -102,6 +102,8 @@ export interface BtestClientRequest {
 	controlPort?: number;
 	username?: string;
 	password?: string;
+	/** A file holding the password (`--password-file`); conflicts with `password` (#672). */
+	passwordFile?: string;
 	durationMs?: number;
 	intervalMs?: number;
 	connectionCount?: number;
@@ -113,6 +115,7 @@ export interface BtestClientRequest {
 	natMode?: boolean;
 	cdbFile?: string;
 	cdbPassword?: string;
+	cdbPasswordFile?: string;
 	/**
 	 * `--match` selector for a `<router>` several CDB records share
 	 * (`user=<name>`, `target=<addr>`, or a record type): the same selector
@@ -270,6 +273,7 @@ export async function btestClient(
 				targetInput: request.targetInput,
 				cdbFile: request.cdbFile,
 				cdbPassword: request.cdbPassword,
+				cdbPasswordFile: request.cdbPasswordFile,
 				match: request.match,
 			},
 			env,
@@ -284,7 +288,11 @@ export async function btestClient(
 			cdbResolution,
 		);
 		const auth = resolveAuth(
-			{ username: request.username, password: request.password },
+			{
+				username: request.username,
+				password: request.password,
+				passwordFile: request.passwordFile,
+			},
 			env,
 			cdbResolution,
 		);
@@ -455,6 +463,8 @@ export interface BtestServerRequest {
 	authenticate?: boolean;
 	username?: string;
 	password?: string;
+	/** A file holding the password (`--password-file`); conflicts with `password` (#672). */
+	passwordFile?: string;
 	allocateUdpPortsFrom?: number;
 	maxSessions?: number;
 	intervalMs?: number;
@@ -555,7 +565,11 @@ export async function btestServer(
 	// (flags first, then CENTRS_USERNAME / CENTRS_PASSWORD). No CDB here — the
 	// server has no target device.
 	const auth = resolveAuth(
-		{ username: request.username, password: request.password },
+		{
+			username: request.username,
+			password: request.password,
+			passwordFile: request.passwordFile,
+		},
 		request.env ?? Bun.env,
 	);
 	const operation: BtestServerOperationMeta = {

@@ -543,8 +543,11 @@ can edit it too. Precedence is per-field: args → env → device record →
 
 Start encrypted with `devices init --encrypt`, or start open for a lab and run
 `devices encrypt` when moving to production. Both require a non-empty
-`--cdb-password` / `CENTRS_CDB_PASSWORD`. A password alone does not change the
-mode of initialization or ordinary writes. The library exports
+`--cdb-password` / `CENTRS_CDB_PASSWORD`, or a file holding it
+(`--cdb-password-file` / `CENTRS_CDB_PASSWORD_FILE`, #672). A password alone,
+or a file alone, does not change the mode of initialization or ordinary writes:
+with an open CDB the file is not read, and a missing one is only the
+`cdb/password-not-needed` warning. The library exports
 `initCdb({ encrypt: true, cdbPassword, cdbFile })` and
 `encryptCdb({ cdbPassword, cdbFile })`; both use the shared settings precedence.
 

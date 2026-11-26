@@ -64,7 +64,12 @@ If `centrs` is already installed on `PATH`, the equivalent command is:
 }
 ```
 
-Use `CENTRS_CDB_PASSWORD` to read or write an encrypted CDB. The write layer
+Use `CENTRS_CDB_PASSWORD` to read or write an encrypted CDB, or
+`CENTRS_CDB_PASSWORD_FILE` (`--cdb-password-file`) to name a file that holds
+it, such as `/run/secrets/<name>`. Then the password is in neither argv nor
+the environment, and the file is read on every CDB load: rotating it takes
+effect at the next call, and deleting it makes calls fail with
+`cdb/password-unavailable` while the server keeps running. The write layer
 decrypts under the loaded password, mutates the record set, and re-encrypts with
 a fresh salt before the atomic rename. Prefer an unencrypted throwaway CDB for
 bench harnesses and CI.
@@ -168,7 +173,8 @@ MCP server applies it as a hard allowlist:
 - **CDB source** follows the constitution: default
   `~/.config/tikoci/winbox.cdb`, overridden by `CENTRS_CDB_FILE` / `--cdb-file`,
   or a freshly created CDB the operator hands the server at start. An encrypted
-  CDB is decrypted with `--cdb-password` (or `CENTRS_CDB_PASSWORD`). With no CDB,
+  CDB is decrypted with `--cdb-password` (or `CENTRS_CDB_PASSWORD`), or with
+  the file `--cdb-password-file` (or `CENTRS_CDB_PASSWORD_FILE`) names. With no CDB,
   the server still serves `centrs_explain` (offline); CDB mutations require a
   loadable CDB file.
 - **Credentials live in the CDB and are never returned by MCP.** `centrs_devices

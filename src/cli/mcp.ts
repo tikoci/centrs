@@ -40,6 +40,12 @@ export const mcpCommand: CliCommandMetadata = {
 				"Decrypt password for an encrypted CDB (or CENTRS_CDB_PASSWORD).",
 		},
 		{
+			flag: "--cdb-password-file",
+			valueName: "<path>",
+			description:
+				"Read the CDB password from a file (one trailing newline ignored), e.g. a container secret under /run/secrets. Read on each CDB load; falls back to `CENTRS_CDB_PASSWORD_FILE`. Conflicts with `--cdb-password`.",
+		},
+		{
 			flag: "--allow-adhoc-targets",
 			description:
 				"Reserved unsafe escape hatch for future inline targets; current tools still use CDB-only targets.",
@@ -52,6 +58,7 @@ interface McpCliArgs {
 	help?: boolean;
 	cdbFile?: string;
 	cdbPassword?: string;
+	cdbPasswordFile?: string;
 	allowAdhocTargets?: boolean;
 }
 
@@ -90,6 +97,14 @@ export function parseMcpCliArgs(args: readonly string[]): McpCliArgs {
 					mcpCommand.options,
 				);
 				break;
+			case "--cdb-password-file":
+				parsed.cdbPasswordFile = expectValue(
+					args,
+					++index,
+					"--cdb-password-file",
+					mcpCommand.options,
+				);
+				break;
 			case "--allow-adhoc-targets":
 				parsed.allowAdhocTargets = true;
 				break;
@@ -110,6 +125,7 @@ export async function runMcpCli(args: readonly string[]): Promise<number> {
 		const config = resolveMcpConfig({
 			cdbFile: parsed.cdbFile,
 			cdbPassword: parsed.cdbPassword,
+			cdbPasswordFile: parsed.cdbPasswordFile,
 			allowAdhocTargets: parsed.allowAdhocTargets,
 			config: await loadEnvFileDefaults(),
 		});

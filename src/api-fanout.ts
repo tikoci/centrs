@@ -238,6 +238,7 @@ export async function apiFanout(
 		{
 			cdbFile: request.cdbFile,
 			cdbPassword: request.cdbPassword,
+			cdbPasswordFile: request.cdbPasswordFile,
 			allowAdhoc: options.allowAdhoc ?? true,
 		},
 		env,

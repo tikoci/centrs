@@ -80,10 +80,12 @@ export const explainCliCommand: CliCommandMetadata = {
 				"--port",
 				"--username / --user / -u",
 				"--password",
+				"--password-file",
 				"--timeout",
 				"--insecure",
 				"--cdb-file",
 				"--cdb-password",
+				"--cdb-password-file",
 				"--resolve",
 			].includes(o.flag),
 		),
@@ -239,6 +241,14 @@ export function parseExplainCliArgs(args: readonly string[]): ExplainCliArgs {
 					explainCliCommand.options,
 				);
 				break;
+			case "--cdb-password-file":
+				parsed.cdbPasswordFile = expectValue(
+					args,
+					++index,
+					arg,
+					explainCliCommand.options,
+				);
+				break;
 			case "--resolve":
 				parsed.resolve = expectValue(
 					args,
@@ -249,6 +259,14 @@ export function parseExplainCliArgs(args: readonly string[]): ExplainCliArgs {
 				break;
 			case "--password":
 				parsed.password = expectValue(
+					args,
+					++index,
+					arg,
+					explainCliCommand.options,
+				);
+				break;
+			case "--password-file":
+				parsed.passwordFile = expectValue(
 					args,
 					++index,
 					arg,

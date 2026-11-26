@@ -18,7 +18,29 @@ The minor bump marks the coming transport-default change (native-api first,
 with availability-aware fallback; not in these previews yet). Preview builds
 publish `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
 
+### Added
+
+- **Password files** (#672): `--cdb-password-file` / `CENTRS_CDB_PASSWORD_FILE`
+  and `--password-file` / `CENTRS_PASSWORD_FILE` read the CDB key and the
+  target password from a file, such as a container's `/run/secrets/<name>`,
+  on the CLI, `centrs mcp` and the library (`cdbPasswordFile`,
+  `passwordFile`). The CDB key file is read on each encrypted-CDB load, so
+  rotating or deleting it takes effect at the next call. A file that cannot
+  give a password is `cdb/password-unavailable` or `auth/password-unavailable`;
+  an unneeded CDB key file is not read, and a missing one is only the
+  `cdb/password-not-needed` warning. Value and file in one tier is
+  `usage/conflicting-flags`. `meta.settings` reports `{kind:"file", key}`.
+  Only flags and the process environment may name a file: `settings set`
+  refuses the keys and the `centrs.env` loader drops them.
+
 ### Changed
+
+- **A working-directory `.env` no longer sets `CENTRS_*`** (#666). Bun
+  auto-loads `.env`, `.env.local` and `.env.<mode>` into `process.env`; the
+  CLI and `centrs mcp` entries now remove the `CENTRS_*` keys those files
+  supplied and print `settings/dotenv-ignored` on stderr. On Linux a key the
+  shell exported with the same value is kept; elsewhere it is dropped too.
+  `.env.example` is gone.
 
 - **Error codes:** RouterOS's `no such …` answers now split by meaning
   (#659, CHR 7.25.1 and 7.24.6). A missing item in a menu that exists

@@ -8,10 +8,15 @@ password was ignored. `ok` and `error` say how the command itself went.
 - `CENTRS_CDB_PASSWORD` left set in the shell after switching to an
   unencrypted CDB *(code)*.
 - `--cdb-password` passed out of habit *(code)*.
+- `CENTRS_CDB_PASSWORD_FILE` set image-wide in a container whose CDB is open
+  or not created yet. The file is not read, and the message says whether it
+  exists, so a missing secret mount shows up without failing the run *(code)*.
 
 ## Fix
 
-- Drop `--cdb-password`, or unset `CENTRS_CDB_PASSWORD`.
+- Drop `--cdb-password`, or unset `CENTRS_CDB_PASSWORD`. A file form
+  (`--cdb-password-file`, `CENTRS_CDB_PASSWORD_FILE`) can stay set where an
+  encrypted CDB is expected later; it never converts an open CDB.
 - To encrypt this CDB instead, run `centrs devices encrypt` with the new
   password in `--cdb-password` or `CENTRS_CDB_PASSWORD`. It refuses an empty
   one with [`cdb/password-required`](password-required.md).

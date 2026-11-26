@@ -157,6 +157,12 @@ export const apiCommand: CliCommandMetadata = {
 			description: "RouterOS password. Falls back to `CENTRS_PASSWORD`.",
 		},
 		{
+			flag: "--password-file",
+			valueName: "<path>",
+			description:
+				"Read the RouterOS password from a file (one trailing newline ignored). Falls back to `CENTRS_PASSWORD_FILE`; outranks CDB records like `--password`. Conflicts with `--password`.",
+		},
+		{
 			flag: "--insecure",
 			description:
 				"Accept a self-signed `api-ssl`/REST TLS cert. Default verifies.",
@@ -170,6 +176,12 @@ export const apiCommand: CliCommandMetadata = {
 			flag: "--cdb-password",
 			valueName: "<password>",
 			description: "Decrypt an encrypted WinBox CDB file.",
+		},
+		{
+			flag: "--cdb-password-file",
+			valueName: "<path>",
+			description:
+				"Read the CDB password from a file (one trailing newline ignored), e.g. a container secret under /run/secrets. Read on each CDB load; falls back to `CENTRS_CDB_PASSWORD_FILE`. Conflicts with `--cdb-password`.",
 		},
 		{
 			flag: "--match",
@@ -343,6 +355,14 @@ export function parseApiCliArgs(args: readonly string[]): ApiCliArgs {
 			case "--password":
 				parsed.password = expectValue(args, ++index, arg, apiCommand.options);
 				break;
+			case "--password-file":
+				parsed.passwordFile = expectValue(
+					args,
+					++index,
+					arg,
+					apiCommand.options,
+				);
+				break;
 			case "--insecure":
 				parsed.insecure = true;
 				break;
@@ -351,6 +371,14 @@ export function parseApiCliArgs(args: readonly string[]): ApiCliArgs {
 				break;
 			case "--cdb-password":
 				parsed.cdbPassword = expectValue(
+					args,
+					++index,
+					arg,
+					apiCommand.options,
+				);
+				break;
+			case "--cdb-password-file":
+				parsed.cdbPasswordFile = expectValue(
 					args,
 					++index,
 					arg,

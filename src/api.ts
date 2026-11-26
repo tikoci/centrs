@@ -157,6 +157,8 @@ export interface ApiRequest {
 	port?: number;
 	username?: string;
 	password?: string;
+	/** A file holding the password (`--password-file`); conflicts with `password` (#672). */
+	passwordFile?: string;
 	insecure?: boolean;
 	timeout?: string | number;
 	format?: string;
@@ -165,6 +167,7 @@ export interface ApiRequest {
 	verbose?: boolean;
 	cdbFile?: string;
 	cdbPassword?: string;
+	cdbPasswordFile?: string;
 	/**
 	 * `--match` selector for a `<router>` several CDB records share
 	 * (`user=<name>`, `target=<addr>`, or a record type): the same selector
@@ -948,6 +951,7 @@ export async function resolveApiRequest(
 					targetInput: request.targetInput,
 					cdbFile: request.cdbFile,
 					cdbPassword: request.cdbPassword,
+					cdbPasswordFile: request.cdbPasswordFile,
 					match: request.match,
 				},
 				env,
@@ -1047,7 +1051,11 @@ export async function resolveApiRequest(
 	const auth = connection
 		? connection.auth
 		: resolveAuth(
-				{ username: request.username, password: request.password },
+				{
+					username: request.username,
+					password: request.password,
+					passwordFile: request.passwordFile,
+				},
 				env,
 				cdbResolution,
 				config,

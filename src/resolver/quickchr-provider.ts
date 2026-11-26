@@ -346,6 +346,7 @@ export function assertNoQuickchrOverrideConflict(
 		port?: number;
 		username?: string;
 		password?: string;
+		passwordFile?: string;
 		sshKey?: string;
 		/** `--match` picks a CDB record; a quickchr target has none (#583). */
 		match?: string;
@@ -367,6 +368,9 @@ export function assertNoQuickchrOverrideConflict(
 	}
 	if (request.password !== undefined) {
 		conflicts.push("--password");
+	}
+	if (request.passwordFile !== undefined) {
+		conflicts.push("--password-file");
 	}
 	if (request.sshKey !== undefined) {
 		conflicts.push("--ssh-key");

@@ -144,6 +144,7 @@ export interface CdbResolveInput {
 	targetInput?: string;
 	cdbFile?: string;
 	cdbPassword?: string;
+	cdbPasswordFile?: string;
 	/**
 	 * `--match` record selector (`user=<name>`, `target=<addr>`, or a record
 	 * type such as `ipUser`) for a `<router>` several CDB records share — the
@@ -220,6 +221,7 @@ export async function resolveCdb(
 	const settings = resolveDevicesSettings({
 		cdbFile: input.cdbFile,
 		cdbPassword: input.cdbPassword,
+		cdbPasswordFile: input.cdbPasswordFile,
 		env,
 		config,
 	});
@@ -230,6 +232,7 @@ export async function resolveCdb(
 	const explicitCdb =
 		input.cdbFile !== undefined ||
 		input.cdbPassword !== undefined ||
+		input.cdbPasswordFile !== undefined ||
 		env[ENV_CDB_FILE] !== undefined ||
 		env[ENV_CDB_PASSWORD] !== undefined ||
 		config[ENV_CDB_FILE] !== undefined;
@@ -245,6 +248,7 @@ export async function resolveCdb(
 		cdb = await loadCdb({
 			cdbFile: input.cdbFile,
 			cdbPassword: input.cdbPassword,
+			cdbPasswordFile: input.cdbPasswordFile,
 			env,
 			config,
 		});
@@ -365,6 +369,7 @@ export interface CdbGroupResolveInput {
 	group: string;
 	cdbFile?: string;
 	cdbPassword?: string;
+	cdbPasswordFile?: string;
 }
 
 /**
@@ -383,6 +388,7 @@ export async function expandCdbGroup(
 	const cdb: LoadedCdb = await loadCdb({
 		cdbFile: input.cdbFile,
 		cdbPassword: input.cdbPassword,
+		cdbPasswordFile: input.cdbPasswordFile,
 		env,
 	});
 

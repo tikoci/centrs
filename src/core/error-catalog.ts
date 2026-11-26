@@ -39,6 +39,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary:
 			"Batch SSH authentication failed (execute --via ssh, sftp transfer).",
 	},
+	{
+		code: "auth/password-unavailable",
+		summary:
+			"The password file named by --password-file or CENTRS_PASSWORD_FILE is missing, unreadable, empty or not UTF-8.",
+	},
 
 	// cdb/*
 	{
@@ -127,6 +132,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		code: "cdb/password-not-needed",
 		summary:
 			"A CDB password was given for an unencrypted CDB and was ignored (warning).",
+	},
+	{
+		code: "cdb/password-unavailable",
+		summary:
+			"The CDB password file named by --cdb-password-file or CENTRS_CDB_PASSWORD_FILE is missing, unreadable, empty or not UTF-8, and the CDB needed its key.",
 	},
 	{
 		code: "cdb/password-required",
