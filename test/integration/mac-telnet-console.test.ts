@@ -14,7 +14,7 @@
  *      with the bridge's UDP relay standing in for the L2 segment. This is the
  *      `commands/execute/examples.md` mac-telnet evidence (examples 20–22).
  *
- * All grounded on stock CHR 7.23.1 (see `mac-telnet-console.ts` and
+ * The base flow is grounded on stock CHR 7.23.1 (see `mac-telnet-console.ts` and
  * `commands/execute/README.md`). REST is the source of truth for cross-checks.
  */
 
@@ -46,6 +46,39 @@ function asRecordArray(value: unknown): Record<string, string>[] {
 function retOf(data: unknown): string {
 	return asRecord(data)["ret"] ?? "";
 }
+
+/** A RouterOS script that builds a `count`-character string of `ch` in `$s`. */
+function repeated(ch: string, count: number): string {
+	return `:local s ""; :for i from=1 to=${count} do={:set s ($s . "${ch}")}`;
+}
+
+/**
+ * Console reader cases (#575), grounded on CHR 7.23.8 and 7.24.5 at 512 columns
+ * (`test/fixtures/mac-telnet-console-echo.json` holds the raw screens). Each is
+ * `[label, command, expected output]`; none prints a table, so the 7.17+ pager
+ * (#677) stays out of the way.
+ */
+const READER_CASES: [string, string, string][] = [
+	["trailing newline", ':put "abc"\n', "abc"],
+	["output equal to the command's tail", ':put "m0123"; # m0123', "m0123"],
+	["multi-line script", ':put "one"\n:put "two"\n', "one\ntwo"],
+	["block", '{\n:put "one"\n}\n', "one"],
+	["prompt-like output", ':put "[u@h] >"\n:put "next"', "[u@h] >\nnext"],
+	["empty line kept", ':put ""\n:put "after"', "\nafter"],
+	["printed ESC[9999B", ':put "before\\1B[9999Bafter"', "beforeafter"],
+	["TAB kept", ':put "a\\tb"', "a\tb"],
+	["1025-character line", `${repeated("x", 1025)}; :put $s`, "x".repeat(1025)],
+	[
+		"wide line after an embedded newline",
+		`${repeated("y", 1100)}; :put ("head\\n" . $s)`,
+		`head\n${"y".repeat(1100)}`,
+	],
+];
+const ENVELOPE_CASES = [
+	"trailing newline",
+	"multi-line script",
+	"1025-character line",
+];
 
 describeFast("execute over mac-telnet (console reader + command path)", () => {
 	test("console reader + executeEnvelope run/write/validate over real L2", async () => {
@@ -96,6 +129,10 @@ describeFast("execute over mac-telnet (console reader + command path)", () => {
 					(await cons.run("/system/identity/print")).output,
 				),
 			).toContain(`name: ${identityRest ?? ""}`);
+			// #575: output is read from the console's framing, not the command text.
+			for (const [label, command, expected] of READER_CASES) {
+				expect((await cons.run(command)).output, label).toBe(expected);
+			}
 			const validCli =
 				"/ip/address/add address=198.51.100.30/32 interface=ether1";
 			await cons.parseGate(validCli); // valid → no throw
@@ -135,6 +172,16 @@ describeFast("execute over mac-telnet (console reader + command path)", () => {
 			expect(collapsePrintWrapping(retOf(read.data))).toContain(
 				`name: ${identityRest ?? ""}`,
 			);
+
+			// #575 through the product path: the same reader feeds `ret`.
+			for (const [label, command, expected] of READER_CASES.filter(([l]) =>
+				ENVELOPE_CASES.includes(l),
+			)) {
+				const env = await executeEnvelope({ ...base, command, yes: true });
+				expect(env.ok, env.ok ? "" : JSON.stringify(env.error)).toBe(true);
+				if (!env.ok) return;
+				expect(retOf(env.data), label).toBe(expected);
+			}
 
 			// 20 — write (add) with --yes; success prints nothing; verify via REST.
 			const write = await executeEnvelope({
