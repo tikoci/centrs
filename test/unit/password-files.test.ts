@@ -24,6 +24,7 @@ import {
 } from "../../src/index.ts";
 import { resolveMcpConfig } from "../../src/mcp/config.ts";
 import { loadAllowlistCdb } from "../../src/mcp/safety.ts";
+import { handleRetrieve } from "../../src/mcp/tools.ts";
 import { loadEnvFileDefaults } from "../../src/resolver/config-file.ts";
 import {
 	CDB_PASSWORD_SECRET,
@@ -149,6 +150,29 @@ describe("readSecretFile", () => {
 			expect(JSON.stringify(error.toJSON?.() ?? error)).not.toContain(KEY);
 		}
 	});
+
+	// PR #674 review: a FIFO with no writer blocked the synchronous read, and
+	// a device would stream forever. Both are refused without reading.
+	test.skipIf(process.platform === "win32")(
+		"a FIFO or a device is refused at once, not read",
+		async () => {
+			const dir = await sandbox();
+			const fifo = join(dir, "fifo");
+			expect(Bun.spawnSync(["mkfifo", fifo]).exitCode).toBe(0);
+			for (const path of [fifo, "/dev/zero"]) {
+				const error = await caught(() =>
+					readSecretFile(CDB_PASSWORD_SECRET, {
+						kind: "file",
+						path,
+						source: { kind: "file", key: "CENTRS_CDB_PASSWORD_FILE" },
+					}),
+				);
+				expect(error.code).toBe("cdb/password-unavailable");
+				expect(error.summary).toContain("is not a regular file");
+			}
+		},
+		5_000,
+	);
 });
 
 describe("CDB key from a file", () => {
@@ -329,6 +353,36 @@ describe("centrs mcp", () => {
 		expect(error.code).toBe("cdb/password-unavailable");
 	});
 
+	// PR #674 review: retrieve ignored the server's configured env and read
+	// the process-wide one, so it could pick another password file.
+	test("retrieve (single and group) reads the password file from config.env", async () => {
+		const dir = await sandbox();
+		const cdbFile = join(dir, "winbox.cdb");
+		await initCdb({ cdbFile });
+		await addDevice({
+			cdb: await loadCdb({ cdbFile }),
+			target: `http://127.0.0.1:${closedPort()}`,
+			user: "ops",
+			comment: "identity=lab",
+			group: "labs",
+		});
+		const missing = join(dir, "configured-not-mounted");
+		const config = resolveMcpConfig({
+			cdbFile,
+			env: { ...HERMETIC_ENV, CENTRS_PASSWORD_FILE: missing },
+		});
+		for (const args of [
+			{ target: "lab", path: "/system/resource" },
+			{ group: "labs", path: "/system/resource" },
+		]) {
+			const text = JSON.stringify(
+				await handleRetrieve({ ...args, timeout: "2s" }, config),
+			);
+			expect(text).toContain("auth/password-unavailable");
+			expect(text).toContain(missing);
+		}
+	});
+
 	test("value and file both set is a startup usage error", () => {
 		expect(() =>
 			resolveMcpConfig({
@@ -362,6 +416,20 @@ describe("review follow-ups (#674)", () => {
 		expect(conflict.ok).toBe(false);
 		if (!conflict.ok)
 			expect(conflict.error.code).toBe("usage/conflicting-flags");
+	});
+
+	// PR #674 review: an open server uses no credential, so an image-wide
+	// password file it cannot read must not stop it.
+	test("btest server --no-authenticate reads no password file", async () => {
+		const dir = await sandbox();
+		const envelope = await btestServer({
+			authenticate: false,
+			bind: "127.0.0.1",
+			port: 0,
+			durationMs: 10,
+			env: { CENTRS_PASSWORD_FILE: join(dir, "not-mounted") },
+		});
+		expect(envelope.ok).toBe(true);
 	});
 
 	test("discover --save: a key-source conflict is an envelope, before listening", async () => {

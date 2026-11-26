@@ -361,6 +361,31 @@ describe("resolveTerminalRequest transport gate", () => {
 		).rejects.toMatchObject({ code: "settings/invalid-via" });
 	});
 
+	// PR #674 review: interactive ssh never uses a password, so a password
+	// file it cannot read must not stop an agent or key login. mac-telnet,
+	// which does use it, still fails on the missing file.
+	test("ssh reads no password file; mac-telnet does", async () => {
+		const env = {
+			...noEnv,
+			CENTRS_USERNAME: "admin",
+			CENTRS_PASSWORD_FILE: "/nonexistent/centrs-terminal-pw",
+		};
+		const ssh = await resolveTerminalRequest(
+			{ targetInput: "192.0.2.10", via: "ssh" },
+			env,
+		);
+		expect(ssh.via).toBe("ssh");
+		await expect(
+			resolveTerminalRequest(
+				{ targetInput: "192.0.2.10", via: "ssh", passwordFile: "/nope" },
+				noEnv,
+			),
+		).resolves.toMatchObject({ via: "ssh" });
+		await expect(
+			resolveTerminalRequest({ targetInput: MAC, via: "mac-telnet" }, env),
+		).rejects.toMatchObject({ code: "auth/password-unavailable" });
+	});
+
 	test("CENTRS_VIA=rest-api is gated the same way", async () => {
 		await expect(
 			resolveTerminalRequest({ targetInput: MAC }, { CENTRS_VIA: "rest-api" }),

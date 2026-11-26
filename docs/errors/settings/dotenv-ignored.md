@@ -18,8 +18,9 @@ warning names the keys and files, never the values.
   whose `.env`, `.env.local` or `.env.development` sets `CENTRS_*` *(code)*.
 - On macOS or Windows, a key the shell exported that a `.env` file also
   names. Only Linux can tell the two apart, so elsewhere it is dropped too
-  *(code)*. Only `PATH` and the Windows system variables are kept; a dropped
-  `HOME` falls back to the account's home directory.
+  *(code)*. Only the Windows system variables are kept. A dropped `HOME`
+  falls back to the account's home directory, and a named `PATH` is reset to
+  the system default; the warning then says so.
 
 ## Fix
 

@@ -105,15 +105,54 @@ describe("planDotenvRelaunch without it (macOS, Windows)", () => {
 			cwd: dir,
 			execArgv: [],
 			initialEnviron: null,
+			platform: "darwin",
 		});
 		expect(plan?.dropped).toEqual([
 			"BUN_CONFIG_VERBOSE_FETCH",
 			"CENTRS_FORMAT",
 			"NODE_ENV",
+			"PATH",
 			"XDG_CONFIG_HOME",
 		]);
-		// PATH keeps the shell's value, which already beat the file's.
-		expect(plan?.env).toEqual({ PATH: "/usr/bin", CENTRS_VIA: "ssh" });
+		// A named PATH may be the file's (a launch with no PATH): it becomes
+		// the system default, never the file's value.
+		expect(plan?.env).toEqual({
+			PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
+			CENTRS_VIA: "ssh",
+		});
+	});
+
+	// PR #674 review: Bun allows a line break, even a blank line, between a
+	// key and its `=` or `:`.
+	test("a key whose separator is on a later line is still named", async () => {
+		await writeFile(join(dir, ".env"), "CENTRS_FORMAT\n\n= json\nNOPE\nB=1\n");
+		const plan = planDotenvRelaunch({
+			env: { CENTRS_FORMAT: "json", B: "1", NOPE: "shell" },
+			cwd: dir,
+			execArgv: [],
+			initialEnviron: null,
+		});
+		expect(plan?.dropped).toEqual(["B", "CENTRS_FORMAT"]);
+	});
+
+	test("Windows: names match case-insensitively; PATH resets under SystemRoot", async () => {
+		await writeFile(join(dir, ".env"), "path=C:\\evil\nCentrs_Insecure=1\n");
+		const plan = planDotenvRelaunch({
+			env: {
+				Path: "C:\\evil",
+				CENTRS_INSECURE: "1",
+				SystemRoot: "D:\\Win",
+			},
+			cwd: dir,
+			execArgv: [],
+			initialEnviron: null,
+			platform: "win32",
+		});
+		expect(plan?.dropped).toEqual(["CENTRS_INSECURE", "Path"]);
+		expect(plan?.env["SystemRoot"]).toBe("D:\\Win");
+		expect(plan?.env["PATH"]).toStartWith("D:\\Win\\System32;D:\\Win;");
+		expect(plan?.env["PATH"]).toContain("D:\\Win\\System32\\OpenSSH\\");
+		expect(plan?.env["Path"]).toBeUndefined();
 	});
 
 	// PR #674 review: `HOME` picks `centrs.env`, and a Windows shell often has
@@ -159,6 +198,9 @@ describe("dotenvGuardWarning", () => {
 		expect(line).toStartWith("warning [settings/dotenv-ignored]: ");
 		expect(line).toContain("CENTRS_CDB_PASSWORD_FILE");
 		expect(line).not.toContain("DATABASE_URL");
+		expect(dotenvGuardWarning({ env: {}, dropped: ["PATH"] })).toContain(
+			"system default PATH",
+		);
 		expect(
 			dotenvGuardWarning({ env: {}, dropped: ["DATABASE_URL"] }),
 		).toBeUndefined();

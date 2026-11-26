@@ -43,6 +43,10 @@ import {
 	resolveCdb,
 	resolveTarget,
 } from "./resolver/index.ts";
+import {
+	chooseSecret,
+	TARGET_PASSWORD_SECRET,
+} from "./resolver/secret-source.ts";
 
 export { BTEST_PORT, BTEST_UDP_PORT_START };
 
@@ -568,26 +572,32 @@ export async function btestServer(
 		port,
 	};
 
-	let auth: ReturnType<typeof resolveAuth>;
+	let auth: ReturnType<typeof resolveAuth> | undefined;
 	try {
+		validateServerOptions(request);
+		const env = request.env ?? Bun.env;
+		const credentials = {
+			username: request.username,
+			password: request.password,
+			passwordFile: request.passwordFile,
+		};
 		// Resolve the single accepted credential through the same path as the
 		// client (flags first, then CENTRS_USERNAME / CENTRS_PASSWORD and the
 		// file forms). No CDB here — the server has no target device. Inside the
 		// envelope boundary: a missing password file or a value/file conflict is
-		// an error envelope, not a rejected call (#672).
-		auth = resolveAuth(
-			{
-				username: request.username,
-				password: request.password,
-				passwordFile: request.passwordFile,
-			},
-			request.env ?? Bun.env,
-		);
-		validateServerOptions(request);
+		// an error envelope, not a rejected call (#672). An open server uses no
+		// credential, so it reads no file; a value/file conflict still fails.
+		if (authenticate) auth = resolveAuth(credentials, env);
+		else
+			chooseSecret(
+				TARGET_PASSWORD_SECRET,
+				{ value: credentials.password, file: credentials.passwordFile },
+				env,
+			);
 		// authenticate=true (the default) without a credential would bind a server
 		// that rejects every client — fail fast instead.
 		if (
-			authenticate &&
+			auth !== undefined &&
 			(auth.username === undefined || !auth.passwordProvided)
 		) {
 			throw optionError(
@@ -641,12 +651,10 @@ export async function btestServer(
 						authenticate,
 						// Only the resolved credential, and only when auth is on (never
 						// leak creds into an unauthenticated handshake).
-						...(authenticate && auth.username !== undefined
+						...(auth?.username !== undefined
 							? { username: auth.username }
 							: {}),
-						...(authenticate && auth.passwordProvided
-							? { password: auth.password }
-							: {}),
+						...(auth?.passwordProvided ? { password: auth.password } : {}),
 						serverUdpPort,
 						udpBindHost: bind === "127.0.0.1" ? "127.0.0.1" : "0.0.0.0",
 						...(request.intervalMs !== undefined

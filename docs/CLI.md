@@ -227,8 +227,8 @@ Usage: centrs terminal <router> [flags] | centrs terminal --host <host> [flags] 
 | `--port` | `<port>` | Override the port: ssh default 22, mac-telnet default 20561. |
 | `--quickchr` | `<name>` | Open an ssh console to one running quickchr machine; host/port/user/key come from its descriptor. Once only; not with `<router>`, --host, --port, --username, --password, --ssh-key or --match. |
 | `--username / --user / -u` | `<name>` | RouterOS username (aliases --user, -u). Falls back to CENTRS_USERNAME. |
-| `--password` | `<secret>` | RouterOS password. Falls back to CENTRS_PASSWORD. |
-| `--password-file` | `<path>` | Read the RouterOS password from a file (one trailing newline ignored). Falls back to `CENTRS_PASSWORD_FILE`; outranks CDB records like `--password`. Conflicts with `--password`. |
+| `--password` | `<secret>` | mac-telnet: RouterOS password. Falls back to CENTRS_PASSWORD. Interactive ssh ignores it; OpenSSH prompts itself. |
+| `--password-file` | `<path>` | mac-telnet: read the RouterOS password from a file (one trailing newline ignored). Falls back to `CENTRS_PASSWORD_FILE`; outranks CDB records like `--password`. Conflicts with `--password`. Interactive ssh never reads it. |
 | `--source-mac` | `<mac>` | mac-telnet: explicit in-packet source MAC (overrides egress resolution). |
 | `--ssh-key` | `<path>` | `--via ssh`: explicit private-key path. Falls back to `CENTRS_SSH_KEY` / the `ssh-agent`. |
 | `--insecure` |  | `--via ssh`: disable host-key verification (accepts changed/impersonated keys). Default verifies. |

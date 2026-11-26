@@ -2,14 +2,17 @@
 
 The CDB needed its key, and the file named for it could not supply one. The
 file comes from `--cdb-password-file` or `CENTRS_CDB_PASSWORD_FILE`. It is
-missing, unreadable, empty, or not UTF-8 text. `context.path` and
+missing, unreadable, not a regular file (a FIFO or a device), empty, or not
+UTF-8 text. `context.path` and
 `context.source` name the file and where it was set; the contents are never
 shown.
 
 The key is needed only to load an encrypted CDB, for
-`devices init --encrypt` and for `devices encrypt`. With an open CDB, or no
-CDB, the file is not read: a missing file there is the
-[`cdb/password-not-needed`](password-not-needed.md) warning, not this error.
+`devices init --encrypt` and for `devices encrypt`. With an open CDB,
+including one this run created, the file is not read: a missing file there
+is the [`cdb/password-not-needed`](password-not-needed.md) warning, not this
+error. When no CDB is in play at all (a literal host and no CDB file), the
+file is neither read nor mentioned.
 
 ## Typical triggers
 

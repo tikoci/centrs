@@ -19,13 +19,23 @@
  * and on RouterOS they mean nothing.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import {
+	closeSync,
+	existsSync,
+	constants as fsConstants,
+	fstatSync,
+	openSync,
+	readFileSync,
+} from "node:fs";
 import type { SettingSource } from "../core/envelope.ts";
 import {
 	decodePasswordBytes,
 	passwordBytesReason,
 } from "../core/password-bytes.ts";
 import { CentrsError, type CentrsErrorCode } from "../errors.ts";
+
+/** `O_NONBLOCK` where the platform has it (not on Windows, which has no FIFOs to open). */
+const NONBLOCK = fsConstants.O_NONBLOCK ?? 0;
 
 export interface SecretSpec {
 	/** Words for messages: "CDB password", "password". */
@@ -135,8 +145,20 @@ export function readSecretFile(
 	const where = choice.source.key ?? spec.fileFlag;
 	let raw: Uint8Array;
 	try {
-		raw = readFileSync(choice.path);
+		// Open without blocking and check the opened file: a FIFO with no
+		// writer, or a device, would otherwise hang or stream forever (PR #674
+		// review). A symlink to a mounted secret is followed as usual.
+		const fd = openSync(choice.path, fsConstants.O_RDONLY | NONBLOCK);
+		try {
+			if (!fstatSync(fd).isFile()) {
+				throw unavailable(spec, choice, where, "is not a regular file", {});
+			}
+			raw = readFileSync(fd);
+		} finally {
+			closeSync(fd);
+		}
 	} catch (cause) {
+		if (cause instanceof CentrsError) throw cause;
 		const errno =
 			typeof cause === "object" && cause !== null && "code" in cause
 				? String((cause as { code: unknown }).code)

@@ -478,3 +478,6 @@ done or declined. A nit that needs more explanation is an issue.
 - `test/integration/api-stream-command.test.ts` fails intermittently in the
   unit tier: its fake server sends "Invalid RouterOS API length descriptor
   0xfb" (1 of 7 local runs, 2026-11-05).
+- `btest`: client and server envelopes report `meta.settings: {}`, so the
+  username and password sources (`--password-file` included) are not shown;
+  carry `auth`'s sources as the other commands do (PR #674 review).

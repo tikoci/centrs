@@ -866,3 +866,6 @@ SYSTEMROOT # Windows system directory variable
 WINDIR # Windows directory variable
 PATHEXT # Windows executable extensions variable
 COMSPEC # Windows command interpreter variable
+Wbem # Windows Management Instrumentation directory in the default Windows PATH
+NONBLOCK # O_NONBLOCK open flag: a password file never blocks on a FIFO
+mkfifo # POSIX command that makes a named pipe (FIFO), used in tests

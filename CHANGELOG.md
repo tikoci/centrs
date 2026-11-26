@@ -42,7 +42,9 @@ publish `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
   launch environment, and print `settings/dotenv-ignored` on stderr naming
   the `CENTRS_*` keys ignored. On Linux the launch environment is exact;
   elsewhere a key a `.env` file names is dropped even if the shell exported
-  it, except `PATH`, `HOME` and the like. `.env.example` is gone.
+  it, except the Windows system variables (`PATHEXT`, `SYSTEMROOT`, `WINDIR`,
+  `COMSPEC`). A dropped `HOME` falls back to `os.homedir()`, and a named
+  `PATH` is reset to the system default. `.env.example` is gone.
 
 - **Error codes:** RouterOS's `no such …` answers now split by meaning
   (#659, CHR 7.25.1 and 7.24.6). A missing item in a menu that exists

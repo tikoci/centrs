@@ -299,9 +299,10 @@ export async function handleRetrieve(
 		cdbPasswordFile: config.cdbPasswordFile,
 	};
 
-	if (args.group === undefined) return await retrieveEnvelope(request);
+	if (args.group === undefined)
+		return await retrieveEnvelope(request, config.env);
 	try {
-		return await retrieveGroup(request);
+		return await retrieveGroup(request, config.env);
 	} catch (error) {
 		return buildRetrieveFanoutErrorEnvelope(request, error);
 	}

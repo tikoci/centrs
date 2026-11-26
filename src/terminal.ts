@@ -49,6 +49,7 @@ import {
 	resolveStringSetting,
 	resolveTarget,
 } from "./resolver/index.ts";
+import { TARGET_PASSWORD_SECRET } from "./resolver/secret-source.ts";
 
 /** Prime budget (login + license + the ~10s mac-telnet negotiation stall). */
 const PRIME_TIMEOUT_MS = 30_000;
@@ -252,14 +253,24 @@ export async function resolveTerminalRequest(
 		cdb,
 		config,
 	);
+	// Interactive ssh never uses a password: OpenSSH takes none on the argv and
+	// prompts on the TTY itself. So it reads no password source, and a password
+	// file it cannot read (an image-wide `CENTRS_PASSWORD_FILE`) cannot stop a
+	// key or agent login (PR #674 review).
+	const usesPassword = viaValue !== "ssh";
+	const {
+		[TARGET_PASSWORD_SECRET.envKey]: _password,
+		[TARGET_PASSWORD_SECRET.fileEnvKey]: _passwordFile,
+		...envWithoutPassword
+	} = env;
 	const auth = resolveAuth(
 		{
 			username: request.username,
-			password: request.password,
-			passwordFile: request.passwordFile,
+			password: usesPassword ? request.password : undefined,
+			passwordFile: usesPassword ? request.passwordFile : undefined,
 			sshKey: request.sshKey,
 		},
-		env,
+		usesPassword ? env : envWithoutPassword,
 		cdb,
 		config,
 	);

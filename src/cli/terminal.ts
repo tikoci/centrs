@@ -77,13 +77,14 @@ export const terminalCommand: CliCommandMetadata = {
 		{
 			flag: "--password",
 			valueName: "<secret>",
-			description: "RouterOS password. Falls back to CENTRS_PASSWORD.",
+			description:
+				"mac-telnet: RouterOS password. Falls back to CENTRS_PASSWORD. Interactive ssh ignores it; OpenSSH prompts itself.",
 		},
 		{
 			flag: "--password-file",
 			valueName: "<path>",
 			description:
-				"Read the RouterOS password from a file (one trailing newline ignored). Falls back to `CENTRS_PASSWORD_FILE`; outranks CDB records like `--password`. Conflicts with `--password`.",
+				"mac-telnet: read the RouterOS password from a file (one trailing newline ignored). Falls back to `CENTRS_PASSWORD_FILE`; outranks CDB records like `--password`. Conflicts with `--password`. Interactive ssh never reads it.",
 		},
 		{
 			flag: "--source-mac",
