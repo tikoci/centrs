@@ -9,6 +9,9 @@ import {
 	ROUTEROS_PROMPT_RE,
 } from "../../src/protocols/mac-telnet-console.ts";
 
+import contextMatrixSlice from "../fixtures/explain/context-matrix.slice.json" with {
+	type: "json",
+};
 import fixtureSource from "../fixtures/parse-oracle.json" with { type: "json" };
 
 type FixtureEntry = {
@@ -482,4 +485,46 @@ describe("parse-oracle.json (GH#230 frozen fixtures, CHR 7.23.3)", () => {
 			});
 		});
 	}
+});
+
+// cspell:ignore héllo hllo
+/**
+ * #575: committed CHR 7.24.5 raw screens from the #574 context-matrix slice,
+ * replayed with the exact bytes `run()` was given. A trailing newline, or a
+ * non-ASCII character the console drops at input, made the echo count run one
+ * line long and swallow the output.
+ */
+describe("extractCommandOutput — #575 trailing-newline and non-ASCII sends (CHR 7.24.5)", () => {
+	type SliceSubmission = { bytes: string; raw?: string };
+	type SliceCell = { cell: string; submissions: SliceSubmission[] };
+	const cells = (contextMatrixSlice as { cells: SliceCell[] }).cells;
+	const submission = (cell: string, index: number) => {
+		const found = cells.find((c) => c.cell === cell)?.submissions[index];
+		if (!found?.raw)
+			throw new Error(`slice has no raw screen for ${cell}[${index}]`);
+		return {
+			bytes: found.bytes,
+			raw: (JSON.parse(found.raw) as { raw: string }).raw,
+		};
+	};
+
+	const cases: [string, number, string][] = [
+		["I2-semi-scope-session", 0, "a=2"],
+		["I3-braces-1line-session", 0, "a=2"],
+		["I5-global-session-split", 1, "g=11"],
+		["I7-unicode-session", 0, "hllo574"],
+		["I8-bom-session", 0, "bom574"],
+		["I1-nl-scope-session-split", 2, "a="],
+	];
+	for (const [cell, index, expected] of cases) {
+		test(`${cell}[${index}] keeps "${expected}"`, () => {
+			const { bytes, raw } = submission(cell, index);
+			expect(extractCommandOutput(raw, bytes)).toBe(expected);
+		});
+	}
+
+	test("a send with no output still extracts as empty", () => {
+		const { bytes, raw } = submission("I5-global-session-split", 0);
+		expect(extractCommandOutput(raw, bytes)).toBe("");
+	});
 });

@@ -1,5 +1,5 @@
 {
-	"_source": "Recorded by `bun run explain:probe:context-matrix 7.24.5` (scripts/probes/explain-context-matrix.ts) on stock CHR 7.24.5 x86, 2026-11-01, and re-recorded 2026-11-11 after #576 (SSH sends a script's line breaks as CR, one prompt); the re-record changed only the three SSH multiline cells (I1-nl-scope-ssh, I4-braces-multi-ssh, I6-menu-ssh) — two disposable CHRs (IP routes, MAC routes), 59 cells, every product cell through centrs executeEnvelope with pinned --via. Replicated on a second full-matrix pass with identical cell outcomes and gate table. Re-run that command to reproduce, then regenerate this file mechanically with `bun run explain:probe:context-matrix --slice <matrix-capture.json>` (cells/gate/inputs from the capture; routes/findings prose preserved for human review — a re-record that changes conclusions needs its prose and replay test updated too); per-run captures stay in `.scratch/`. Session submissions always carry their raw screen. Migrated by hand for #665, which changed centrs's code, not the device's answer: the bare-menu `no such command` cells (I6-menu-rest-split, I6-menu-native-split, gate I6-nav) now carry routeros/unknown-path and its summary in place of the recorded routeros/request-failed / routeros/api-trap; the `cause` is the recorded device text, unchanged. Findings read per #507's dimensions; unknowns stay unknown. No router is needed to read this file.",
+	"_source": "Recorded by `bun run explain:probe:context-matrix 7.24.5` (scripts/probes/explain-context-matrix.ts) on stock CHR 7.24.5 x86, 2026-11-01, and re-recorded 2026-11-11 after #576 (SSH sends a script's line breaks as CR, one prompt); the re-record changed only the three SSH multiline cells (I1-nl-scope-ssh, I4-braces-multi-ssh, I6-menu-ssh); re-recorded 2026-11-26 after the #575 mac-telnet reader fix, which changed only the eight mac-telnet and session cells of I2, I3, I5 and I7 (plus I6's creation timestamps), from one full-matrix pass — two disposable CHRs (IP routes, MAC routes), 59 cells, every product cell through centrs executeEnvelope with pinned --via. Replicated on a second full-matrix pass with identical cell outcomes and gate table. Re-run that command to reproduce, then regenerate this file mechanically with `bun run explain:probe:context-matrix --slice <matrix-capture.json>` (cells/gate/inputs from the capture; routes/findings prose preserved for human review — a re-record that changes conclusions needs its prose and replay test updated too); per-run captures stay in `.scratch/`. Session submissions always carry their raw screen. Migrated by hand for #665, which changed centrs's code, not the device's answer: the bare-menu `no such command` cells (I6-menu-rest-split, I6-menu-native-split, gate I6-nav) now carry routeros/unknown-path and its summary in place of the recorded routeros/request-failed / routeros/api-trap; the `cause` is the recorded device text, unchanged. Findings read per #507's dimensions; unknowns stay unknown. No router is needed to read this file.",
 	"routerosVersion": "7.24.5 (stable)",
 	"arch": "x86_64",
 	"routes": {
@@ -129,7 +129,7 @@
 		"SUBMISSION-1: /execute over REST and native runs multiline input as ONE scope (I1/I4 whole -> a=2; I6 menu+print in one call shows the table). Stored scripts agree (a=2).",
 		"SUBMISSION-2: SSH command execution runs multiline input as ONE prompt since #576: centrs sends line breaks as CR, so I1 whole over ssh answers a=2 and I4 whole answers a=2, like rest/native. Before #576 it sent LF, which ends RouterOS's SSH exec prompt, and each line ran on its own (I1: `syntax error (line 1 column 6)` + `a=`; I4: `missing closing brace (line 1 column 2)` + the same tail; per-line coordinates).",
 		"SUBMISSION-3: mac-telnet console runs multiline sends per line too: I1 whole shows the last line's echo plus `a=`. Braced multiline (I4) is absorbed as one submission on the console (`{... }` fold, a=2).",
-		"SUBMISSION-4: `;`-joined statements are one scope on EVERY route incl. the console: I2 answers a=2 on rest/native/ssh/stored, and the session raw screen shows the device printing a=2 (the product mac-telnet ret is empty — reader extraction loss, see DELIVERY-2).",
+		"SUBMISSION-4: `;`-joined statements are one scope on EVERY route incl. the console: I2 answers a=2 on rest/native/ssh/stored, and on the mac-telnet routes (product ret and held session both answer a=2 since the #575 reader fix).",
 		"SUBMISSION-5: a bare menu path is not executable over /execute (rest and native: `no such command`, routeros/unknown-path since #665; recorded as routeros/request-failed and routeros/api-trap) but navigates fine on console routes (ssh/mac/session/stored nav all ok). A bare `print` is validation/unknown-path on every product route (device stage; direct fallback confirms `bad command name print`) and routeros/unknown-path when run inside a stored script.",
 		"SUBMISSION-6: menu context holds WITHIN one submission on every route it runs on (I6 whole shows the 192.0.2.44 entry on rest/native/stored/mac/session). ACROSS submissions it holds only on a held console (I6 session split shows the table; stored split answers `bad command name print`).",
 		"SUBMISSION-7: ssh carries multiline menu navigation since #576: I6 whole over ssh prints the address-list rows. Before #576 it exited 1 with no output (transport/network) because the LF-ended first line was a bare menu path and the second ran outside it; the nonzero exit is now reported as the router's answer (#576).",
@@ -140,7 +140,7 @@
 		"ENV-2 (BOM): a leading BOM splits by device path, not by centrs: the offline stage passes (abstains) on every route; REST/native device :parse rejects (validation/syntax; direct fallback `expected command name (line 1 column 1)`); console :parse accepts and runs (ssh/mac ret `bom574`); a stored script carrying a BOM fails at run (`expected command name (line 1 column 1)`).",
 		"GATE-1 (identity/permissions dimension): every scope-bearing shape is write-shaped in centrs — I1..I4, I5-set and script-run all need --yes (usage/confirmation-required); pure reads (I5-read, I7) run without. Valid syntax never implies executability: I6-nav passes validation and fails at the device.",
 		"DELIVERY-1: ssh multiline delivery matches the interactive console since #576 (CR line breaks keep one prompt); before it, the LF-split send refused multiline menu navigation (exit 1, silent).",
-		"DELIVERY-2: the mac-telnet console reader drops :put output for single-line sends with trailing newline and non-trivial content (I2/I3/I5-read/I7 ret/product-output empty while the committed raw screens show the device printing a=2, g=11, hllo574). Multiline sends leak echo artifacts into ret (a `[cmx@CHR] > :put ...` line; a `{... }` fold). Same reader, same follow-up — the product mac-telnet cells for I2/I3/I5/I7 are extraction artifacts, not device answers.",
+		"DELIVERY-2: the mac-telnet console reader dropped :put output for single-line sends with a trailing newline or a non-ASCII character (I2/I3/I5-read/I7 came back empty while the raw screens showed a=2, g=11, hllo574); fixed in #575, and this re-record shows the device answers on those cells. Multiline sends still leak echo artifacts into ret (a `[cmx@CHR] > :put ...` line; a `{... }` fold), tracked on #575.",
 		"UNKNOWN-1: console echo-shape switch behind DELIVERY-2; BOM-strip location in the console input path — recorded as unknown, not guessed. (The ssh multiline-nav exit 1 was the LF line split, resolved by #576.)",
 		"UNKNOWN-2: cross-cell leakage on a long-held console (fresh console per cell by design); any RouterOS version other than 7.24.5 x86; SSH-interactive-shell (PTY) submission, which RouterOS does not grant over SSH."
 	],
@@ -153,7 +153,7 @@
 				{
 					"bytes": ":local a574I1nlscoperest 1\n:set a574I1nlscoperest 2\n:put \"a=$a574I1nlscoperest\"\n",
 					"sha256": "19f56351bb7f23d0363bfdc862ed008755a0d4358df745233322c570b7cb27fd",
-					"ms": 6,
+					"ms": 7,
 					"ok": true,
 					"out": "{\"ret\":\"a=2\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -168,7 +168,7 @@
 				{
 					"bytes": ":local a574I1nlscoperestsplit 1",
 					"sha256": "aaefbd81771d758681c2cb62648319ba7e05175d1f441fc215a964eb63eb3805",
-					"ms": 5,
+					"ms": 4,
 					"ok": true,
 					"out": "{\"ret\":\"\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -188,7 +188,7 @@
 				{
 					"bytes": ":put \"a=$a574I1nlscoperestsplit\"",
 					"sha256": "33e5fdace6d3a31a9f0344ce9a70f581f55adfdffffeb48d7185dd61353df262",
-					"ms": 5,
+					"ms": 4,
 					"ok": true,
 					"out": "{\"ret\":\"a=\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -211,7 +211,7 @@
 				{
 					"bytes": ":local a574I1nlscopenative 1\n:set a574I1nlscopenative 2\n:put \"a=$a574I1nlscopenative\"\n",
 					"sha256": "6ac72490d88b5f4d1a9f33cdb1bdcb19c1873f37451ea2c8f4cc88bebbb0af64",
-					"ms": 133,
+					"ms": 131,
 					"ok": true,
 					"out": "{\"ret\":\"a=2\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -226,7 +226,7 @@
 				{
 					"bytes": ":local a574I1nlscopenativesplit 1",
 					"sha256": "80cba5d3c6219783f6d25417851cf0c95c149c465e3760324deb9d9bf8d953f4",
-					"ms": 122,
+					"ms": 128,
 					"ok": true,
 					"out": "{\"ret\":\"\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -234,7 +234,7 @@
 				{
 					"bytes": ":set a574I1nlscopenativesplit 2",
 					"sha256": "c01dbf50b0507474f45315e2dc55fc3763f1c8a9ca81b7935a7e441865538a65",
-					"ms": 119,
+					"ms": 128,
 					"ok": false,
 					"error": {
 						"code": "validation/syntax",
@@ -246,7 +246,7 @@
 				{
 					"bytes": ":put \"a=$a574I1nlscopenativesplit\"",
 					"sha256": "b23d65a158eefb607e6b3ee217eeae4beeede4b13986b763a605cc65d003a7f5",
-					"ms": 119,
+					"ms": 118,
 					"ok": true,
 					"out": "{\"ret\":\"a=\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -269,7 +269,7 @@
 				{
 					"bytes": ":local a574I1nlscopessh 1\n:set a574I1nlscopessh 2\n:put \"a=$a574I1nlscopessh\"\n",
 					"sha256": "00799d94a9620028633ea34fd4e2fc5762129df587bf3ff4e86d84968e3b4acf",
-					"ms": 498,
+					"ms": 492,
 					"ok": true,
 					"out": "{\"ret\":\"a=2\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -284,7 +284,7 @@
 				{
 					"bytes": ":local a574I1nlscopesshsplit 1",
 					"sha256": "2336c2510a07a873c17cb55c18661707cbf10e8d52d1d823ccb9e8aae2ca6d7e",
-					"ms": 490,
+					"ms": 482,
 					"ok": true,
 					"out": "{\"ret\":\"\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -292,7 +292,7 @@
 				{
 					"bytes": ":set a574I1nlscopesshsplit 2",
 					"sha256": "df32fd6d76e019ca26c067e120f4b94422b340e83594159bd0c07e7c7daab857",
-					"ms": 243,
+					"ms": 250,
 					"ok": false,
 					"error": {
 						"code": "validation/syntax",
@@ -304,7 +304,7 @@
 				{
 					"bytes": ":put \"a=$a574I1nlscopesshsplit\"",
 					"sha256": "c536b28fca2346263bc562f7529c45d91b1b894f17fd57a6066d94163e30b0f2",
-					"ms": 481,
+					"ms": 485,
 					"ok": true,
 					"out": "{\"ret\":\"a=\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -327,7 +327,7 @@
 				{
 					"bytes": ":local a574I1nlscopemactelnet 1\n:set a574I1nlscopemactelnet 2\n:put \"a=$a574I1nlscopemactelnet\"\n",
 					"sha256": "118087c7043b4b890fa0a4b1c2a62941cda5b9dca4a3ea2cdbf03a1cb8d5c9ff",
-					"ms": 11322,
+					"ms": 11295,
 					"ok": true,
 					"out": "{\"ret\":\"[cmx@CHR] > :put \\\"a=$a574I1nlscopemactelnet\\\"\\na=\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -342,7 +342,7 @@
 				{
 					"bytes": ":local a574I1nlscopemactelnetsp 1",
 					"sha256": "d505773fe884e9aa133cb712f69e2143fd6872878b6eed4c15fd4060209f57c1",
-					"ms": 11324,
+					"ms": 11110,
 					"ok": true,
 					"out": "{\"ret\":\"\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -350,7 +350,7 @@
 				{
 					"bytes": ":set a574I1nlscopemactelnetsp 2",
 					"sha256": "73f13c8d36163a1c161a1daf53ee82cf8257358c909bd1eab7aa9ee67fd6447a",
-					"ms": 10976,
+					"ms": 10956,
 					"ok": false,
 					"error": {
 						"code": "validation/syntax",
@@ -362,7 +362,7 @@
 				{
 					"bytes": ":put \"a=$a574I1nlscopemactelnetsp\"",
 					"sha256": "d4980466a0751ed25e7a1968f77b9a61e6d48503e3439ccc3d0ba3757858116f",
-					"ms": 11120,
+					"ms": 11115,
 					"ok": true,
 					"out": "{\"ret\":\"a=\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -410,7 +410,7 @@
 				{
 					"bytes": ":set a574I1nlscopesessionspli 2",
 					"sha256": "f4c98961a971f54d77e79e8d34b11ccbfeba402514f0a842479e12f74ceaee77",
-					"ms": 151,
+					"ms": 152,
 					"ok": true,
 					"out": "{\"output\":\"syntax error (line 1 column 6)\"}",
 					"note": "held console, one run() per submission",
@@ -466,7 +466,7 @@
 				{
 					"bytes": ":local a574I2semiscopenative 1; :set a574I2semiscopenative 2; :put \"a=$a574I2semiscopenative\"\n",
 					"sha256": "9c3f2da95ad0fcd2bd5c24fff4727d49ffac61ced69cd3d4a9d063dc5584f4bd",
-					"ms": 130,
+					"ms": 120,
 					"ok": true,
 					"out": "{\"ret\":\"a=2\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -481,7 +481,7 @@
 				{
 					"bytes": ":local a574I2semiscopessh 1; :set a574I2semiscopessh 2; :put \"a=$a574I2semiscopessh\"\n",
 					"sha256": "40d93188d059ddb6c4531a9111cb36f4073b1dea79453da01bacd903ba45292f",
-					"ms": 492,
+					"ms": 491,
 					"ok": true,
 					"out": "{\"ret\":\"a=2\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -496,9 +496,9 @@
 				{
 					"bytes": ":local a574I2semiscopemactelnet 1; :set a574I2semiscopemactelnet 2; :put \"a=$a574I2semiscopemactelnet\"\n",
 					"sha256": "5807c313106a7f54301ea75d3289d4e1ffb170d645f69399e5be85c23c6c99a8",
-					"ms": 11114,
+					"ms": 11119,
 					"ok": true,
-					"out": "{\"ret\":\"\"}",
+					"out": "{\"ret\":\"a=2\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
 				}
 			]
@@ -513,7 +513,7 @@
 					"sha256": "559ef5815d67b40812bb4d5806408b97296fe564826ab0b43eebef0372e0f8dd",
 					"ms": 152,
 					"ok": true,
-					"out": "{\"output\":\"\"}",
+					"out": "{\"output\":\"a=2\"}",
 					"note": "held console, one run() per submission",
 					"raw": "{\"raw\":\":local a574I2semiscopesession 1; :set a574I2semiscopesession 2; :put \\\"a=$a574I2semiscopesession\\\"\\r[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mlocal\\u001b[m \\u001b[m\\u001b[32;1ma574I2semiscopesession\\u001b[m 1\\u001b[m\\u001b[33m;\\u001b[m \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mset\\u001b[m \\u001b[m\\u001b[32;1ma574I2semiscopesession\\u001b[m 2\\u001b[m\\u001b[33m;\\u001b[m \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mput\\u001b[m \\u001b[m\\u001b[33m\\\"\\u001b[ma=\\u001b[m\\u001b[33m$\\u001b[m\\u001b[32;1ma574I2semiscopesession\\u001b[m\\u001b[33m\\\"\\u001b[m\\r\\n\\ra=2\\r\\n\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \"}"
 				}
@@ -543,7 +543,7 @@
 				{
 					"bytes": "{ :local a574I3braces1linerest 1; :set a574I3braces1linerest 2; :put \"a=$a574I3braces1linerest\" }\n",
 					"sha256": "f698638485f823e9cc4c2bef3733e3016d9a3e5ff721a35331fa64d81d4e0e40",
-					"ms": 8,
+					"ms": 7,
 					"ok": true,
 					"out": "{\"ret\":\"a=2\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -558,7 +558,7 @@
 				{
 					"bytes": "{ :local a574I3braces1linenative 1; :set a574I3braces1linenative 2; :put \"a=$a574I3braces1linenative\" }\n",
 					"sha256": "8d426f73e92c640b05524d88696975b6012e623c8923265d1d483f8d409339c4",
-					"ms": 130,
+					"ms": 118,
 					"ok": true,
 					"out": "{\"ret\":\"a=2\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -573,7 +573,7 @@
 				{
 					"bytes": "{ :local a574I3braces1linessh 1; :set a574I3braces1linessh 2; :put \"a=$a574I3braces1linessh\" }\n",
 					"sha256": "9021321e4872345a82dcd6384a79a194b609602f751353d4d156e000ddadc30c",
-					"ms": 811,
+					"ms": 491,
 					"ok": true,
 					"out": "{\"ret\":\"a=2\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -588,9 +588,9 @@
 				{
 					"bytes": "{ :local a574I3braces1linemacteln 1; :set a574I3braces1linemacteln 2; :put \"a=$a574I3braces1linemacteln\" }\n",
 					"sha256": "f4a48ee12fd2de40abbb969b0295216c33fd2dd1c553d1b3e8bca20b65b62d79",
-					"ms": 11127,
+					"ms": 11107,
 					"ok": true,
-					"out": "{\"ret\":\"\"}",
+					"out": "{\"ret\":\"a=2\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
 				}
 			]
@@ -603,9 +603,9 @@
 				{
 					"bytes": "{ :local a574I3braces1linesession 1; :set a574I3braces1linesession 2; :put \"a=$a574I3braces1linesession\" }\n",
 					"sha256": "5cb1a49306818d4b136d764677b65eccc2598b058242cf1ce4d10ced00e6932e",
-					"ms": 151,
+					"ms": 152,
 					"ok": true,
-					"out": "{\"output\":\"\"}",
+					"out": "{\"output\":\"a=2\"}",
 					"note": "held console, one run() per submission",
 					"raw": "{\"raw\":\"{ :local a574I3braces1linesession 1; :set a574I3braces1linesession 2; :put \\\"a=$a574I3braces1linesession\\\" }\\r[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\u001b[m\\u001b[33m{\\u001b[m \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mlocal\\u001b[m \\u001b[m\\u001b[32;1ma574I3braces1linesession\\u001b[m 1\\u001b[m\\u001b[33m;\\u001b[m \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mset\\u001b[m \\u001b[m\\u001b[32;1ma574I3braces1linesession\\u001b[m 2\\u001b[m\\u001b[33m;\\u001b[m \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mput\\u001b[m \\u001b[m\\u001b[33m\\\"\\u001b[ma=\\u001b[m\\u001b[33m$\\u001b[m\\u001b[32;1ma574I3braces1linesession\\u001b[m\\u001b[33m\\\"\\u001b[m \\u001b[m\\u001b[33m}\\u001b[m\\r\\n\\ra=2\\r\\n\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \"}"
 				}
@@ -635,7 +635,7 @@
 				{
 					"bytes": "{\n:local a574I4bracesmultirest 1\n:set a574I4bracesmultirest 2\n:put \"a=$a574I4bracesmultirest\"\n}\n",
 					"sha256": "c18e9edebe54248f92e16c74ec1da308b45dd13be40d21b28faf11009f2d43f9",
-					"ms": 7,
+					"ms": 5,
 					"ok": true,
 					"out": "{\"ret\":\"a=2\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -650,7 +650,7 @@
 				{
 					"bytes": "{\n:local a574I4bracesmultinative 1\n:set a574I4bracesmultinative 2\n:put \"a=$a574I4bracesmultinative\"\n}\n",
 					"sha256": "5da380c8e6df1516a02969b35b2f79c987d67604beabd5922d2bdde80078e53d",
-					"ms": 136,
+					"ms": 119,
 					"ok": true,
 					"out": "{\"ret\":\"a=2\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -680,7 +680,7 @@
 				{
 					"bytes": "{\n:local a574I4bracesmultimacteln 1\n:set a574I4bracesmultimacteln 2\n:put \"a=$a574I4bracesmultimacteln\"\n}\n",
 					"sha256": "03c68fea9ad21a7fd0996560856909483e87b551fc713f41ebec2f541931ae17",
-					"ms": 11110,
+					"ms": 11123,
 					"ok": true,
 					"out": "{\"ret\":\"{... }\\na=2\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -695,7 +695,7 @@
 				{
 					"bytes": "{\n:local a574I4bracesmultisession 1\n:set a574I4bracesmultisession 2\n:put \"a=$a574I4bracesmultisession\"\n}\n",
 					"sha256": "301da003e0d67dce3351622f39dac263db0ccfc9709c5a3bc05122c6ff10247c",
-					"ms": 157,
+					"ms": 155,
 					"ok": true,
 					"out": "{\"output\":\"{... }\\na=2\"}",
 					"note": "held console, one run() per submission",
@@ -711,7 +711,7 @@
 				{
 					"bytes": "/system/script/run cmx-I4-braces-multi-stored-1",
 					"sha256": "1fcab2560b1ffd52c16bb37083f7e08a0d2311d3c251c9b3ea11abd271876402",
-					"ms": 3,
+					"ms": 2,
 					"ok": true,
 					"out": "{\"ret\":\"a=2\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]],
@@ -727,7 +727,7 @@
 				{
 					"bytes": ":global g574I5globalrestsplit 11\n",
 					"sha256": "638edf866ed0f65d32033f3874882468d1c17b9fc7f5bfa77c1cfd595cbe3e5c",
-					"ms": 5,
+					"ms": 4,
 					"ok": true,
 					"out": "{\"ret\":\"\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -735,7 +735,7 @@
 				{
 					"bytes": ":put \"g=$g574I5globalrestsplit\"\n",
 					"sha256": "84902a89211a12b216f60936ecf21128e181fb4afde74ad3230208c4f3db360f",
-					"ms": 5,
+					"ms": 4,
 					"ok": true,
 					"out": "{\"ret\":\"g=11\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -750,7 +750,7 @@
 				{
 					"bytes": ":global g574I5globalnativesplit 11\n",
 					"sha256": "22ea62bf8afaec4b0a3fc9d945f0be12411b1b8e330b6a0aa5f9a6fe0c07c88f",
-					"ms": 1124,
+					"ms": 118,
 					"ok": true,
 					"out": "{\"ret\":\"\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -758,7 +758,7 @@
 				{
 					"bytes": ":put \"g=$g574I5globalnativesplit\"\n",
 					"sha256": "9bf10af07e7f896b428f369add4f502366ed6bf1036cf6e35974693f58087330",
-					"ms": 129,
+					"ms": 128,
 					"ok": true,
 					"out": "{\"ret\":\"g=11\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -773,7 +773,7 @@
 				{
 					"bytes": ":global g574I5globalsshsplit 11\n",
 					"sha256": "0ba2640d18e71680e5f5a62f0787ed262e36d44e2ea1622e08d45a8882289679",
-					"ms": 497,
+					"ms": 492,
 					"ok": true,
 					"out": "{\"ret\":\"\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -781,7 +781,7 @@
 				{
 					"bytes": ":put \"g=$g574I5globalsshsplit\"\n",
 					"sha256": "354d2b651d87c23d3179556a5b0914d1348834e589e21d934f8b496d8190fc51",
-					"ms": 492,
+					"ms": 505,
 					"ok": true,
 					"out": "{\"ret\":\"g=11\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -804,9 +804,9 @@
 				{
 					"bytes": ":put \"g=$g574I5globalmactelnetspl\"\n",
 					"sha256": "e4f69c5d07c2e86d2eaf1e923e1795a0a7f850085f99e5cf6846327d27713c6c",
-					"ms": 11120,
+					"ms": 11113,
 					"ok": true,
-					"out": "{\"ret\":\"\"}",
+					"out": "{\"ret\":\"g=11\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
 				}
 			]
@@ -830,7 +830,7 @@
 					"sha256": "315aa1ac9e361ebb1b1ab8176e66c9a9a1480cb881a10f4b56c0205ce40d17ba",
 					"ms": 152,
 					"ok": true,
-					"out": "{\"output\":\"\"}",
+					"out": "{\"output\":\"g=11\"}",
 					"note": "held console, one run() per submission",
 					"raw": "{\"raw\":\":put \\\"g=$g574I5globalsessionsplit\\\"\\r[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mput\\u001b[m \\u001b[m\\u001b[33m\\\"\\u001b[mg=\\u001b[m\\u001b[33m$\\u001b[m\\u001b[36;1mg574I5globalsessionsplit\\u001b[m\\u001b[33m\\\"\\u001b[m\\r\\n\\rg=11\\r\\n\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \"}"
 				}
@@ -869,9 +869,9 @@
 				{
 					"bytes": "/ip/firewall/address-list\nprint\n",
 					"sha256": "1247e7cbd2d7d83b4fd00812b1fc63c3c96b0eb18eb6d325640c68a4be87df01",
-					"ms": 7,
+					"ms": 6,
 					"ok": true,
-					"out": "{\"ret\":\"Columns: LIST, ADDRESS, CREATION-TIME\\r\\n# LIST       ADDRESS     CREATION-TIME      \\r\\n;;; probe-574-menu\\r\\n0 probe-574  192.0.2.44  2026-11-12 03:08:29\"}",
+					"out": "{\"ret\":\"Columns: LIST, ADDRESS, CREATION-TIME\\r\\n# LIST       ADDRESS     CREATION-TIME      \\r\\n;;; probe-574-menu\\r\\n0 probe-574  192.0.2.44  2026-11-26 15:09:48\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
 				}
 			]
@@ -884,7 +884,7 @@
 				{
 					"bytes": "/ip/firewall/address-list",
 					"sha256": "9ce25c08588a6274516100ed1e51f37a3d6d89e9d1f017055f1369775f6503d8",
-					"ms": 7,
+					"ms": 6,
 					"ok": false,
 					"error": {
 						"code": "routeros/unknown-path",
@@ -896,7 +896,7 @@
 				{
 					"bytes": "print",
 					"sha256": "ce953a0eb08246617b7f849486c4b26a7af37e9d2e8f0e13b3ae1bf0da8a70a2",
-					"ms": 7,
+					"ms": 5,
 					"ok": false,
 					"error": {
 						"code": "validation/unknown-path",
@@ -923,9 +923,9 @@
 				{
 					"bytes": "/ip/firewall/address-list\nprint\n",
 					"sha256": "1247e7cbd2d7d83b4fd00812b1fc63c3c96b0eb18eb6d325640c68a4be87df01",
-					"ms": 129,
+					"ms": 128,
 					"ok": true,
-					"out": "{\"ret\":\"Columns: LIST, ADDRESS, CREATION-TIME\\r\\n# LIST       ADDRESS     CREATION-TIME      \\r\\n;;; probe-574-menu\\r\\n0 probe-574  192.0.2.44  2026-11-12 03:08:29\"}",
+					"out": "{\"ret\":\"Columns: LIST, ADDRESS, CREATION-TIME\\r\\n# LIST       ADDRESS     CREATION-TIME      \\r\\n;;; probe-574-menu\\r\\n0 probe-574  192.0.2.44  2026-11-26 15:09:48\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
 				}
 			]
@@ -938,7 +938,7 @@
 				{
 					"bytes": "/ip/firewall/address-list",
 					"sha256": "9ce25c08588a6274516100ed1e51f37a3d6d89e9d1f017055f1369775f6503d8",
-					"ms": 119,
+					"ms": 129,
 					"ok": false,
 					"error": {
 						"code": "routeros/unknown-path",
@@ -950,7 +950,7 @@
 				{
 					"bytes": "print",
 					"sha256": "ce953a0eb08246617b7f849486c4b26a7af37e9d2e8f0e13b3ae1bf0da8a70a2",
-					"ms": 120,
+					"ms": 128,
 					"ok": false,
 					"error": {
 						"code": "validation/unknown-path",
@@ -977,9 +977,9 @@
 				{
 					"bytes": "/ip/firewall/address-list\nprint\n",
 					"sha256": "1247e7cbd2d7d83b4fd00812b1fc63c3c96b0eb18eb6d325640c68a4be87df01",
-					"ms": 505,
+					"ms": 486,
 					"ok": true,
-					"out": "{\"ret\":\"Columns: LIST, ADDRESS, CREATION-TIME\\n# LIST       ADDRESS     CREATION-TIME\\n;;; probe-574-menu\\n0 probe-574  192.0.2.44  2026-11-12 03:08:29\"}",
+					"out": "{\"ret\":\"Columns: LIST, ADDRESS, CREATION-TIME\\n# LIST       ADDRESS     CREATION-TIME\\n;;; probe-574-menu\\n0 probe-574  192.0.2.44  2026-11-26 15:09:48\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
 				}
 			]
@@ -992,7 +992,7 @@
 				{
 					"bytes": "/ip/firewall/address-list",
 					"sha256": "9ce25c08588a6274516100ed1e51f37a3d6d89e9d1f017055f1369775f6503d8",
-					"ms": 488,
+					"ms": 485,
 					"ok": true,
 					"out": "{\"ret\":\"\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -1000,7 +1000,7 @@
 				{
 					"bytes": "print",
 					"sha256": "ce953a0eb08246617b7f849486c4b26a7af37e9d2e8f0e13b3ae1bf0da8a70a2",
-					"ms": 247,
+					"ms": 250,
 					"ok": false,
 					"error": {
 						"code": "validation/unknown-path",
@@ -1027,9 +1027,9 @@
 				{
 					"bytes": "/ip/firewall/address-list\nprint\n",
 					"sha256": "1247e7cbd2d7d83b4fd00812b1fc63c3c96b0eb18eb6d325640c68a4be87df01",
-					"ms": 11104,
+					"ms": 11116,
 					"ok": true,
-					"out": "{\"ret\":\"Columns: LIST, ADDRESS, CREATION-TIME\\n# LIST       ADDRESS     CREATION-TIME\\n;;; probe-574-menu\\n0 probe-574  192.0.2.44  2026-11-12 03:09:07\"}",
+					"out": "{\"ret\":\"Columns: LIST, ADDRESS, CREATION-TIME\\n# LIST       ADDRESS     CREATION-TIME\\n;;; probe-574-menu\\n0 probe-574  192.0.2.44  2026-11-26 15:10:24\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
 				}
 			]
@@ -1042,7 +1042,7 @@
 				{
 					"bytes": "/ip/firewall/address-list",
 					"sha256": "9ce25c08588a6274516100ed1e51f37a3d6d89e9d1f017055f1369775f6503d8",
-					"ms": 11116,
+					"ms": 11138,
 					"ok": true,
 					"out": "{\"ret\":\"\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -1050,7 +1050,7 @@
 				{
 					"bytes": "print",
 					"sha256": "ce953a0eb08246617b7f849486c4b26a7af37e9d2e8f0e13b3ae1bf0da8a70a2",
-					"ms": 10956,
+					"ms": 10968,
 					"ok": false,
 					"error": {
 						"code": "validation/unknown-path",
@@ -1077,11 +1077,11 @@
 				{
 					"bytes": "/ip/firewall/address-list\nprint\n",
 					"sha256": "1247e7cbd2d7d83b4fd00812b1fc63c3c96b0eb18eb6d325640c68a4be87df01",
-					"ms": 154,
+					"ms": 153,
 					"ok": true,
-					"out": "{\"output\":\"Columns: LIST, ADDRESS, CREATION-TIME\\n# LIST       ADDRESS     CREATION-TIME\\n;;; probe-574-menu\\n0 probe-574  192.0.2.44  2026-11-12 03:09:07\"}",
+					"out": "{\"output\":\"Columns: LIST, ADDRESS, CREATION-TIME\\n# LIST       ADDRESS     CREATION-TIME\\n;;; probe-574-menu\\n0 probe-574  192.0.2.44  2026-11-26 15:10:24\"}",
 					"note": "held console, one run() per submission",
-					"raw": "{\"raw\":\"/ip/firewall/address-list\\r[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\u001b[m\\u001b[36m/ip/firewall/address-list\\u001b[m\\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] \\u001b[m\\u001b[36m/ip/firewall/address-list\\u001b[m> print\\u001b[5D\\u001b[m\\u001b[35mprint\\u001b[m\\r\\n\\r\\u001b[KColumns: \\u001b[m\\u001b[1mLIST\\u001b[m, \\u001b[m\\u001b[1mADDRESS\\u001b[m, \\u001b[m\\u001b[1mCREATION-TIME\\r\\n#\\u001b[m \\u001b[m\\u001b[1mLIST\\u001b[m       \\u001b[m\\u001b[1mADDRESS\\u001b[m     \\u001b[m\\u001b[1mCREATION-TIME\\u001b[m      \\r\\n;;; probe-574-menu\\r\\n0 probe-574  192.0.2.44  2026-11-12 03:09:07\\r\\r\\n\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] \\u001b[m\\u001b[36m/ip/firewall/address-list\\u001b[m> \\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] \\u001b[m\\u001b[36m/ip/firewall/address-list\\u001b[m> \"}"
+					"raw": "{\"raw\":\"/ip/firewall/address-list\\r[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\u001b[m\\u001b[36m/ip/firewall/address-list\\u001b[m\\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] \\u001b[m\\u001b[36m/ip/firewall/address-list\\u001b[m> print\\u001b[5D\\u001b[m\\u001b[35mprint\\u001b[m\\r\\n\\r\\u001b[KColumns: \\u001b[m\\u001b[1mLIST\\u001b[m, \\u001b[m\\u001b[1mADDRESS\\u001b[m, \\u001b[m\\u001b[1mCREATION-TIME\\r\\n#\\u001b[m \\u001b[m\\u001b[1mLIST\\u001b[m       \\u001b[m\\u001b[1mADDRESS\\u001b[m     \\u001b[m\\u001b[1mCREATION-TIME\\u001b[m      \\r\\n;;; probe-574-menu\\r\\n0 probe-574  192.0.2.44  2026-11-26 15:10:24\\r\\r\\n\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] \\u001b[m\\u001b[36m/ip/firewall/address-list\\u001b[m> \\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] \\u001b[m\\u001b[36m/ip/firewall/address-list\\u001b[m> \"}"
 				}
 			]
 		},
@@ -1104,9 +1104,9 @@
 					"sha256": "ce953a0eb08246617b7f849486c4b26a7af37e9d2e8f0e13b3ae1bf0da8a70a2",
 					"ms": 152,
 					"ok": true,
-					"out": "{\"output\":\"Columns: LIST, ADDRESS, CREATION-TIME\\n# LIST       ADDRESS     CREATION-TIME\\n;;; probe-574-menu\\n0 probe-574  192.0.2.44  2026-11-12 03:09:07\"}",
+					"out": "{\"output\":\"Columns: LIST, ADDRESS, CREATION-TIME\\n# LIST       ADDRESS     CREATION-TIME\\n;;; probe-574-menu\\n0 probe-574  192.0.2.44  2026-11-26 15:10:24\"}",
 					"note": "held console, one run() per submission",
-					"raw": "{\"raw\":\"print\\u001b[5D\\u001b[m\\u001b[35mprint\\u001b[m\\r\\n\\r\\u001b[KColumns: \\u001b[m\\u001b[1mLIST\\u001b[m, \\u001b[m\\u001b[1mADDRESS\\u001b[m, \\u001b[m\\u001b[1mCREATION-TIME\\r\\n#\\u001b[m \\u001b[m\\u001b[1mLIST\\u001b[m       \\u001b[m\\u001b[1mADDRESS\\u001b[m     \\u001b[m\\u001b[1mCREATION-TIME\\u001b[m      \\r\\n;;; probe-574-menu\\r\\n0 probe-574  192.0.2.44  2026-11-12 03:09:07\\r\\r\\n\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] \\u001b[m\\u001b[36m/ip/firewall/address-list\\u001b[m> \"}"
+					"raw": "{\"raw\":\"print\\u001b[5D\\u001b[m\\u001b[35mprint\\u001b[m\\r\\n\\r\\u001b[KColumns: \\u001b[m\\u001b[1mLIST\\u001b[m, \\u001b[m\\u001b[1mADDRESS\\u001b[m, \\u001b[m\\u001b[1mCREATION-TIME\\r\\n#\\u001b[m \\u001b[m\\u001b[1mLIST\\u001b[m       \\u001b[m\\u001b[1mADDRESS\\u001b[m     \\u001b[m\\u001b[1mCREATION-TIME\\u001b[m      \\r\\n;;; probe-574-menu\\r\\n0 probe-574  192.0.2.44  2026-11-26 15:10:24\\r\\r\\n\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] \\u001b[m\\u001b[36m/ip/firewall/address-list\\u001b[m> \"}"
 				}
 			]
 		},
@@ -1120,7 +1120,7 @@
 					"sha256": "1e4832bec6fd56bb92d02916faab1696ad6ee3081375078a7a4b1e0d54105777",
 					"ms": 3,
 					"ok": true,
-					"out": "{\"ret\":\"Columns: LIST, ADDRESS, CREATION-TIME\\r\\n# LIST       ADDRESS     CREATION-TIME      \\r\\n;;; probe-574-menu\\r\\n0 probe-574  192.0.2.44  2026-11-12 03:08:29\"}",
+					"out": "{\"ret\":\"Columns: LIST, ADDRESS, CREATION-TIME\\r\\n# LIST       ADDRESS     CREATION-TIME      \\r\\n;;; probe-574-menu\\r\\n0 probe-574  192.0.2.44  2026-11-26 15:09:48\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]],
 					"note": "script cmx-I6-menu-stored-1 source-sha256 1247e7cbd2d7d83b4fd00812b1fc63c3c96b0eb18eb6d325640c68a4be87df01"
 				}
@@ -1147,7 +1147,7 @@
 					"ok": false,
 					"error": {
 						"code": "routeros/unknown-path",
-						"summary": "RouterOS does not recognize the command: bad command name print (line 1 column 1)",
+						"summary": "RouterOS has no command at this path: bad command name print (line 1 column 1)",
 						"cause": "\"bad command name print (line 1 column 1)\""
 					},
 					"stages": [["offline", "passed"], ["device", "passed"]],
@@ -1193,7 +1193,7 @@
 				{
 					"bytes": ":put \"héllo→574\"\n",
 					"sha256": "faa4cb664e7dabb2d4e557456edbba855d08c257ba9b5e8116868f226fba6563",
-					"ms": 480,
+					"ms": 491,
 					"ok": true,
 					"out": "{\"ret\":\"hllo574\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -1208,9 +1208,9 @@
 				{
 					"bytes": ":put \"héllo→574\"\n",
 					"sha256": "faa4cb664e7dabb2d4e557456edbba855d08c257ba9b5e8116868f226fba6563",
-					"ms": 11120,
+					"ms": 11166,
 					"ok": true,
-					"out": "{\"ret\":\"\"}",
+					"out": "{\"ret\":\"hllo574\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
 				}
 			]
@@ -1223,9 +1223,9 @@
 				{
 					"bytes": ":put \"héllo→574\"\n",
 					"sha256": "faa4cb664e7dabb2d4e557456edbba855d08c257ba9b5e8116868f226fba6563",
-					"ms": 151,
+					"ms": 152,
 					"ok": true,
-					"out": "{\"output\":\"\"}",
+					"out": "{\"output\":\"hllo574\"}",
 					"note": "held console, one run() per submission",
 					"raw": "{\"raw\":\":put \\\"hllo574\\\"\\r[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\u001b[m\\u001b[36m:\\u001b[m\\u001b[35mput\\u001b[m \\u001b[m\\u001b[33m\\\"\\u001b[mhllo574\\u001b[m\\u001b[33m\\\"\\u001b[m\\r\\n\\rhllo574\\r\\n\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \\r\\n\\r\\r\\r\\r\\u001b[9999B\\u001b[K[\\u001b[m\\u001b[36mcmx\\u001b[m@\\u001b[m\\u001b[32mCHR\\u001b[m] > \"}"
 				}
@@ -1255,7 +1255,7 @@
 				{
 					"bytes": "﻿:put \"bom574\"\n",
 					"sha256": "a59b96efcbb124b80179ff4f8720725b2672750e39712adb880483cb608bd6bc",
-					"ms": 3,
+					"ms": 5,
 					"ok": false,
 					"error": {
 						"code": "validation/syntax",
@@ -1282,7 +1282,7 @@
 				{
 					"bytes": "﻿:put \"bom574\"\n",
 					"sha256": "a59b96efcbb124b80179ff4f8720725b2672750e39712adb880483cb608bd6bc",
-					"ms": 128,
+					"ms": 116,
 					"ok": false,
 					"error": {
 						"code": "validation/syntax",
@@ -1324,7 +1324,7 @@
 				{
 					"bytes": "﻿:put \"bom574\"\n",
 					"sha256": "a59b96efcbb124b80179ff4f8720725b2672750e39712adb880483cb608bd6bc",
-					"ms": 11108,
+					"ms": 11119,
 					"ok": true,
 					"out": "{\"ret\":\"bom574\"}",
 					"stages": [["offline", "passed"], ["device", "passed"]]
@@ -1355,7 +1355,7 @@
 				{
 					"bytes": "/system/script/run cmx-I8-bom-stored-1",
 					"sha256": "f3746bb35f654b0ad69f80903bb1beb1c189486bd791f6a84c0c5b485c78f5f9",
-					"ms": 2,
+					"ms": 4,
 					"ok": false,
 					"error": {
 						"code": "routeros/request-failed",

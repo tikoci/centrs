@@ -16,10 +16,10 @@ import slice from "../fixtures/explain/context-matrix.slice.json" with {
  * disagrees with the slice means the slice (and these assertions) needs
  * re-recording, not a silent update.
  *
- * One cell family is a KNOWN centrs bug, not a device answer: the mac-telnet
- * reader drops :put output for trailing-newline single-line sends (the
- * committed raw screens prove the device printed). It has a follow-up issue;
- * the slice pins the broken behavior until a re-recorded matrix shows the fix.
+ * The mac-telnet reader used to drop :put output for single-line sends with a
+ * trailing newline or a non-ASCII character (#575). The slice was re-recorded
+ * after the fix (2026-11-26); only those eight mac-telnet and session cells
+ * changed. Multi-line sends still leak echo into mac-telnet output (#575).
  * The ssh multiline cells were re-recorded after #576 fixed them (CR line
  * breaks keep one prompt); only those three cells changed. #665 changed the
  * code for RouterOS's `no such command` to `routeros/unknown-path`; the three
@@ -118,13 +118,10 @@ describe("context-matrix evidence slice (#574)", () => {
 			"I2-semi-scope-native",
 			"I2-semi-scope-ssh",
 			"I2-semi-scope-stored",
+			"I2-semi-scope-mactelnet",
+			"I2-semi-scope-session",
 		])
 			expect(out(cell(id), 0)).toContain("a=2");
-		// The console ran it too — the raw screen shows a=2 — but the
-		// mac-telnet reader lost the output (follow-up issue).
-		const session = cell("I2-semi-scope-session").submissions[0];
-		expect(session?.raw ?? "").toContain("a=2");
-		expect(session?.out ?? "").not.toContain("a=2");
 	});
 
 	test("split submissions never share locals", () => {
@@ -153,12 +150,10 @@ describe("context-matrix evidence slice (#574)", () => {
 			"I5-global-native-split",
 			"I5-global-ssh-split",
 			"I5-global-stored-split",
+			"I5-global-mactelnet-split",
+			"I5-global-session-split",
 		])
 			expect(out(cell(id), 1)).toContain("g=11");
-		// The held console printed g=11 too (raw screen); the reader lost it.
-		const session = cell("I5-global-session-split").submissions[1];
-		expect(session?.raw ?? "").toContain("g=11");
-		expect(session?.out ?? "").not.toContain("g=11");
 	});
 
 	test("menu context holds within one submission on every running route", () => {
@@ -203,10 +198,12 @@ describe("context-matrix evidence slice (#574)", () => {
 			"I7-unicode-stored",
 		])
 			expect(out(cell(id), 0)).toContain("héllo→574");
-		expect(out(cell("I7-unicode-ssh"), 0)).toContain("hllo574");
-		const session = cell("I7-unicode-session").submissions[0];
-		expect(session?.raw ?? "").toContain("hllo574");
-		expect(session?.out ?? "").not.toContain("hllo574");
+		for (const id of [
+			"I7-unicode-ssh",
+			"I7-unicode-mactelnet",
+			"I7-unicode-session",
+		])
+			expect(out(cell(id), 0)).toContain("hllo574");
 	});
 
 	test("a leading BOM splits by device path", () => {

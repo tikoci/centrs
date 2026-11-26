@@ -154,18 +154,24 @@ export function emulateScreen(text: string): string[] {
  * When `command` is supplied, consume exactly as many echoed lines as the command
  * spans (so a wrapped echo — e.g. a long `:put [:parse "…"]` — does not leak into
  * the output); otherwise fall back to dropping the single first line.
+ *
+ * The count uses the command as the console echoes it: without trailing line
+ * breaks (`run()` sends its own CR) and without non-ASCII characters, which
+ * the console drops at input (CHR 7.24.5, #575). Counting either one consumed
+ * the output line as if it were echo.
  */
 export function extractCommandOutput(raw: string, command?: string): string {
 	const lines = emulateScreen(raw);
 	let start = 1;
 	if (command !== undefined && lines.length > 0) {
+		const echoed = consoleEcho(command);
 		const first = lines[0] ?? "";
 		const promptMatch = first.match(/^\[[^\]\r\n]*\][^\r\n]*?>\s?/);
 		const echoedOnFirst = promptMatch
 			? first.slice(promptMatch[0].length)
 			: first;
 		let consumed = echoedOnFirst.length;
-		while (consumed < command.length && start < lines.length) {
+		while (consumed < echoed.length && start < lines.length) {
 			consumed += (lines[start] ?? "").length;
 			start += 1;
 		}
@@ -180,6 +186,11 @@ export function extractCommandOutput(raw: string, command?: string): string {
 		break;
 	}
 	return body.join("\n");
+}
+
+/** The command text the console echoes: trailing line breaks and non-ASCII removed. */
+function consoleEcho(command: string): string {
+	return command.replace(/[\r\n]+$/, "").replace(/[^\x20-\x7e\r\n\t]/g, "");
 }
 
 /**

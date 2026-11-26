@@ -98,6 +98,10 @@ publish `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
 
 ### Fixed
 
+- `execute --via mac-telnet` keeps the output of a single-line command that
+  ends in a newline or holds a non-ASCII character. The reader counted those
+  characters as echoed text, but the console echoes neither, so it skipped the
+  output line as echo and returned `""` (#575, CHR 7.24.5 captures).
 - `discover`'s refresh request gets a reply again. The 9-zero-byte refresh
   ended with a trailing byte, and RouterOS drops a datagram whose TLVs do not
   end exactly at its end, so no router answered it; `discover` only saw
@@ -222,9 +226,9 @@ Confirmed, pre-existing defects carried into these previews; none is a
 regression from 0.1.10.
 
 - [#575](https://github.com/tikoci/centrs/issues/575): `execute --via
-  mac-telnet` can silently drop `:put` output from single-line commands with
-  a trailing newline. Use REST, native API, or SSH when reliable captured
-  output is required.
+  mac-telnet` with a multi-line script can return echoed command text in its
+  output. Use REST, native API, or SSH when reliable captured output is
+  required.
 - [#604](https://github.com/tikoci/centrs/issues/604): MCP authorization and
   dialing read the CDB separately, so a concurrent record edit can change the
   target, credentials or write policy in between. Avoid CDB edits during MCP
