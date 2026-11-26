@@ -546,7 +546,8 @@ describe("extractCommandOutput — #575 trailing-newline and non-ASCII sends (CH
 describe("extractCommandOutput — console echo captures (#575 review)", () => {
 	for (const capture of echoCaptures.captures) {
 		test(capture.label, () => {
-			expect(extractCommandOutput(capture.raw, capture.command)).toBe(
+			const { cols } = capture as { cols?: number };
+			expect(extractCommandOutput(capture.raw, capture.command, cols)).toBe(
 				capture.expected,
 			);
 		});

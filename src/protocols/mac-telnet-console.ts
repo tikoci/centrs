@@ -255,37 +255,80 @@ function framedOutput(raw: string, cols: number): string[] | undefined {
 /**
  * The output lines of one segment, with the console's width wraps rejoined.
  *
- * The console breaks a printed record after `cols + 1` characters on its first
- * row and `cols` on each later row, and always emits that CRLF; a line after a
- * newline inside the printed value (a bare LF) holds `cols`. So a full row is
- * followed either by the rest of the line or, when the line ended exactly
- * there, by an empty row. Rows are measured before trailing spaces are trimmed,
- * since a space can sit in the wrap column (CHR 7.23.1, 7.23.8, 7.24.5 at 512
- * columns). The last row is the leftover before the next prompt.
+ * The console keeps one position per printed record. It resets at the
+ * record's CRLF and at any CR; a newline inside the printed value (a bare LF)
+ * ends the line but keeps the position. The console sends a wrap (always CRLF)
+ * when the position reaches `cols + 1`, then every `cols` after that, so a
+ * record that ends exactly on a wrap point leaves an empty row. Every
+ * character, UTF-8 included, and 0x01 take one position; TAB moves to the next
+ * multiple of 8 unless it is within 2 of the next wrap point; BS takes one
+ * back; BEL, VT, FF, DEL and ESC sequences take none. Measured on CHR 7.24.5
+ * and 7.23.8 at 512, 200 and 80 columns (#575). The last row is the leftover
+ * before the next prompt.
  */
 function outputLines(text: string, cols: number): string[] {
 	const parts = text.split(/(\r?\n)/);
 	const lines: string[] = [];
-	let capacity = cols + 1;
+	let position = 0;
+	let nextWrap = cols + 1;
 	let continuing = false;
 	for (let i = 0; i < parts.length; i += 2) {
-		const row = emulateScreen(parts[i] ?? "", false)[0] ?? "";
+		const raw = parts[i] ?? "";
 		const brk = parts[i + 1];
-		if (continuing) {
-			continuing = false;
-			if (row.length === 0) {
-				capacity = brk === "\n" ? cols : cols + 1;
-				if (brk === undefined) lines.push("");
-				continue;
+		const plain = raw.replace(ANSI_CSI, "");
+		for (let j = 0; j < plain.length; j++) {
+			const code = plain.charCodeAt(j);
+			if (code === 0x0d) {
+				position = 0;
+				nextWrap = cols + 1;
+			} else if (code === 0x1b) j++;
+			else if (code === 0x09) {
+				if (position < nextWrap - 2)
+					position = (Math.floor(position / 8) + 1) * 8;
+			} else if (code === 0x08) position = Math.max(0, position - 1);
+			else if (code === 0x01 || (code >= 0x20 && code !== 0x7f)) {
+				if (code >= 0xd800 && code <= 0xdbff) j++;
+				position += 1;
 			}
-			lines[lines.length - 1] += row;
-		} else lines.push(row);
-		if (row.length >= capacity) {
+		}
+		const row = rowText(raw);
+		if (continuing) lines[lines.length - 1] += row;
+		else lines.push(row);
+		if (continuing && row.length === 0 && brk === undefined) lines.push("");
+		if (brk === "\r\n" && position >= nextWrap) {
 			continuing = true;
-			capacity = cols;
-		} else capacity = brk === "\n" ? cols : cols + 1;
+			nextWrap += cols;
+		} else {
+			continuing = false;
+			if (brk === "\r\n") {
+				position = 0;
+				nextWrap = cols + 1;
+			}
+		}
 	}
 	return lines.map((line) => line.replace(/\s+$/, ""));
+}
+
+/**
+ * One output row as text: colors and ESC sequences removed, CR and BS applied
+ * as the screen would, every other character (TAB and C0 controls included)
+ * kept, since it is the command's output.
+ */
+function rowText(raw: string): string {
+	const clean = raw.replace(ANSI_CSI, "").replace(ANSI_ESC2, "");
+	const cells: string[] = [];
+	let col = 0;
+	for (const ch of clean) {
+		const code = ch.charCodeAt(0);
+		if (code === 0x0d) col = 0;
+		else if (code === 0x08) col = Math.max(0, col - 1);
+		else if (code === 0x1b) continue;
+		else {
+			cells[col] = ch;
+			col += 1;
+		}
+	}
+	return Array.from(cells, (c) => c ?? " ").join("");
 }
 
 /** The pre-#575 rule: skip as many screen columns as the command is long. */

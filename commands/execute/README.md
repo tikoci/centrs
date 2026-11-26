@@ -115,14 +115,21 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
   the only one that negotiates a size: `src/protocols/mac-telnet-console.ts`
   answers the device's terminal-size probe with a deliberately tall/wide screen,
   so captured columns are neither paginated nor wrapped *at the negotiated
-  width*. The console still breaks one output line longer than that: after 513
-  characters on the first row of each printed value and 512 on each later row
-  (and after a newline inside the value), always with a CRLF. The reader
-  rejoins those rows, so a long line comes back whole (CHR 7.23.1, 7.23.8,
-  7.24.5). **SSH execute** runs *without* a pseudo-tty (`src/protocols/ssh.ts`),
-  so no width is negotiated at all. **REST/native-api** are not consoles, so a
-  terminal width never applies (they return structured records, or a string
-  `ret` for script-mode). There is therefore no per-call `--width` knob today —
+  width*. Two things still depend on that width. RouterOS lays out `print`
+  (tables, `detail` continuation lines) and `export` (its trailing-`\`
+  folding) for `cols − 1` columns, the same as SSH at a matching width
+  (`user+<cols>w`); that layout is RouterOS output and is kept. Separately,
+  the console breaks any output line it is printing when its position reaches
+  `cols + 1`, then every `cols`, always with a CRLF; the position resets at
+  the end of each printed value but not at a newline inside it, and a TAB
+  advances it to the next multiple of 8. The reader rejoins those breaks, so
+  a long line comes back whole (CHR 7.23.8 and 7.24.5 at 512, 200 and 80
+  columns). **SSH execute** runs *without* a pseudo-tty (`src/protocols/ssh.ts`),
+  so no width is negotiated, and RouterOS lays out `print` and `export` for 80
+  columns there (a narrow table prints `Columns: -- (terminal too narrow)`);
+  REST `/rest/execute` `as-string` returns the same text. **REST/native-api**
+  records are not console output, so a terminal width never applies to them
+  (structured records, or a string `ret` for script-mode). There is therefore no per-call `--width` knob today —
   an explicit width override is deferred until a concrete need appears.
 - **A device-side wrap that no width negotiation reaches (GH#352).** Declaring a
   width is not sufficient, because RouterOS can wrap for reasons that are not
