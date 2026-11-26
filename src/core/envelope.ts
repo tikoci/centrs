@@ -44,7 +44,9 @@ export type SettingSourceKind =
 	| "cli"
 	| "cdb"
 	| "arp"
-	| "provider";
+	| "provider"
+	/** A secret read from a file named by a flag or env key (`key`). */
+	| "file";
 
 export interface SettingSource {
 	kind: SettingSourceKind;

@@ -104,6 +104,12 @@ export const executeCommand: CliCommandMetadata = {
 			description: "RouterOS password. Falls back to `CENTRS_PASSWORD`.",
 		},
 		{
+			flag: "--password-file",
+			valueName: "<path>",
+			description:
+				"Read the RouterOS password from a file (one trailing newline ignored). Falls back to `CENTRS_PASSWORD_FILE`; outranks CDB records like `--password`. Conflicts with `--password`.",
+		},
+		{
 			flag: "--ssh-key",
 			valueName: "<path>",
 			description:
@@ -123,6 +129,12 @@ export const executeCommand: CliCommandMetadata = {
 			flag: "--cdb-password",
 			valueName: "<password>",
 			description: "Decrypt an encrypted WinBox CDB file.",
+		},
+		{
+			flag: "--cdb-password-file",
+			valueName: "<path>",
+			description:
+				"Read the CDB password from a file (one trailing newline ignored), e.g. a container secret under /run/secrets. Read on each CDB load; falls back to `CENTRS_CDB_PASSWORD_FILE`. Conflicts with `--cdb-password`.",
 		},
 		{
 			flag: "--match",
@@ -276,6 +288,14 @@ export function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
 					executeCommand.options,
 				);
 				break;
+			case "--password-file":
+				parsed.passwordFile = expectValue(
+					args,
+					++index,
+					arg,
+					executeCommand.options,
+				);
+				break;
 			case "--ssh-key":
 				parsed.sshKey = expectValue(args, ++index, arg, executeCommand.options);
 				break;
@@ -292,6 +312,14 @@ export function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
 				break;
 			case "--cdb-password":
 				parsed.cdbPassword = expectValue(
+					args,
+					++index,
+					arg,
+					executeCommand.options,
+				);
+				break;
+			case "--cdb-password-file":
+				parsed.cdbPasswordFile = expectValue(
 					args,
 					++index,
 					arg,

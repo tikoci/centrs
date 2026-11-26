@@ -73,11 +73,13 @@ describe("settingsManagedKeys registry", () => {
 });
 
 describe("settingsRefusedKeys registry", () => {
-	test("covers exactly the 5 refused keys", () => {
+	test("covers exactly the 7 refused keys", () => {
 		expect(settingsRefusedKeys.map((def) => def.attr).sort()).toEqual(
 			[
 				"cdb-password",
+				"cdb-password-file",
 				"password",
+				"password-file",
 				"run-fast-integration",
 				"skip-env-file",
 				"username",

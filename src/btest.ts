@@ -15,7 +15,11 @@
  */
 
 import { createServer } from "node:net";
-import type { CentrsEnvelope, EnvelopeMeta } from "./core/envelope.ts";
+import type {
+	CentrsEnvelope,
+	CommonSettingsMeta,
+	EnvelopeMeta,
+} from "./core/envelope.ts";
 import {
 	asCentrsError,
 	CentrsError,
@@ -38,11 +42,17 @@ import {
 	runBtestClientSession,
 } from "./protocols/btest-session.ts";
 import {
+	type ResolvedAuth,
 	redactTargetInput,
 	resolveAuth,
 	resolveCdb,
 	resolveTarget,
+	toCoreSource,
 } from "./resolver/index.ts";
+import {
+	chooseSecret,
+	TARGET_PASSWORD_SECRET,
+} from "./resolver/secret-source.ts";
 
 export { BTEST_PORT, BTEST_UDP_PORT_START };
 
@@ -102,6 +112,8 @@ export interface BtestClientRequest {
 	controlPort?: number;
 	username?: string;
 	password?: string;
+	/** A file holding the password (`--password-file`); conflicts with `password` (#672). */
+	passwordFile?: string;
 	durationMs?: number;
 	intervalMs?: number;
 	connectionCount?: number;
@@ -113,6 +125,7 @@ export interface BtestClientRequest {
 	natMode?: boolean;
 	cdbFile?: string;
 	cdbPassword?: string;
+	cdbPasswordFile?: string;
 	/**
 	 * `--match` selector for a `<router>` several CDB records share
 	 * (`user=<name>`, `target=<addr>`, or a record type): the same selector
@@ -240,6 +253,7 @@ export async function btestClient(
 		context?: Record<string, unknown>;
 	}[] = [];
 
+	let auth: ResolvedAuth | undefined;
 	try {
 		validateClientOptions(request);
 
@@ -270,6 +284,7 @@ export async function btestClient(
 				targetInput: request.targetInput,
 				cdbFile: request.cdbFile,
 				cdbPassword: request.cdbPassword,
+				cdbPasswordFile: request.cdbPasswordFile,
 				match: request.match,
 			},
 			env,
@@ -283,8 +298,12 @@ export async function btestClient(
 			"rest-api",
 			cdbResolution,
 		);
-		const auth = resolveAuth(
-			{ username: request.username, password: request.password },
+		auth = resolveAuth(
+			{
+				username: request.username,
+				password: request.password,
+				passwordFile: request.passwordFile,
+			},
 			env,
 			cdbResolution,
 		);
@@ -391,10 +410,10 @@ export async function btestClient(
 			data,
 			warnings: warnings.map((w) => ({ ...w })),
 			tips: [],
-			meta: clientMeta(target.host, controlPort, operation, auth.username),
+			meta: clientMeta(target.host, controlPort, operation, auth),
 		};
 	} catch (error) {
-		return buildClientErrorEnvelope(request, operation, error);
+		return buildClientErrorEnvelope(request, operation, error, auth);
 	}
 }
 
@@ -402,17 +421,35 @@ function clientMeta(
 	host: string,
 	port: number,
 	operation: BtestClientOperationMeta,
-	user?: string,
+	auth: ResolvedAuth,
 ): EnvelopeMeta<BtestClientOperationMeta> {
 	return {
 		target: {
 			host,
 			port,
-			...(user !== undefined ? { user } : {}),
+			...(auth.username !== undefined ? { user: auth.username } : {}),
 		},
 		via: "btest",
-		settings: {},
+		settings: authSettings(auth),
 		operation,
+	};
+}
+
+/**
+ * Where the credential came from (`meta.settings.username` / `.password`),
+ * never its value; a password file reports `{ kind: "file", key }` (#672).
+ * Nothing when no credential was resolved (an open server, or a failure
+ * before resolution).
+ */
+function authSettings(auth: ResolvedAuth | undefined): CommonSettingsMeta {
+	if (auth === undefined) return {};
+	return {
+		...(auth.usernameSource
+			? { username: toCoreSource(auth.usernameSource) }
+			: {}),
+		...(auth.passwordSource
+			? { password: toCoreSource(auth.passwordSource) }
+			: {}),
 	};
 }
 
@@ -420,6 +457,7 @@ function buildClientErrorEnvelope(
 	request: BtestClientRequest,
 	operation: BtestClientOperationMeta,
 	error: unknown,
+	auth: ResolvedAuth | undefined,
 ): BtestClientEnvelope {
 	const centrsError = asCentrsError(error, {
 		code: "routeros/btest-protocol",
@@ -441,7 +479,7 @@ function buildClientErrorEnvelope(
 				port: operation.controlPort,
 			},
 			via: "btest",
-			settings: {},
+			settings: authSettings(auth),
 			operation,
 		},
 	};
@@ -455,6 +493,8 @@ export interface BtestServerRequest {
 	authenticate?: boolean;
 	username?: string;
 	password?: string;
+	/** A file holding the password (`--password-file`); conflicts with `password` (#672). */
+	passwordFile?: string;
 	allocateUdpPortsFrom?: number;
 	maxSessions?: number;
 	intervalMs?: number;
@@ -551,13 +591,6 @@ export async function btestServer(
 	const authenticate = request.authenticate ?? true;
 	const maxSessions = request.maxSessions ?? DEFAULT_MAX_SESSIONS;
 	const allocateFrom = request.allocateUdpPortsFrom ?? BTEST_UDP_PORT_START;
-	// Resolve the single accepted credential through the same path as the client
-	// (flags first, then CENTRS_USERNAME / CENTRS_PASSWORD). No CDB here — the
-	// server has no target device.
-	const auth = resolveAuth(
-		{ username: request.username, password: request.password },
-		request.env ?? Bun.env,
-	);
 	const operation: BtestServerOperationMeta = {
 		command: "btest",
 		mode: "server",
@@ -565,12 +598,32 @@ export async function btestServer(
 		port,
 	};
 
+	let auth: ReturnType<typeof resolveAuth> | undefined;
 	try {
 		validateServerOptions(request);
+		const env = request.env ?? Bun.env;
+		const credentials = {
+			username: request.username,
+			password: request.password,
+			passwordFile: request.passwordFile,
+		};
+		// Resolve the single accepted credential through the same path as the
+		// client (flags first, then CENTRS_USERNAME / CENTRS_PASSWORD and the
+		// file forms). No CDB here — the server has no target device. Inside the
+		// envelope boundary: a missing password file or a value/file conflict is
+		// an error envelope, not a rejected call (#672). An open server uses no
+		// credential, so it reads no file; a value/file conflict still fails.
+		if (authenticate) auth = resolveAuth(credentials, env);
+		else
+			chooseSecret(
+				TARGET_PASSWORD_SECRET,
+				{ value: credentials.password, file: credentials.passwordFile },
+				env,
+			);
 		// authenticate=true (the default) without a credential would bind a server
 		// that rejects every client — fail fast instead.
 		if (
-			authenticate &&
+			auth !== undefined &&
 			(auth.username === undefined || !auth.passwordProvided)
 		) {
 			throw optionError(
@@ -579,7 +632,7 @@ export async function btestServer(
 			);
 		}
 	} catch (error) {
-		return buildServerErrorEnvelope(operation, error);
+		return buildServerErrorEnvelope(operation, error, auth);
 	}
 
 	const sessions: BtestSessionRecord[] = [];
@@ -624,12 +677,10 @@ export async function btestServer(
 						authenticate,
 						// Only the resolved credential, and only when auth is on (never
 						// leak creds into an unauthenticated handshake).
-						...(authenticate && auth.username !== undefined
+						...(auth?.username !== undefined
 							? { username: auth.username }
 							: {}),
-						...(authenticate && auth.passwordProvided
-							? { password: auth.password }
-							: {}),
+						...(auth?.passwordProvided ? { password: auth.password } : {}),
 						serverUdpPort,
 						udpBindHost: bind === "127.0.0.1" ? "127.0.0.1" : "0.0.0.0",
 						...(request.intervalMs !== undefined
@@ -692,7 +743,11 @@ export async function btestServer(
 			});
 		});
 	} catch (error) {
-		return buildServerErrorEnvelope(operation, listenError(error, bind, port));
+		return buildServerErrorEnvelope(
+			operation,
+			listenError(error, bind, port),
+			auth,
+		);
 	}
 
 	await new Promise<void>((resolve) => {
@@ -731,7 +786,12 @@ export async function btestServer(
 		},
 		warnings: warnings.map((w) => ({ ...w })),
 		tips: [],
-		meta: { target: {}, via: "btest", settings: {}, operation },
+		meta: {
+			target: {},
+			via: "btest",
+			settings: authSettings(auth),
+			operation,
+		},
 	};
 }
 
@@ -764,6 +824,7 @@ function listenError(error: unknown, bind: string, port: number): CentrsError {
 function buildServerErrorEnvelope(
 	operation: BtestServerOperationMeta,
 	error: unknown,
+	auth: ResolvedAuth | undefined,
 ): BtestServerEnvelope {
 	const centrsError = asCentrsError(error, {
 		code: "routeros/btest-protocol",
@@ -776,7 +837,12 @@ function buildServerErrorEnvelope(
 		error: serializeCentrsError(centrsError),
 		warnings: [],
 		tips: [],
-		meta: { target: {}, via: "btest", settings: {}, operation },
+		meta: {
+			target: {},
+			via: "btest",
+			settings: authSettings(auth),
+			operation,
+		},
 	};
 }
 

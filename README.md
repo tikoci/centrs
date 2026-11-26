@@ -192,7 +192,11 @@ CLI/MCP add, set and remove operations and `discover --save` reload and retry.
 Close WinBox before mutating the same file: external writers do not take the
 centrs lock.
 Encrypted-CDB reads and writes work with `--cdb-password` /
-`CENTRS_CDB_PASSWORD`; writes decrypt, mutate and re-encrypt with a fresh salt.
+`CENTRS_CDB_PASSWORD`, or a file holding the password with
+`--cdb-password-file` / `CENTRS_CDB_PASSWORD_FILE` (a container's
+`/run/secrets/<name>`); writes decrypt, mutate and re-encrypt with a fresh salt.
+A target password can come from a file the same way (`--password-file` /
+`CENTRS_PASSWORD_FILE`).
 `devices init --encrypt` creates an encrypted registry, and `devices encrypt`
 explicitly converts an existing open CDB. Conversion retains existing backups
 and warns that plaintext copies remain. The manual WinBox round-trip is still

@@ -52,6 +52,7 @@ Usage: centrs retrieve <target> <routeros-path> [flags] | centrs retrieve <targe
 | `--port` | `<port>` | Override the resolved management port. |
 | `--username / --user / -u` | `<name>` | RouterOS username (aliases `--user`, `-u`). Falls back to `CENTRS_USERNAME`. |
 | `--password` | `<secret>` | RouterOS password. Falls back to `CENTRS_PASSWORD`. |
+| `--password-file` | `<path>` | Read the RouterOS password from a file (one trailing newline ignored). Falls back to `CENTRS_PASSWORD_FILE`; outranks CDB records like `--password`. Conflicts with `--password`. |
 | `--timeout` | &lt;ms\|5s&gt; | Per-request timeout, separate from --wait's overall deadline. REST currently rejects values above 60s. |
 | `--attribute` | `<name>` | Project one attribute. May be repeated. |
 | `--attributes` | `<a,b>` | Project a comma-separated attribute list. |
@@ -71,6 +72,7 @@ Usage: centrs retrieve <target> <routeros-path> [flags] | centrs retrieve <targe
 | `--max-results` | `<bytes>` | Fail instead of printing output larger than the given byte budget. |
 | `--cdb-file` | `<path>` | Read target credentials from a WinBox CDB file. |
 | `--cdb-password` | `<password>` | Decrypt an encrypted WinBox CDB file. |
+| `--cdb-password-file` | `<path>` | Read the CDB password from a file (one trailing newline ignored), e.g. a container secret under /run/secrets. Read on each CDB load; falls back to `CENTRS_CDB_PASSWORD_FILE`. Conflicts with `--cdb-password`. |
 | `--match` | &lt;user=name\|target=addr\|record-type&gt; | Pick one of several CDB records saved for `<router>` (as `devices show --match`); single target only. |
 | `--resolve` | &lt;none\|arp&gt; | Resolve a MAC-address target to an IP via the host ARP cache (default none). |
 | `--validate / --no-validate` |  | Enable or disable inspect-backed preflight validation. |
@@ -101,10 +103,12 @@ Usage: centrs execute <target> <command> [flags] | centrs execute <target...> --
 | `--port` | `<port>` | Override the resolved management port. |
 | `--username / --user / -u` | `<name>` | RouterOS username (aliases `--user`, `-u`). Falls back to `CENTRS_USERNAME`. |
 | `--password` | `<secret>` | RouterOS password. Falls back to `CENTRS_PASSWORD`. |
+| `--password-file` | `<path>` | Read the RouterOS password from a file (one trailing newline ignored). Falls back to `CENTRS_PASSWORD_FILE`; outranks CDB records like `--password`. Conflicts with `--password`. |
 | `--ssh-key` | `<path>` | `--via ssh`: explicit private-key path. Falls back to `CENTRS_SSH_KEY` / the `ssh-agent`. |
 | `--insecure` |  | Disable SSH host-key verification (`--via ssh`: accepts changed/impersonated keys, not just new) or accept a self-signed `api-ssl` TLS cert. Default verifies. |
 | `--cdb-file` | `<path>` | Read target credentials from a WinBox CDB file. |
 | `--cdb-password` | `<password>` | Decrypt an encrypted WinBox CDB file. |
+| `--cdb-password-file` | `<path>` | Read the CDB password from a file (one trailing newline ignored), e.g. a container secret under /run/secrets. Read on each CDB load; falls back to `CENTRS_CDB_PASSWORD_FILE`. Conflicts with `--cdb-password`. |
 | `--match` | &lt;user=name\|target=addr\|record-type&gt; | Pick one of several CDB records saved for `<router>` (as `devices show --match`); single target only. |
 | `--resolve` | &lt;none\|arp&gt; | Resolve a MAC-address target to an IP via the host ARP cache (default none). |
 | `--timeout` | `<duration>` | Per-request timeout (for REST, max 60s). |
@@ -151,9 +155,11 @@ Usage: centrs api <router> <endpoint> [flags] | centrs api --host <host|url> <en
 | `--port` | `<port>` | Override the resolved management port. |
 | `--username / --user / -u` | `<name>` | RouterOS username. Falls back to `CENTRS_USERNAME`. |
 | `--password` | `<secret>` | RouterOS password. Falls back to `CENTRS_PASSWORD`. |
+| `--password-file` | `<path>` | Read the RouterOS password from a file (one trailing newline ignored). Falls back to `CENTRS_PASSWORD_FILE`; outranks CDB records like `--password`. Conflicts with `--password`. |
 | `--insecure` |  | Accept a self-signed `api-ssl`/REST TLS cert. Default verifies. |
 | `--cdb-file` | `<path>` | Read target credentials from a WinBox CDB file. |
 | `--cdb-password` | `<password>` | Decrypt an encrypted WinBox CDB file. |
+| `--cdb-password-file` | `<path>` | Read the CDB password from a file (one trailing newline ignored), e.g. a container secret under /run/secrets. Read on each CDB load; falls back to `CENTRS_CDB_PASSWORD_FILE`. Conflicts with `--cdb-password`. |
 | `--match` | &lt;user=name\|target=addr\|record-type&gt; | Pick one of several CDB records saved for `<router>` (as `devices show --match`); single target only. |
 | `--resolve` | &lt;none\|arp&gt; | Resolve a MAC-address target to an IP via the host ARP cache (default none). |
 | `--timeout` | `<duration>` | Per-request timeout (for REST, max 60s). |
@@ -194,12 +200,14 @@ Usage: centrs transfer <router>|--host <host> upload <local> [remote] | download
 | `--port` | `<port>` | Override the resolved management port. |
 | `--username / --user / -u` | `<name>` | RouterOS username (aliases --user, -u). Falls back to CENTRS_USERNAME. |
 | `--password` | `<secret>` | RouterOS password. Falls back to CENTRS_PASSWORD. |
+| `--password-file` | `<path>` | Read the RouterOS password from a file (one trailing newline ignored). Falls back to `CENTRS_PASSWORD_FILE`; outranks CDB records like `--password`. Conflicts with `--password`. |
 | `--timeout` | &lt;ms\|5s&gt; | Operation timeout. REST rejects values above 60s. |
 | `--format` | &lt;text\|json\|yaml&gt; | Output format. Defaults to text; --json / --yaml shortcuts. |
 | `--json` |  | Shortcut for --format json. |
 | `--yaml` |  | Shortcut for --format yaml. |
 | `--cdb-file` | `<path>` | Read target credentials from a WinBox CDB file. |
 | `--cdb-password` | `<password>` | Decrypt an encrypted WinBox CDB file. |
+| `--cdb-password-file` | `<path>` | Read the CDB password from a file (one trailing newline ignored), e.g. a container secret under /run/secrets. Read on each CDB load; falls back to `CENTRS_CDB_PASSWORD_FILE`. Conflicts with `--cdb-password`. |
 | `--match` | &lt;user=name\|target=addr\|record-type&gt; | Pick one of several CDB records saved for `<router>` (as `devices show --match`); single target only. |
 | `--validate / --no-validate` |  | Enable or disable the existence-probe preflight. |
 | `--verbose` |  | Show the resolved transport in text output, on stderr. |
@@ -219,12 +227,14 @@ Usage: centrs terminal <router> [flags] | centrs terminal --host <host> [flags] 
 | `--port` | `<port>` | Override the port: ssh default 22, mac-telnet default 20561. |
 | `--quickchr` | `<name>` | Open an ssh console to one running quickchr machine; host/port/user/key come from its descriptor. Once only; not with `<router>`, --host, --port, --username, --password, --ssh-key or --match. |
 | `--username / --user / -u` | `<name>` | RouterOS username (aliases --user, -u). Falls back to CENTRS_USERNAME. |
-| `--password` | `<secret>` | RouterOS password. Falls back to CENTRS_PASSWORD. |
+| `--password` | `<secret>` | mac-telnet: RouterOS password. Falls back to CENTRS_PASSWORD. Interactive ssh ignores it; OpenSSH prompts itself. |
+| `--password-file` | `<path>` | mac-telnet: read the RouterOS password from a file (one trailing newline ignored). Falls back to `CENTRS_PASSWORD_FILE`; outranks CDB records like `--password`. Conflicts with `--password`. Interactive ssh never reads it. |
 | `--source-mac` | `<mac>` | mac-telnet: explicit in-packet source MAC (overrides egress resolution). |
 | `--ssh-key` | `<path>` | `--via ssh`: explicit private-key path. Falls back to `CENTRS_SSH_KEY` / the `ssh-agent`. |
 | `--insecure` |  | `--via ssh`: disable host-key verification (accepts changed/impersonated keys). Default verifies. |
 | `--cdb-file` | `<path>` | Read target credentials from a WinBox CDB file. |
 | `--cdb-password` | `<password>` | Decrypt an encrypted WinBox CDB file. |
+| `--cdb-password-file` | `<path>` | Read the CDB password from a file (one trailing newline ignored), e.g. a container secret under /run/secrets. Read on each CDB load; falls back to `CENTRS_CDB_PASSWORD_FILE`. Conflicts with `--cdb-password`. |
 | `--match` | &lt;user=name\|target=addr\|record-type&gt; | Pick one of several CDB records saved for `<router>` (as `devices show --match`); single target only. |
 | `--resolve` | &lt;none\|arp&gt; | `--via ssh` only: turn a MAC target into an IP. CDB-first; `arp` opts into the host ARP cache (default none). The mac-telnet default ignores it. |
 | `--format` | &lt;text\|json\|yaml&gt; | Error-envelope format on failure. --json / --yaml shortcuts. |
@@ -247,9 +257,11 @@ Usage: centrs explain [<router>] '<input>' [flags]
 | `--port` | `<port>` | Override the resolved management port. |
 | `--username / --user / -u` | `<name>` | RouterOS username. Falls back to `CENTRS_USERNAME`. |
 | `--password` | `<secret>` | RouterOS password. Falls back to `CENTRS_PASSWORD`. |
+| `--password-file` | `<path>` | Read the RouterOS password from a file (one trailing newline ignored). Falls back to `CENTRS_PASSWORD_FILE`; outranks CDB records like `--password`. Conflicts with `--password`. |
 | `--insecure` |  | Accept a self-signed `api-ssl`/REST TLS cert. Default verifies. |
 | `--cdb-file` | `<path>` | Read target credentials from a WinBox CDB file. |
 | `--cdb-password` | `<password>` | Decrypt an encrypted WinBox CDB file. |
+| `--cdb-password-file` | `<path>` | Read the CDB password from a file (one trailing newline ignored), e.g. a container secret under /run/secrets. Read on each CDB load; falls back to `CENTRS_CDB_PASSWORD_FILE`. Conflicts with `--cdb-password`. |
 | `--resolve` | &lt;none\|arp&gt; | Resolve a MAC-address target to an IP via the host ARP cache (default none). |
 | `--timeout` | `<duration>` | Per-request timeout (for REST, max 60s). |
 | `-p` | `<secret>` | Alias for --password. |
@@ -281,6 +293,7 @@ Usage: centrs devices <init|encrypt|list|show|groups|add|edit|set|remove> [args]
 | `--no-backup` |  | `encrypt` only — skip the plaintext pre-conversion snapshot. Without that snapshot, a forgotten password cannot be recovered. |
 | `--cdb-file` | `<path>` | Override the resolved CDB path (default `~/.config/tikoci/winbox.cdb`). |
 | `--cdb-password` | `<secret>` | CDB password for encrypted reads, writes, explicit encrypted initialization and conversion. Falls back to `CENTRS_CDB_PASSWORD`; a password alone never converts an open CDB. |
+| `--cdb-password-file` | `<path>` | Read the CDB password from a file (one trailing newline ignored), e.g. a container secret under /run/secrets. Read on each CDB load; falls back to `CENTRS_CDB_PASSWORD_FILE`. Conflicts with `--cdb-password`. |
 | `--via` | `<protocol>` | Resolve and report the protocol source for provenance examples; no network IO is performed. |
 | `--group` | `<name>` | `list` filter / `add`,`set` first-class group field for the target entry. |
 | `--where` | `<attr=value>` | `list` only — repeatable device-class filter over CDB facts (AND-combined), e.g. `--where lat=37.7749`. |
@@ -322,6 +335,7 @@ Usage: centrs devices init [flags]
 | `--encrypt` |  | `init` only — require encrypted creation with a non-empty CDB password; refuse an existing open CDB. |
 | `--cdb-file` | `<path>` | Override the resolved CDB path (default `~/.config/tikoci/winbox.cdb`). |
 | `--cdb-password` | `<secret>` | CDB password for encrypted reads, writes, explicit encrypted initialization and conversion. Falls back to `CENTRS_CDB_PASSWORD`; a password alone never converts an open CDB. |
+| `--cdb-password-file` | `<path>` | Read the CDB password from a file (one trailing newline ignored), e.g. a container secret under /run/secrets. Read on each CDB load; falls back to `CENTRS_CDB_PASSWORD_FILE`. Conflicts with `--cdb-password`. |
 | `--format` | &lt;text\|json\|yaml&gt; | Output format for the CLI response. |
 | `--json` |  | Shortcut for `--format json`. |
 
@@ -338,6 +352,7 @@ Usage: centrs devices encrypt [flags]
 | `--no-backup` |  | `encrypt` only — skip the plaintext pre-conversion snapshot. Without that snapshot, a forgotten password cannot be recovered. |
 | `--cdb-file` | `<path>` | Override the resolved CDB path (default `~/.config/tikoci/winbox.cdb`). |
 | `--cdb-password` | `<secret>` | CDB password for encrypted reads, writes, explicit encrypted initialization and conversion. Falls back to `CENTRS_CDB_PASSWORD`; a password alone never converts an open CDB. |
+| `--cdb-password-file` | `<path>` | Read the CDB password from a file (one trailing newline ignored), e.g. a container secret under /run/secrets. Read on each CDB load; falls back to `CENTRS_CDB_PASSWORD_FILE`. Conflicts with `--cdb-password`. |
 | `--format` | &lt;text\|json\|yaml&gt; | Output format for the CLI response. |
 | `--json` |  | Shortcut for `--format json`. |
 
@@ -357,6 +372,7 @@ Usage: centrs discover [--timeout 15s] [--save] [flags]
 | `--port` | `<port>` | UDP port to bind for MNDP. Default 5678. |
 | `--cdb-file` | `<path>` | `--save` CDB path override (default `~/.config/tikoci/winbox.cdb`). |
 | `--cdb-password` | `<secret>` | `--save` password for an encrypted CDB. Used to decrypt the existing CDB and re-encrypt on write. |
+| `--cdb-password-file` | `<path>` | Read the CDB password from a file (one trailing newline ignored), e.g. a container secret under /run/secrets. Read on each CDB load; falls back to `CENTRS_CDB_PASSWORD_FILE`. Conflicts with `--cdb-password`. |
 | `--format` | &lt;text\|json\|yaml&gt; | Output format for the CLI response. |
 | `--json` |  | Shortcut for `--format json`. |
 
@@ -387,9 +403,11 @@ Usage: centrs btest <client <router>|server> [flags]
 | `--max-sessions` | `<n>` | (server) Concurrent test cap (1..1000). Default 100. |
 | `--user / --username / -u` | `<name>` | Credential (aliases --username, -u; falls back to CDB / CENTRS_USERNAME). |
 | `--password` | `<secret>` | Credential (falls back to CDB / CENTRS_PASSWORD). |
+| `--password-file` | `<path>` | Read the RouterOS password from a file (one trailing newline ignored). Falls back to `CENTRS_PASSWORD_FILE`; outranks CDB records like `--password`. Conflicts with `--password`. |
 | `--port` | `<port>` | Control port. Default 2000. |
 | `--cdb-file` | `<path>` | (client) Read target credentials from a WinBox CDB file. |
 | `--cdb-password` | `<password>` | (client) Decrypt an encrypted WinBox CDB file. |
+| `--cdb-password-file` | `<path>` | Read the CDB password from a file (one trailing newline ignored), e.g. a container secret under /run/secrets. Read on each CDB load; falls back to `CENTRS_CDB_PASSWORD_FILE`. Conflicts with `--cdb-password`. |
 | `--match` | &lt;user=name\|target=addr\|record-type&gt; | (client) Pick one of several CDB records saved for `<router>` (as `devices show --match`); `btest server` rejects it. |
 | `--format` | &lt;text\|csv\|json\|yaml&gt; | Output format. Default text. |
 | `--csv` |  | Shortcut for `--format csv`. |
@@ -406,6 +424,7 @@ Usage: centrs mcp [start] [--cdb-file <path>] [--allow-adhoc-targets]
 | ---- | ----- | ----------- |
 | `--cdb-file` | `<path>` | CDB allowlist path (default `~/.config/tikoci/winbox.cdb`, or CENTRS_CDB_FILE). |
 | `--cdb-password` | `<password>` | Decrypt password for an encrypted CDB (or CENTRS_CDB_PASSWORD). |
+| `--cdb-password-file` | `<path>` | Read the CDB password from a file (one trailing newline ignored), e.g. a container secret under /run/secrets. Read on each CDB load; falls back to `CENTRS_CDB_PASSWORD_FILE`. Conflicts with `--cdb-password`. |
 | `--allow-adhoc-targets` |  | Reserved unsafe escape hatch for future inline targets; current tools still use CDB-only targets. |
 | `--help` |  | Show this help. |
 
@@ -422,6 +441,7 @@ Usage: centrs settings [print|get|set|reset] [args] [flags]
 | `--all` |  | `print` only — also list unrecognized CENTRS_* lines found in the file. |
 | `--cdb-file` | `<path>` | `print` only — CDB to probe for the `__default__` record summary (falls back to normal CDB resolution; never centrs.env). |
 | `--cdb-password` | `<secret>` | `print` only — decrypt password for the probed CDB. |
+| `--cdb-password-file` | `<path>` | Read the CDB password from a file (one trailing newline ignored), e.g. a container secret under /run/secrets. Read on each CDB load; falls back to `CENTRS_CDB_PASSWORD_FILE`. Conflicts with `--cdb-password`. |
 | `--skip-env-file` |  | `print` only — note that other commands in this environment would not see centrs.env (settings itself always reads the real file). |
 | `--format` | &lt;text\|json\|yaml&gt; | Output format for the CLI response. |
 | `--json` |  | Shortcut for `--format json`. |

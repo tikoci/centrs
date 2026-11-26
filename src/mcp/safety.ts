@@ -53,6 +53,7 @@ export async function loadAllowlistCdb(
 	return loadCdb({
 		cdbFile: config.cdbFile,
 		cdbPassword: config.cdbPassword,
+		cdbPasswordFile: config.cdbPasswordFile,
 		env: config.env,
 	});
 }

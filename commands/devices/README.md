@@ -543,8 +543,11 @@ can edit it too. Precedence is per-field: args → env → device record →
 
 Start encrypted with `devices init --encrypt`, or start open for a lab and run
 `devices encrypt` when moving to production. Both require a non-empty
-`--cdb-password` / `CENTRS_CDB_PASSWORD`. A password alone does not change the
-mode of initialization or ordinary writes. The library exports
+`--cdb-password` / `CENTRS_CDB_PASSWORD`, or a file holding it
+(`--cdb-password-file` / `CENTRS_CDB_PASSWORD_FILE`, #672). A password alone,
+or a file alone, does not change the mode of initialization or ordinary writes:
+with an open CDB the file is not read, and a missing one is only the
+`cdb/password-not-needed` warning. The library exports
 `initCdb({ encrypt: true, cdbPassword, cdbFile })` and
 `encryptCdb({ cdbPassword, cdbFile })`; both use the shared settings precedence.
 
@@ -575,8 +578,8 @@ warning still applies to them. Without the snapshot, a forgotten password cannot
 be recovered.
 
 `init` and `encrypt` act on the CDB file, not on records: they accept only
-`--cdb-file`, `--cdb-password`, `--format`/`--json`, plus `--encrypt` (`init`)
-or `--no-backup` (`encrypt`). Any other flag is `input/invalid-command`
+`--cdb-file`, `--cdb-password`, `--cdb-password-file`, `--format`/`--json`,
+plus `--encrypt` (`init`) or `--no-backup` (`encrypt`). Any other flag is `input/invalid-command`
 instead of being silently ignored. `devices init --help` and
 `devices encrypt --help` show only those accepted flags; the same metadata
 generates their sections in [`docs/CLI.md`](../../docs/CLI.md).

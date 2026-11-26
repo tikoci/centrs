@@ -58,6 +58,12 @@ export const settingsCommand: CliCommandMetadata = {
 			description: "`print` only — decrypt password for the probed CDB.",
 		},
 		{
+			flag: "--cdb-password-file",
+			valueName: "<path>",
+			description:
+				"Read the CDB password from a file (one trailing newline ignored), e.g. a container secret under /run/secrets. Read on each CDB load; falls back to `CENTRS_CDB_PASSWORD_FILE`. Conflicts with `--cdb-password`.",
+		},
+		{
 			flag: "--skip-env-file",
 			description:
 				"`print` only — note that other commands in this environment would not see centrs.env (settings itself always reads the real file).",
@@ -82,6 +88,7 @@ interface SettingsCliArgs {
 	all?: boolean;
 	cdbFile?: string;
 	cdbPassword?: string;
+	cdbPasswordFile?: string;
 	skipEnvFile?: boolean;
 	format?: SettingsOutputFormat;
 }
@@ -96,6 +103,7 @@ export function parseSettingsCliArgs(args: readonly string[]): SettingsCliArgs {
 	let all = false;
 	let cdbFile: string | undefined;
 	let cdbPassword: string | undefined;
+	let cdbPasswordFile: string | undefined;
 	let skipEnvFile = false;
 	let format: SettingsOutputFormat | undefined;
 
@@ -117,6 +125,14 @@ export function parseSettingsCliArgs(args: readonly string[]): SettingsCliArgs {
 				break;
 			case "--cdb-password":
 				cdbPassword = expectValue(args, ++index, arg, settingsCommand.options);
+				break;
+			case "--cdb-password-file":
+				cdbPasswordFile = expectValue(
+					args,
+					++index,
+					arg,
+					settingsCommand.options,
+				);
 				break;
 			case "--skip-env-file":
 				skipEnvFile = true;
@@ -152,6 +168,7 @@ export function parseSettingsCliArgs(args: readonly string[]): SettingsCliArgs {
 		all,
 		cdbFile,
 		cdbPassword,
+		cdbPasswordFile,
 		skipEnvFile,
 		format,
 	};
@@ -230,6 +247,7 @@ export async function runSettingsCli(args: readonly string[]): Promise<number> {
 					skipEnvFile: parsed.skipEnvFile,
 					cdbFile: parsed.cdbFile,
 					cdbPassword: parsed.cdbPassword,
+					cdbPasswordFile: parsed.cdbPasswordFile,
 				});
 				break;
 			case "get":

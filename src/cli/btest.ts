@@ -134,6 +134,12 @@ export const btestCommand: CliCommandMetadata = {
 			description: "Credential (falls back to CDB / CENTRS_PASSWORD).",
 		},
 		{
+			flag: "--password-file",
+			valueName: "<path>",
+			description:
+				"Read the RouterOS password from a file (one trailing newline ignored). Falls back to `CENTRS_PASSWORD_FILE`; outranks CDB records like `--password`. Conflicts with `--password`.",
+		},
+		{
 			flag: "--port",
 			valueName: "<port>",
 			description: "Control port. Default 2000.",
@@ -147,6 +153,12 @@ export const btestCommand: CliCommandMetadata = {
 			flag: "--cdb-password",
 			valueName: "<password>",
 			description: "(client) Decrypt an encrypted WinBox CDB file.",
+		},
+		{
+			flag: "--cdb-password-file",
+			valueName: "<path>",
+			description:
+				"Read the CDB password from a file (one trailing newline ignored), e.g. a container secret under /run/secrets. Read on each CDB load; falls back to `CENTRS_CDB_PASSWORD_FILE`. Conflicts with `--cdb-password`.",
 		},
 		{
 			flag: "--match",
@@ -316,6 +328,14 @@ export function parseClientArgs(args: readonly string[]): ClientCliArgs {
 			case "--password":
 				request.password = expectValue(args, ++i, arg, btestCommand.options);
 				break;
+			case "--password-file":
+				request.passwordFile = expectValue(
+					args,
+					++i,
+					arg,
+					btestCommand.options,
+				);
+				break;
 			case "--port":
 				request.controlPort = parseIntFlag(
 					expectValue(args, ++i, arg, btestCommand.options),
@@ -327,6 +347,14 @@ export function parseClientArgs(args: readonly string[]): ClientCliArgs {
 				break;
 			case "--cdb-password":
 				request.cdbPassword = expectValue(args, ++i, arg, btestCommand.options);
+				break;
+			case "--cdb-password-file":
+				request.cdbPasswordFile = expectValue(
+					args,
+					++i,
+					arg,
+					btestCommand.options,
+				);
 				break;
 			case "--match":
 				request.match = expectValue(args, ++i, arg, btestCommand.options);
@@ -405,6 +433,14 @@ export function parseServerArgs(args: readonly string[]): ServerCliArgs {
 				break;
 			case "--password":
 				request.password = expectValue(args, ++i, arg, btestCommand.options);
+				break;
+			case "--password-file":
+				request.passwordFile = expectValue(
+					args,
+					++i,
+					arg,
+					btestCommand.options,
+				);
 				break;
 			case "--port":
 				request.port = parseIntFlag(

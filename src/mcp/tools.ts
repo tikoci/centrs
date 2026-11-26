@@ -204,6 +204,7 @@ export async function handleValidate(
 			timeout: args.timeout,
 			cdbFile: config.cdbFile,
 			cdbPassword: config.cdbPassword,
+			cdbPasswordFile: config.cdbPasswordFile,
 			validate: true,
 			stdinIsTty: false,
 		},
@@ -295,11 +296,13 @@ export async function handleRetrieve(
 		timeout: args.timeout,
 		cdbFile: config.cdbFile,
 		cdbPassword: config.cdbPassword,
+		cdbPasswordFile: config.cdbPasswordFile,
 	};
 
-	if (args.group === undefined) return await retrieveEnvelope(request);
+	if (args.group === undefined)
+		return await retrieveEnvelope(request, config.env);
 	try {
-		return await retrieveGroup(request);
+		return await retrieveGroup(request, config.env);
 	} catch (error) {
 		return buildRetrieveFanoutErrorEnvelope(request, error);
 	}
@@ -358,6 +361,7 @@ export async function handleExecute(
 			timeout: args.timeout,
 			cdbFile: config.cdbFile,
 			cdbPassword: config.cdbPassword,
+			cdbPasswordFile: config.cdbPasswordFile,
 			validate: true,
 			yes: args.confirm === true,
 			stdinIsTty: false,
@@ -762,6 +766,7 @@ export async function handleDiscover(
 			group: args.group,
 			cdbFile: config.cdbFile,
 			cdbPassword: config.cdbPassword,
+			cdbPasswordFile: config.cdbPasswordFile,
 			env: config.env,
 			sendRefresh: args.sendRefresh,
 		});

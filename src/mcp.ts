@@ -29,5 +29,7 @@ export async function runMcp(
 }
 
 if (import.meta.main) {
-	process.exitCode = await runMcp();
+	// #666, as in `src/cli.ts`: never run with the working directory's `.env`.
+	const { runWithoutDotenv } = await import("./resolver/dotenv-guard.ts");
+	process.exitCode = await runWithoutDotenv(() => runMcp());
 }

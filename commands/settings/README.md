@@ -58,6 +58,7 @@ matters for what `get`/`set`/`print`/`reset` accept:
    | --- | --- | --- |
    | `CENTRS_PASSWORD`, `CENTRS_USERNAME` | Default credentials belong to the `__default__` CDB record, which routes through the `devices` write layer and is redacted from structured output (constitution: identity and CDB). A parallel copy in a plaintext file is a second source of truth for the same secret, one that is never redacted. | `centrs devices add __default__ --user … --password …` |
    | `CENTRS_CDB_PASSWORD` | This is the CDB's own decryption password. Storing it beside an *encrypted* CDB in a plaintext sibling file defeats the encryption. Security-sensitive surface per `SECURITY.md`. | Pass `--cdb-password` per invocation, export the env var in the calling shell, or use `Bun.secret()` once available — never persist to `centrs.env`. |
+   | `CENTRS_PASSWORD_FILE`, `CENTRS_CDB_PASSWORD_FILE` | A path, not a secret, but only a flag or the process environment may name one (#672). A `centrs.env` line, or a cloned workspace's file, could otherwise point it at `~/.ssh/id_ed25519` and send that file as a password. The `centrs.env` loader drops these keys too. | `--password-file` / `--cdb-password-file` per invocation, or the launching environment (a container's env, an MCP server's launch config). |
    | `CENTRS_SKIP_ENV_FILE` | Self-referential: it means "don't load `centrs.env`." Writing it *into* `centrs.env` is a no-op by construction (a file that says "ignore me" is never read to find out). | Export it in the shell or pass `--skip-env-file` per call. |
    | `CENTRS_RUN_FAST_INTEGRATION` | A CI/test signal, not a user preference. | N/A — set by `bun run test:integration`, never by a human. |
 
@@ -224,6 +225,32 @@ in kebab-case or SCREAMING_SNAKE (`format`, `FORMAT`, `centrs_format`,
 canonical `CENTRS_FORMAT=` line. It is **user-global only** — the single XDG
 path above; there is no project-local config file discovered from the working
 directory.
+
+**A working-directory `.env` is not read** (#666). Bun loads `.env`,
+`.env.local` and `.env.<mode>` from the working directory into `process.env`
+for any script it runs, and reads some of its own settings from them at
+startup (`BUN_CONFIG_VERBOSE_FETCH` would print a REST Basic credential).
+So when Bun loaded one, the CLI and `centrs mcp` entries re-launch once
+under `bun --no-env-file` with the environment centrs was started with, and
+print `warning [settings/dotenv-ignored]` on stderr naming the `CENTRS_*`
+keys ignored (never their values). A cloned repo therefore cannot turn on
+`CENTRS_INSECURE`, point `CENTRS_CDB_FILE`, a `*_FILE` key or
+`XDG_CONFIG_HOME` somewhere, or switch on Bun's fetch logging. On Linux the
+child gets exactly the exec-time environment (`/proc/self/environ`), and the
+re-launch happens only when Bun changed it. Elsewhere, every key a Bun `.env`
+file names is dropped except the Windows system variables (`PATHEXT`,
+`SYSTEMROOT`, `WINDIR`, `COMSPEC`), which Windows always sets. A shell
+export of a dropped key is lost too, which fails safe. That includes `HOME`:
+it picks `centrs.env`, and a Windows shell often has none, so a dropped
+`HOME` falls back to the account's home directory (`os.homedir()`). A named
+`PATH` is reset to the system default (the OS's own `bin` and `sbin`
+directories, or the `SYSTEMROOT` directories with OpenSSH on Windows): a service may start
+Bun with no `PATH`, and the file must not pick which `ssh` runs. Bun also
+allows a line break between a key and its `=`, so names are matched across
+lines.
+The shebang stays `env bun` (no `env -S bun --no-env-file`): BusyBox `env`
+(Alpine, `oven/bun:alpine`) has no `-S`. A library caller passes its own
+`env`.
 
 **The `config` precedence layer** — `src/resolver/config-file.ts` resolves
 `${XDG_CONFIG_HOME:-~/.config}/tikoci/centrs.env` (injectable `env` map,

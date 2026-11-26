@@ -5,6 +5,10 @@
  */
 
 import {
+	decodePasswordBytes,
+	passwordBytesReason,
+} from "../core/password-bytes.ts";
+import {
 	asCentrsError,
 	CentrsError,
 	formatCentrsErrorText,
@@ -18,6 +22,7 @@ import {
 	type DevicesCommand,
 	type DevicesEnvelope,
 	type DevicesOutputFormat,
+	type DevicesSettings,
 	type DevicesWhereClause,
 	describeCentrs,
 	devicesOutputFormats,
@@ -40,6 +45,7 @@ import {
 	showDevice,
 	winBoxCdbRecordType,
 } from "../index.ts";
+import { CDB_PASSWORD_SECRET } from "../resolver/secret-source.ts";
 import {
 	type CliCommandMetadata,
 	expandEqualsArgs,
@@ -57,10 +63,18 @@ import {
  */
 const CDB_FILE_FLAGS: Readonly<Record<"init" | "encrypt", readonly string[]>> =
 	{
-		init: ["--cdb-file", "--cdb-password", "--format", "--json", "--encrypt"],
+		init: [
+			"--cdb-file",
+			"--cdb-password",
+			"--cdb-password-file",
+			"--format",
+			"--json",
+			"--encrypt",
+		],
 		encrypt: [
 			"--cdb-file",
 			"--cdb-password",
+			"--cdb-password-file",
 			"--format",
 			"--json",
 			"--no-backup",
@@ -95,6 +109,12 @@ const devicesMetadata: CliCommandMetadata = {
 			valueName: "<secret>",
 			description:
 				"CDB password for encrypted reads, writes, explicit encrypted initialization and conversion. Falls back to `CENTRS_CDB_PASSWORD`; a password alone never converts an open CDB.",
+		},
+		{
+			flag: "--cdb-password-file",
+			valueName: "<path>",
+			description:
+				"Read the CDB password from a file (one trailing newline ignored), e.g. a container secret under /run/secrets. Read on each CDB load; falls back to `CENTRS_CDB_PASSWORD_FILE`. Conflicts with `--cdb-password`.",
 		},
 		{
 			flag: "--via",
@@ -284,6 +304,7 @@ interface DevicesCliArgs {
 	subcommand?: DevicesSubcommand;
 	cdbFile?: string;
 	cdbPassword?: string;
+	cdbPasswordFile?: string;
 	encrypt?: boolean;
 	noBackup?: boolean;
 	group?: string;
@@ -368,6 +389,14 @@ export function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 				break;
 			case "--cdb-password":
 				parsed.cdbPassword = expectValue(
+					args,
+					++index,
+					arg,
+					devicesCommand.options,
+				);
+				break;
+			case "--cdb-password-file":
+				parsed.cdbPasswordFile = expectValue(
 					args,
 					++index,
 					arg,
@@ -819,13 +848,6 @@ export interface PasswordStdinSource {
 	read?: () => Promise<Uint8Array>;
 }
 
-// `fatal` rejects malformed UTF-8 instead of substituting U+FFFD; `ignoreBOM`
-// keeps a leading U+FEFF visible so it can be refused rather than dropped.
-const stdinPasswordDecoder = new TextDecoder("utf-8", {
-	fatal: true,
-	ignoreBOM: true,
-});
-
 /**
  * Read a record password for `devices add`/`set --password-stdin` (#582).
  *
@@ -853,14 +875,9 @@ export async function readPasswordStdin(
 		});
 	}
 	const raw = await (source.read ?? (() => Bun.stdin.bytes()))();
-	const end = raw.length;
-	const trimmed =
-		end >= 2 && raw[end - 2] === 0x0d && raw[end - 1] === 0x0a
-			? raw.subarray(0, end - 2)
-			: end >= 1 && raw[end - 1] === 0x0a
-				? raw.subarray(0, end - 1)
-				: raw;
-	if (trimmed.length === 0) {
+	const decoded = decodePasswordBytes(raw);
+	if (decoded.ok) return decoded.value;
+	if (decoded.reason === "empty") {
 		throw new CentrsError({
 			code: "input/empty-stdin",
 			summary: "`--password-stdin` received an empty password on stdin.",
@@ -869,24 +886,13 @@ export async function readPasswordStdin(
 			context: { flag: "--password-stdin" },
 		});
 	}
-	const invalid = (reason: string) =>
-		new CentrsError({
-			code: "input/invalid-stdin",
-			summary: `\`--password-stdin\` received ${reason}.`,
-			remediation:
-				"Pipe the password as UTF-8 text with no byte-order mark (e.g. `printf '%s' \"$PW\" | centrs devices set <target> --password-stdin`). Re-save a file written by an editor as UTF-8 without BOM.",
-			context: { flag: "--password-stdin", byteLength: trimmed.length },
-		});
-	let value: string;
-	try {
-		value = stdinPasswordDecoder.decode(trimmed);
-	} catch {
-		throw invalid("bytes that are not valid UTF-8");
-	}
-	if (value.startsWith("\uFEFF")) {
-		throw invalid("a leading byte-order mark (U+FEFF)");
-	}
-	return value;
+	throw new CentrsError({
+		code: "input/invalid-stdin",
+		summary: `\`--password-stdin\` received ${passwordBytesReason(decoded.reason)}.`,
+		remediation:
+			"Pipe the password as UTF-8 text with no byte-order mark (e.g. `printf '%s' \"$PW\" | centrs devices set <target> --password-stdin`). Re-save a file written by an editor as UTF-8 without BOM.",
+		context: { flag: "--password-stdin", byteLength: decoded.byteLength },
+	});
 }
 
 /** Run a devices subcommand, replaying eligible mutations after CDB conflicts. */
@@ -915,6 +921,7 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 			const options = {
 				cdbFile: parsed.cdbFile,
 				cdbPassword: parsed.cdbPassword,
+				cdbPasswordFile: parsed.cdbPasswordFile,
 				env: envSnapshot,
 			};
 			const envelope =
@@ -927,6 +934,7 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 		const loadOptions = {
 			cdbFile: parsed.cdbFile,
 			cdbPassword: parsed.cdbPassword,
+			cdbPasswordFile: parsed.cdbPasswordFile,
 			env: envSnapshot,
 		};
 		const reload = () => loadCdb(loadOptions);
@@ -1049,11 +1057,12 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 	} catch (error) {
 		const format = parsed?.format ?? inferDevicesFormat(args);
 		const subcommand: DevicesCommand = parsed?.subcommand ?? "list";
-		const settings = resolveDevicesSettings({
-			cdbFile: parsed?.cdbFile,
-			cdbPassword: parsed?.cdbPassword,
-			env: envSnapshot ?? Bun.env,
-		});
+		const settings = errorEnvelopeSettings(
+			parsed?.cdbFile,
+			parsed?.cdbPassword,
+			parsed?.cdbPasswordFile,
+			envSnapshot ?? Bun.env,
+		);
 		const centrsError = asCentrsError(error, {
 			code: "input/invalid-command",
 			summary: error instanceof Error ? error.message : String(error),
@@ -1072,6 +1081,34 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 			console.error(formatCentrsErrorText(centrsError));
 		}
 		return 1;
+	}
+}
+
+/**
+ * The settings an error envelope reports. Choosing the key source can throw
+ * (value and file together), and the error being reported may be exactly
+ * that, so a second failure falls back to the settings without a key source.
+ */
+function errorEnvelopeSettings(
+	cdbFile: string | undefined,
+	cdbPassword: string | undefined,
+	cdbPasswordFile: string | undefined,
+	env: Record<string, string | undefined>,
+): DevicesSettings {
+	try {
+		return resolveDevicesSettings({
+			cdbFile,
+			cdbPassword,
+			cdbPasswordFile,
+			env,
+		});
+	} catch {
+		const {
+			[CDB_PASSWORD_SECRET.envKey]: _value,
+			[CDB_PASSWORD_SECRET.fileEnvKey]: _file,
+			...rest
+		} = env;
+		return resolveDevicesSettings({ cdbFile, env: rest });
 	}
 }
 

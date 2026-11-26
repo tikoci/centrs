@@ -321,7 +321,10 @@ that keeps growing is being used as an issue.
   `centrs.env` or a workspace file, so workspace trust does not bound it.
   Value, file and a later command are one choice per secret (setting two is a
   usage error), resolved in one place and read on each CDB load. Removing a
-  file after import is the host's job, not centrs's.
+  file after import is the host's job, not centrs's. Key rotation is open: a
+  rekey that takes the old and new CDB keys from separate sources (each a
+  value or a file) would let app-t3code follow an `/app` secret change
+  without re-seeding the CDB (#674 review).
 - **Absorbed:** #420, #542, #603.
 
 ### Batch reads and sessions

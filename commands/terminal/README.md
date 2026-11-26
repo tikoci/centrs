@@ -128,7 +128,10 @@ omits `BatchMode=yes` (`interactive: true` in `sshCommonOptions`), so the host
 `ssh` can prompt on the inherited TTY for an encrypted key's passphrase or a
 password. centrs does not forward `--password` to ssh — OpenSSH accepts no
 password on the argv — so password auth is satisfied by that interactive prompt,
-not by the centrs-resolved credential.
+not by the centrs-resolved credential. For the same reason the ssh terminal
+reads no password source: `--password-file` and `CENTRS_PASSWORD_FILE` are
+mac-telnet only, so an image-wide file that is missing cannot stop a key or
+agent login.
 
 Resolved by the sftp transfer client (`src/protocols/sftp.ts`), so they are no
 longer open for the file path: **host-key verification** rides the unified

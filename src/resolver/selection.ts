@@ -38,6 +38,7 @@ import { CentrsError } from "../errors.ts";
 import {
 	type CdbResolution,
 	DEFAULT_RECORD_TARGET,
+	isExplicitCdb,
 	type ResolverWarning,
 	resolutionFromEntry,
 } from "./cdb.ts";
@@ -88,6 +89,7 @@ export interface TargetSelection {
 export interface SelectionResolveInput {
 	cdbFile?: string;
 	cdbPassword?: string;
+	cdbPasswordFile?: string;
 	/** CLI: true (literal positionals allowed). MCP: false (CDB is the allowlist). */
 	allowAdhoc: boolean;
 }
@@ -147,9 +149,6 @@ export function isDefaultRecordTarget(target: string): boolean {
 	return target === DEFAULT_RECORD_TARGET;
 }
 
-const ENV_CDB_FILE = "CENTRS_CDB_FILE";
-const ENV_CDB_PASSWORD = "CENTRS_CDB_PASSWORD";
-
 /**
  * Expand a {@link TargetSelection} into N resolved members. The CDB is loaded
  * once; selectors and positionals union into a record-index set (plus literals),
@@ -176,15 +175,16 @@ export async function expandSelection(
 	const settings = resolveDevicesSettings({
 		cdbFile: input.cdbFile,
 		cdbPassword: input.cdbPassword,
+		cdbPasswordFile: input.cdbPasswordFile,
 		env,
 		config,
 	});
-	const explicitCdb =
-		input.cdbFile !== undefined ||
-		input.cdbPassword !== undefined ||
-		env[ENV_CDB_FILE] !== undefined ||
-		env[ENV_CDB_PASSWORD] !== undefined ||
-		config[ENV_CDB_FILE] !== undefined;
+	const explicitCdb = await isExplicitCdb(
+		input,
+		env,
+		config,
+		settings.cdbFile.value,
+	);
 	const emptyCdb = (): LoadedCdb => ({
 		entries: [],
 		warnings: [],
@@ -202,6 +202,7 @@ export async function expandSelection(
 			cdb = await loadCdb({
 				cdbFile: input.cdbFile,
 				cdbPassword: input.cdbPassword,
+				cdbPasswordFile: input.cdbPasswordFile,
 				env,
 				config,
 			});

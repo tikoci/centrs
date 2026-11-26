@@ -67,12 +67,27 @@ import {
 	parseLatLon,
 } from "./resolver/geo.ts";
 import { normalizeMac } from "./resolver/mac.ts";
+import {
+	CDB_PASSWORD_SECRET,
+	chooseSecret,
+	readSecretFile,
+	secretFileExists,
+} from "./resolver/secret-source.ts";
 
 export type { SettingSource, SettingSourceKind };
 
 export interface DevicesSettings {
 	cdbFile: { value: string; source: SettingSource };
-	cdbPassword: { value: string; source: SettingSource; provided: boolean };
+	cdbPassword: {
+		value: string;
+		source: SettingSource;
+		provided: boolean;
+		/**
+		 * The file the password comes from (#672). `value` stays `""` until a
+		 * load that needs the key reads it (`readCdbPasswordFile`).
+		 */
+		file?: string;
+	};
 }
 
 export interface DevicesWarning {
@@ -170,6 +185,11 @@ function devicesMeta(
 export interface LoadCdbOptions {
 	cdbFile?: string;
 	cdbPassword?: string;
+	/**
+	 * `--cdb-password-file`: a file holding the CDB password, read on each load
+	 * that needs it. Conflicts with `cdbPassword` (#672).
+	 */
+	cdbPasswordFile?: string;
 	env?: Record<string, string | undefined>;
 	/**
 	 * The `centrs.env` config tier (`src/resolver/config-file.ts`). Only
@@ -197,7 +217,6 @@ export interface LoadedCdb {
 const DEFAULT_CDB_RELATIVE = ".config/tikoci/winbox.cdb";
 const ENV_HOME = "HOME";
 const ENV_CDB_FILE = "CENTRS_CDB_FILE";
-const ENV_CDB_PASSWORD = "CENTRS_CDB_PASSWORD";
 
 export function defaultCdbPath(
 	env?: Record<string, string | undefined>,
@@ -227,26 +246,58 @@ export function resolveDevicesSettings(
 		cdbFileSource = { kind: "cli", key: "--cdb-file" };
 	}
 
-	let cdbPassword = "";
-	let provided = false;
-	let cdbPasswordSource: SettingSource = { kind: "default", key: "default" };
-	const envCdbPassword = env[ENV_CDB_PASSWORD];
-	if (envCdbPassword !== undefined) {
-		cdbPassword = envCdbPassword;
-		provided = true;
-		cdbPasswordSource = { kind: "env", key: ENV_CDB_PASSWORD };
-	}
-	if (options.cdbPassword !== undefined) {
-		cdbPassword = options.cdbPassword;
-		provided = true;
-		cdbPasswordSource = { kind: "cli", key: "--cdb-password" };
-	}
+	const choice = chooseSecret(
+		CDB_PASSWORD_SECRET,
+		{ value: options.cdbPassword, file: options.cdbPasswordFile },
+		env,
+	);
+	const cdbPassword: DevicesSettings["cdbPassword"] =
+		choice === undefined
+			? {
+					value: "",
+					source: { kind: "default", key: "default" },
+					provided: false,
+				}
+			: choice.kind === "value"
+				? { value: choice.value, source: choice.source, provided: true }
+				: {
+						value: "",
+						source: choice.source,
+						provided: true,
+						file: choice.path,
+					};
 
 	return {
 		cdbFile: { value: cdbFile, source: cdbFileSource },
-		cdbPassword: { value: cdbPassword, source: cdbPasswordSource, provided },
+		cdbPassword,
 	};
 }
+
+/**
+ * Fill `cdbPassword.value` from its file when the source is a file (#672).
+ * Called only where the key is needed, so a rotated or deleted file takes
+ * effect at the next load. Throws `cdb/password-unavailable`.
+ */
+export function readCdbPasswordFile(
+	settings: DevicesSettings,
+): DevicesSettings {
+	const { file } = settings.cdbPassword;
+	if (file === undefined) return settings;
+	const value = readSecretFile(CDB_PASSWORD_SECRET, {
+		kind: "file",
+		path: file,
+		source: settings.cdbPassword.source,
+	});
+	return { ...settings, cdbPassword: { ...settings.cdbPassword, value } };
+}
+
+/** Where the CDB password came from, for messages: a flag, env key or file. */
+function cdbPasswordWhere(settings: DevicesSettings): string {
+	return settings.cdbPassword.source.key ?? "--cdb-password";
+}
+
+const CDB_PASSWORD_SOURCES =
+	"--cdb-password, --cdb-password-file, CENTRS_CDB_PASSWORD or CENTRS_CDB_PASSWORD_FILE";
 
 function isAlreadyExistsError(cause: unknown): boolean {
 	return (
@@ -323,9 +374,11 @@ export interface InitCdbOptions extends LoadCdbOptions {
 export async function initCdb(
 	options: InitCdbOptions,
 ): Promise<CentrsSuccessEnvelope<DevicesInitData, DevicesOperationMeta>> {
-	const settings = resolveDevicesSettings(options);
+	const resolved = resolveDevicesSettings(options);
+	const settings = options.encrypt
+		? requireEncryptionPassword(resolved)
+		: resolved;
 	const cdbFile = settings.cdbFile.value;
-	if (options.encrypt) requireEncryptionPassword(settings);
 	const existingResult = async () => {
 		const existing = await loadCdb(options);
 		if (options.encrypt && !existing.encrypted) {
@@ -388,24 +441,33 @@ export async function initCdb(
 			encrypted: options.encrypt === true,
 			recordCount: 0,
 		},
-		warnings: [],
+		// A key given to a plain `init` is unused, as on an open-CDB load.
+		warnings:
+			!options.encrypt && settings.cdbPassword.provided
+				? [cdbPasswordNotNeeded(settings)]
+				: [],
 		tips: [],
 		meta: devicesMeta("init", settings),
 	};
 }
 
-function requireEncryptionPassword(settings: DevicesSettings): void {
-	if (
-		!settings.cdbPassword.provided ||
-		settings.cdbPassword.value.length === 0
-	) {
+function requireEncryptionPassword(unread: DevicesSettings): DevicesSettings {
+	if (!unread.cdbPassword.provided) {
 		throw new CentrsError({
 			code: "cdb/password-required",
 			summary: "CDB encryption requires a non-empty password.",
-			remediation:
-				"Pass --cdb-password or set CENTRS_CDB_PASSWORD to a non-empty CDB password.",
+			remediation: `Give a non-empty CDB password with one of ${CDB_PASSWORD_SOURCES}.`,
 		});
 	}
+	const settings = readCdbPasswordFile(unread);
+	if (settings.cdbPassword.value.length === 0) {
+		throw new CentrsError({
+			code: "cdb/password-required",
+			summary: "CDB encryption requires a non-empty password.",
+			remediation: `Give a non-empty CDB password with one of ${CDB_PASSWORD_SOURCES}.`,
+		});
+	}
+	return settings;
 }
 
 export interface EncryptCdbOptions extends LoadCdbOptions {
@@ -440,8 +502,7 @@ export interface DevicesEncryptData {
 export async function encryptCdb(
 	options: EncryptCdbOptions,
 ): Promise<CentrsSuccessEnvelope<DevicesEncryptData, DevicesOperationMeta>> {
-	const settings = resolveDevicesSettings(options);
-	requireEncryptionPassword(settings);
+	const settings = requireEncryptionPassword(resolveDevicesSettings(options));
 	const cdbFile = settings.cdbFile.value;
 	// Pin even the default path so conversion never implicitly creates a file.
 	const cdb = await loadCdb({ ...options, cdbFile });
@@ -497,8 +558,32 @@ export async function encryptCdb(
 	};
 }
 
+/**
+ * The open-CDB warning for a configured but unneeded password. A file source
+ * is not read; the message says whether it exists, so a missing secret mount
+ * is visible without failing work that needs no key (#672).
+ */
+function cdbPasswordNotNeeded(settings: DevicesSettings): DevicesWarning {
+	const { file } = settings.cdbPassword;
+	const where = cdbPasswordWhere(settings);
+	if (file === undefined) {
+		return {
+			code: "cdb/password-not-needed",
+			message: `A CDB password was given (${where}) but the CDB is not encrypted; the password was ignored.`,
+		};
+	}
+	const exists = secretFileExists(file);
+	return {
+		code: "cdb/password-not-needed",
+		message: exists
+			? `${where} names ${file}, but the CDB is not encrypted; the file was not read.`
+			: `${where} names ${file}, which does not exist; the CDB is not encrypted, so no key was needed.`,
+		context: { source: where, path: file, exists },
+	};
+}
+
 export async function loadCdb(options: LoadCdbOptions): Promise<LoadedCdb> {
-	const settings = resolveDevicesSettings(options);
+	let settings = resolveDevicesSettings(options);
 	const warnings: DevicesWarning[] = [];
 
 	const file = Bun.file(settings.cdbFile.value);
@@ -564,23 +649,19 @@ export async function loadCdb(options: LoadCdbOptions): Promise<LoadedCdb> {
 	let openBytes: Uint8Array;
 	if (parsed.mode === "open") {
 		if (settings.cdbPassword.provided) {
-			warnings.push({
-				code: "cdb/password-not-needed",
-				message:
-					"--cdb-password was provided but the CDB is not encrypted; the password was ignored.",
-			});
+			warnings.push(cdbPasswordNotNeeded(settings));
 		}
 		openBytes = bytes;
 	} else {
 		if (!settings.cdbPassword.provided) {
 			throw new CentrsError({
 				code: "cdb/password-required",
-				summary: "CDB is encrypted; --cdb-password is required.",
-				remediation:
-					"Pass --cdb-password or set CENTRS_CDB_PASSWORD to the CDB password.",
+				summary: "CDB is encrypted; a CDB password is required.",
+				remediation: `Give the CDB password with one of ${CDB_PASSWORD_SOURCES}.`,
 				context: { cdbFile: settings.cdbFile.value },
 			});
 		}
+		settings = readCdbPasswordFile(settings);
 		try {
 			openBytes = decryptCdb(parsed, settings.cdbPassword.value);
 		} catch (cause) {
@@ -589,8 +670,7 @@ export async function loadCdb(options: LoadCdbOptions): Promise<LoadedCdb> {
 					code: "cdb/decrypt-failed",
 					summary:
 						"CDB decryption produced an invalid open-CDB magic; the password is likely wrong.",
-					remediation:
-						"Re-check --cdb-password or CENTRS_CDB_PASSWORD against the value used when the CDB was saved.",
+					remediation: `Re-check the CDB password from ${cdbPasswordWhere(settings)} against the value used when the CDB was saved.`,
 					context: { cdbFile: settings.cdbFile.value },
 					cause,
 					causeData: { reason: "open-magic-mismatch" },
@@ -602,8 +682,7 @@ export async function loadCdb(options: LoadCdbOptions): Promise<LoadedCdb> {
 					cause instanceof Error
 						? cause.message
 						: "Failed to decrypt CDB file.",
-				remediation:
-					"Verify --cdb-password is correct and the file is a WinBox-encrypted CDB.",
+				remediation: `Verify the CDB password from ${cdbPasswordWhere(settings)} is correct and the file is a WinBox-encrypted CDB.`,
 				context: { cdbFile: settings.cdbFile.value },
 				cause,
 			});

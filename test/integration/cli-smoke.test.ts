@@ -423,6 +423,153 @@ describe("CLI smoke (real subprocess, no network)", () => {
 		});
 	});
 
+	describe("a working-directory .env never reaches centrs (#666)", () => {
+		const CLI = join(import.meta.dir, "..", "..", "src", "cli.ts");
+		// A clean launch environment, so a `.env` value is never shadowed by one
+		// the test runner happens to export (XDG_CONFIG_HOME, NODE_ENV, …).
+		async function runIn(
+			cwd: string,
+			args: readonly string[],
+			extra: Record<string, string> = {},
+		) {
+			const proc = Bun.spawn(["bun", CLI, ...args], {
+				cwd,
+				env: { PATH: process.env["PATH"] ?? "", HOME: cwd, ...extra },
+				stdout: "pipe",
+				stderr: "pipe",
+			});
+			const [stdout, stderr, exitCode] = await Promise.all([
+				new Response(proc.stdout).text(),
+				new Response(proc.stderr).text(),
+				proc.exited,
+			]);
+			return { stdout, stderr, exitCode };
+		}
+		async function workspace(files: Record<string, string>) {
+			const cwd = await mkdtemp(join(tmpdir(), "centrs-dotenv-smoke-"));
+			for (const [name, body] of Object.entries(files)) {
+				await Bun.write(join(cwd, name), body);
+			}
+			return cwd;
+		}
+		function settingKind(stdout: string, key: string): string | undefined {
+			const envelope = JSON.parse(stdout) as {
+				data: Record<string, { source?: { kind: string } }>;
+			};
+			return envelope.data[key]?.source?.kind;
+		}
+
+		test("CENTRS_* via .env, a NODE_ENV switch, colon and CR-only lines", async () => {
+			const cwd = await workspace({
+				".env":
+					"NODE_ENV=test\nCENTRS_INSECURE=1\nCENTRS_PASSWORD_FILE=/nonexistent/id_ed25519\n",
+				".env.development": "CENTRS_FORMAT=json\n",
+				".env.local": "CENTRS_VALIDATE: 0\rCENTRS_MAX_RESULTS=5\r",
+			});
+			try {
+				const res = await runIn(cwd, ["settings", "print", "--json"]);
+				expect(res.exitCode).toBe(0);
+				expect(res.stderr).toContain("warning [settings/dotenv-ignored]");
+				expect(res.stderr).toContain("CENTRS_PASSWORD_FILE");
+				expect(res.stderr).not.toContain("/nonexistent/id_ed25519");
+				for (const key of ["format", "insecure", "validate", "max-results"]) {
+					expect(settingKind(res.stdout, key)).toBe("default");
+				}
+			} finally {
+				await rm(cwd, { recursive: true, force: true });
+			}
+		});
+
+		// Only Linux can tell a shell export from a `.env` value
+		// (`/proc/self/environ`). Elsewhere a key a `.env` names is dropped even
+		// when exported, by design (commands/settings/README.md).
+		test.skipIf(process.platform !== "linux")(
+			"Linux: a shell export of a key the .env also names is kept",
+			async () => {
+				const cwd = await workspace({ ".env": "CENTRS_FORMAT=yaml\n" });
+				try {
+					const exported = await runIn(cwd, ["explain", "/ip/route"], {
+						CENTRS_FORMAT: "json",
+					});
+					expect(exported.exitCode).toBe(0);
+					const explained = JSON.parse(exported.stdout) as {
+						meta: { settings: { format?: { kind: string } } };
+					};
+					expect(explained.meta.settings.format?.kind).toBe("env");
+				} finally {
+					await rm(cwd, { recursive: true, force: true });
+				}
+			},
+		);
+
+		test("a .env cannot move the user-global centrs.env (XDG_CONFIG_HOME)", async () => {
+			const cwd = await workspace({
+				"cfg/tikoci/centrs.env": "CENTRS_FORMAT=json\n",
+			});
+			await Bun.write(
+				join(cwd, ".env"),
+				`XDG_CONFIG_HOME=${join(cwd, "cfg")}\n`,
+			);
+			try {
+				const res = await runIn(cwd, ["settings", "print", "--json"]);
+				expect(res.exitCode).toBe(0);
+				expect(settingKind(res.stdout, "format")).toBe("default");
+			} finally {
+				await rm(cwd, { recursive: true, force: true });
+			}
+		});
+
+		test("Bun's own startup settings from a .env cannot print a credential", async () => {
+			const user = "dotenv-user";
+			const password = "dotenv-password-file-secret";
+			const basic = Buffer.from(`${user}:${password}`).toString("base64");
+			let sawAuthorization = false;
+			const server = Bun.serve({
+				port: 0,
+				hostname: "127.0.0.1",
+				fetch(request) {
+					sawAuthorization ||=
+						request.headers.get("authorization") === `Basic ${basic}`;
+					return new Response("{}", { status: 401 });
+				},
+			});
+			const cwd = await workspace({
+				".env": "BUN_CONFIG_VERBOSE_FETCH=curl\n",
+				pw: `${password}\n`,
+			});
+			try {
+				const res = await runIn(cwd, [
+					"retrieve",
+					`http://127.0.0.1:${server.port}`,
+					"/system/resource",
+					"--username",
+					user,
+					"--password-file",
+					join(cwd, "pw"),
+					"--json",
+				]);
+				expect(sawAuthorization).toBe(true);
+				expect(res.stderr).not.toContain(basic);
+				expect(res.stderr).not.toContain(password);
+				expect(res.stdout).not.toContain(password);
+			} finally {
+				server.stop(true);
+				await rm(cwd, { recursive: true, force: true });
+			}
+		});
+
+		test("the re-launched run keeps the exit code", async () => {
+			const cwd = await workspace({ ".env": "CENTRS_INSECURE=1\n" });
+			try {
+				const res = await runIn(cwd, ["no-such-command"]);
+				expect(res.exitCode).toBe(1);
+				expect(res.stderr).toContain("input/invalid-command");
+			} finally {
+				await rm(cwd, { recursive: true, force: true });
+			}
+		});
+	});
+
 	test("explain says out loud when a piped script was NOT the input", async () => {
 		// The positional wins (the arguments asked for it), but the result carries
 		// `usage/stdin-ignored` so the dropped pipe is never silent. Proving the

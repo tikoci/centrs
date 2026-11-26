@@ -27,6 +27,11 @@ import {
 import type { CdbResolution, CommentKvOverrides } from "./cdb.ts";
 import { normalizeMac } from "./mac.ts";
 import {
+	chooseSecret,
+	readSecretFile,
+	TARGET_PASSWORD_SECRET,
+} from "./secret-source.ts";
+import {
 	type ResolvedSetting,
 	type ResolverSettingSource,
 	resolveOptionalIntegerSetting,
@@ -454,7 +459,23 @@ function resolvePortSource(
 }
 
 export function resolveAuth(
-	credentials: { username?: string; password?: string; sshKey?: string },
+	credentials: {
+		username?: string;
+		password?: string;
+		/** `--password-file`; conflicts with `password` (#672). */
+		passwordFile?: string;
+		sshKey?: string;
+		/**
+		 * The protocol never sends a target password (ssh: batch `execute`
+		 * and sftp/scp run with `BatchMode=yes`; the interactive terminal
+		 * leaves the prompt to OpenSSH). The source is still chosen, so a
+		 * conflict is an error and "a password was given but not sent" tips
+		 * can name it, but a password file is not read: one it cannot read,
+		 * such as an image-wide `CENTRS_PASSWORD_FILE`, cannot stop a key or
+		 * agent login (PR #674 review).
+		 */
+		sendsNoPassword?: boolean;
+	},
 	env: Record<string, string | undefined>,
 	cdb?: CdbResolution,
 	config: Record<string, string | undefined> = {},
@@ -485,13 +506,38 @@ export function resolveAuth(
 		cdb?.overrides.sshKey,
 		config,
 	);
-	const password = resolveStringSetting(
-		credentials.password,
+	// Value or file, flag then env (#672). A chosen file outranks CDB records
+	// like `CENTRS_PASSWORD` does, so a missing one is an error, never a quiet
+	// fall back to the record's password.
+	const passwordChoice = chooseSecret(
+		TARGET_PASSWORD_SECRET,
+		{ value: credentials.password, file: credentials.passwordFile },
 		env,
-		"CENTRS_PASSWORD",
-		undefined,
-		"password",
 	);
+	const password: ResolvedSetting<string> | undefined =
+		passwordChoice === undefined
+			? undefined
+			: passwordChoice.kind === "file"
+				? {
+						value:
+							credentials.sendsNoPassword === true
+								? ""
+								: readSecretFile(TARGET_PASSWORD_SECRET, passwordChoice),
+						source: {
+							kind: "file",
+							key: passwordChoice.source.key ?? "--password-file",
+						},
+					}
+				: {
+						value: passwordChoice.value,
+						source:
+							passwordChoice.source.kind === "cli"
+								? { kind: "explicit", key: "password" }
+								: {
+										kind: "env",
+										key: passwordChoice.source.key ?? "CENTRS_PASSWORD",
+									},
+					};
 	const def = cdb?.defaults;
 	const cdbUsername =
 		username === undefined && cdb?.username

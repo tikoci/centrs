@@ -109,6 +109,8 @@ export interface ExecuteRequest {
 	port?: number;
 	username?: string;
 	password?: string;
+	/** A file holding the password (`--password-file`); conflicts with `password` (#672). */
+	passwordFile?: string;
 	/** SSH private-key path for `--via ssh` (path only; agent / ~/.ssh used if unset). */
 	sshKey?: string;
 	/**
@@ -126,6 +128,7 @@ export interface ExecuteRequest {
 	maxResultsBytes?: number;
 	cdbFile?: string;
 	cdbPassword?: string;
+	cdbPasswordFile?: string;
 	/**
 	 * `--match` selector for a `<router>` several CDB records share
 	 * (`user=<name>`, `target=<addr>`, or a record type): the same selector
@@ -379,6 +382,7 @@ export async function resolveExecuteRequest(
 					targetInput: request.targetInput,
 					cdbFile: request.cdbFile,
 					cdbPassword: request.cdbPassword,
+					cdbPasswordFile: request.cdbPasswordFile,
 					match: request.match,
 				},
 				env,
@@ -449,7 +453,10 @@ export async function resolveExecuteRequest(
 				{
 					username: request.username,
 					password: request.password,
+					passwordFile: request.passwordFile,
 					sshKey: request.sshKey,
+					// Batch ssh (`BatchMode=yes`) sends no password (PR #674).
+					sendsNoPassword: via.value === "ssh",
 				},
 				env,
 				cdbResolution,

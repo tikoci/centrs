@@ -77,7 +77,14 @@ export const terminalCommand: CliCommandMetadata = {
 		{
 			flag: "--password",
 			valueName: "<secret>",
-			description: "RouterOS password. Falls back to CENTRS_PASSWORD.",
+			description:
+				"mac-telnet: RouterOS password. Falls back to CENTRS_PASSWORD. Interactive ssh ignores it; OpenSSH prompts itself.",
+		},
+		{
+			flag: "--password-file",
+			valueName: "<path>",
+			description:
+				"mac-telnet: read the RouterOS password from a file (one trailing newline ignored). Falls back to `CENTRS_PASSWORD_FILE`; outranks CDB records like `--password`. Conflicts with `--password`. Interactive ssh never reads it.",
 		},
 		{
 			flag: "--source-mac",
@@ -105,6 +112,12 @@ export const terminalCommand: CliCommandMetadata = {
 			flag: "--cdb-password",
 			valueName: "<password>",
 			description: "Decrypt an encrypted WinBox CDB file.",
+		},
+		{
+			flag: "--cdb-password-file",
+			valueName: "<path>",
+			description:
+				"Read the CDB password from a file (one trailing newline ignored), e.g. a container secret under /run/secrets. Read on each CDB load; falls back to `CENTRS_CDB_PASSWORD_FILE`. Conflicts with `--cdb-password`.",
 		},
 		{
 			flag: "--match",
@@ -278,6 +291,14 @@ export function parseTerminalCliArgs(args: readonly string[]): ParsedTerminal {
 					terminalCommand.options,
 				);
 				break;
+			case "--password-file":
+				flags.passwordFile = expectValue(
+					args,
+					++index,
+					arg,
+					terminalCommand.options,
+				);
+				break;
 			case "--source-mac":
 				flags.sourceMac = expectValue(
 					args,
@@ -302,6 +323,14 @@ export function parseTerminalCliArgs(args: readonly string[]): ParsedTerminal {
 				break;
 			case "--cdb-password":
 				flags.cdbPassword = expectValue(
+					args,
+					++index,
+					arg,
+					terminalCommand.options,
+				);
+				break;
+			case "--cdb-password-file":
+				flags.cdbPasswordFile = expectValue(
 					args,
 					++index,
 					arg,

@@ -353,6 +353,20 @@ export const settingsRefusedKeys: readonly RefusedKeyDef[] = [
 			"Pass --cdb-password per invocation, export CENTRS_CDB_PASSWORD in the calling shell, or use Bun.secret() once available — never persist a CDB decrypt password to centrs.env.",
 	},
 	{
+		attr: "password-file",
+		envKey: "CENTRS_PASSWORD_FILE",
+		secret: false,
+		remediation:
+			"Pass --password-file per invocation or export CENTRS_PASSWORD_FILE in the launching environment. Only a flag or the process environment may name a password file, so a shared or cloned config cannot point it at another file (#672).",
+	},
+	{
+		attr: "cdb-password-file",
+		envKey: "CENTRS_CDB_PASSWORD_FILE",
+		secret: false,
+		remediation:
+			"Pass --cdb-password-file per invocation or export CENTRS_CDB_PASSWORD_FILE in the launching environment (a container's env, the MCP server's launch config). Only a flag or the process environment may name a password file (#672).",
+	},
+	{
 		attr: "skip-env-file",
 		envKey: "CENTRS_SKIP_ENV_FILE",
 		secret: false,
@@ -540,6 +554,7 @@ export interface SettingsPrintArgs {
 	skipEnvFile?: boolean;
 	cdbFile?: string;
 	cdbPassword?: string;
+	cdbPasswordFile?: string;
 }
 
 function redactIfSecret(
@@ -664,11 +679,16 @@ function collectUnrecognized(
  * error, unlike `devices list` — settings should never require a CDB to exist.
  */
 async function probeDefaultDevice(
-	args: Pick<SettingsPrintArgs, "cdbFile" | "cdbPassword" | "env">,
+	args: Pick<
+		SettingsPrintArgs,
+		"cdbFile" | "cdbPassword" | "cdbPasswordFile" | "env"
+	>,
+	warnings: Warning[],
 ): Promise<SettingsDefaultDeviceSummary> {
 	const settings = resolveDevicesSettings({
 		cdbFile: args.cdbFile,
 		cdbPassword: args.cdbPassword,
+		cdbPasswordFile: args.cdbPasswordFile,
 		env: args.env,
 	});
 	if (!(await Bun.file(settings.cdbFile.value).exists())) {
@@ -677,8 +697,13 @@ async function probeDefaultDevice(
 	const cdb = await loadCdb({
 		cdbFile: settings.cdbFile.value,
 		cdbPassword: args.cdbPassword,
+		cdbPasswordFile: args.cdbPasswordFile,
 		env: args.env,
 	});
+	// An unneeded or missing key file on an open CDB (#672) is said here too.
+	for (const warning of cdb.warnings) {
+		if (warning.code === "cdb/password-not-needed") warnings.push(warning);
+	}
 	const entry = cdb.entries.find(
 		(candidate) => candidate.target === DEFAULT_RECORD_TARGET,
 	);
@@ -727,7 +752,7 @@ export async function settingsPrint(
 	if (args.all) {
 		data.unrecognized = collectUnrecognized(lines);
 	}
-	data.defaultDevice = await probeDefaultDevice(args);
+	data.defaultDevice = await probeDefaultDevice(args, warnings);
 
 	if (args.skipEnvFile) {
 		warnings.push({

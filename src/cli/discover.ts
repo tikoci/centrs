@@ -64,6 +64,12 @@ export const discoverCommand: CliCommandMetadata = {
 				"`--save` password for an encrypted CDB. Used to decrypt the existing CDB and re-encrypt on write.",
 		},
 		{
+			flag: "--cdb-password-file",
+			valueName: "<path>",
+			description:
+				"Read the CDB password from a file (one trailing newline ignored), e.g. a container secret under /run/secrets. Read on each CDB load; falls back to `CENTRS_CDB_PASSWORD_FILE`. Conflicts with `--cdb-password`.",
+		},
+		{
 			flag: "--format",
 			valueName: `<${discoverOutputFormats.join("|")}>`,
 			description: "Output format for the CLI response.",
@@ -83,6 +89,7 @@ interface DiscoverCliArgs {
 	port?: number;
 	cdbFile?: string;
 	cdbPassword?: string;
+	cdbPasswordFile?: string;
 	format?: DiscoverOutputFormat;
 }
 
@@ -132,6 +139,14 @@ export function parseDiscoverCliArgs(args: readonly string[]): DiscoverCliArgs {
 				break;
 			case "--cdb-password":
 				parsed.cdbPassword = expectValue(
+					args,
+					++index,
+					arg,
+					discoverCommand.options,
+				);
+				break;
+			case "--cdb-password-file":
+				parsed.cdbPasswordFile = expectValue(
 					args,
 					++index,
 					arg,
@@ -202,6 +217,7 @@ export async function runDiscoverCli(args: readonly string[]): Promise<number> {
 			port: parsed.port,
 			cdbFile: parsed.cdbFile,
 			cdbPassword: parsed.cdbPassword,
+			cdbPasswordFile: parsed.cdbPasswordFile,
 			env: Bun.env,
 		};
 		emitDiscoverProgress(options, parsed.format);

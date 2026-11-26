@@ -56,6 +56,40 @@ import {
 
 const ENV_CDB_FILE = "CENTRS_CDB_FILE";
 const ENV_CDB_PASSWORD = "CENTRS_CDB_PASSWORD";
+const ENV_CDB_PASSWORD_FILE = "CENTRS_CDB_PASSWORD_FILE";
+
+/**
+ * Whether the caller chose a CDB on purpose, so a missing file or a name the
+ * registry lacks is an error rather than "no CDB in play". Every flag and the
+ * value/path env keys count, as does a `centrs.env` CDB path. The env key
+ * file counts only when the CDB exists: it is often an image-wide default
+ * (#672), which must not make a first start without a CDB fail, but with a
+ * CDB present it pins the lookup like `CENTRS_CDB_PASSWORD` does. Shared by
+ * single-target ({@link resolveCdb}) and fan-out (`expandSelection`).
+ */
+export async function isExplicitCdb(
+	input: { cdbFile?: string; cdbPassword?: string; cdbPasswordFile?: string },
+	env: Record<string, string | undefined>,
+	config: Record<string, string | undefined>,
+	cdbPath: string,
+): Promise<boolean> {
+	if (
+		input.cdbFile !== undefined ||
+		input.cdbPassword !== undefined ||
+		input.cdbPasswordFile !== undefined ||
+		env[ENV_CDB_FILE] !== undefined ||
+		env[ENV_CDB_PASSWORD] !== undefined ||
+		config[ENV_CDB_FILE] !== undefined
+	) {
+		return true;
+	}
+	const keyFile = env[ENV_CDB_PASSWORD_FILE];
+	return (
+		keyFile !== undefined &&
+		keyFile !== "" &&
+		(await Bun.file(cdbPath).exists())
+	);
+}
 
 export interface ResolverWarning {
 	code: string;
@@ -144,6 +178,7 @@ export interface CdbResolveInput {
 	targetInput?: string;
 	cdbFile?: string;
 	cdbPassword?: string;
+	cdbPasswordFile?: string;
 	/**
 	 * `--match` record selector (`user=<name>`, `target=<addr>`, or a record
 	 * type such as `ipUser`) for a `<router>` several CDB records share — the
@@ -220,6 +255,7 @@ export async function resolveCdb(
 	const settings = resolveDevicesSettings({
 		cdbFile: input.cdbFile,
 		cdbPassword: input.cdbPassword,
+		cdbPasswordFile: input.cdbPasswordFile,
 		env,
 		config,
 	});
@@ -227,12 +263,12 @@ export async function resolveCdb(
 	// as an env var: it is an intentional choice, not the built-in fallback,
 	// so a missing file there should surface as a real error rather than
 	// silently degrading to "no CDB in play".
-	const explicitCdb =
-		input.cdbFile !== undefined ||
-		input.cdbPassword !== undefined ||
-		env[ENV_CDB_FILE] !== undefined ||
-		env[ENV_CDB_PASSWORD] !== undefined ||
-		config[ENV_CDB_FILE] !== undefined;
+	const explicitCdb = await isExplicitCdb(
+		input,
+		env,
+		config,
+		settings.cdbFile.value,
+	);
 	if (!explicitCdb && !(await Bun.file(settings.cdbFile.value).exists())) {
 		if (input.match !== undefined) {
 			matchWithoutRecord(input, "no CDB file is in play");
@@ -245,6 +281,7 @@ export async function resolveCdb(
 		cdb = await loadCdb({
 			cdbFile: input.cdbFile,
 			cdbPassword: input.cdbPassword,
+			cdbPasswordFile: input.cdbPasswordFile,
 			env,
 			config,
 		});
@@ -365,6 +402,7 @@ export interface CdbGroupResolveInput {
 	group: string;
 	cdbFile?: string;
 	cdbPassword?: string;
+	cdbPasswordFile?: string;
 }
 
 /**
@@ -383,6 +421,7 @@ export async function expandCdbGroup(
 	const cdb: LoadedCdb = await loadCdb({
 		cdbFile: input.cdbFile,
 		cdbPassword: input.cdbPassword,
+		cdbPasswordFile: input.cdbPasswordFile,
 		env,
 	});
 

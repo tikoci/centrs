@@ -150,6 +150,12 @@ export const transferCommand: CliCommandMetadata = {
 			description: "RouterOS password. Falls back to CENTRS_PASSWORD.",
 		},
 		{
+			flag: "--password-file",
+			valueName: "<path>",
+			description:
+				"Read the RouterOS password from a file (one trailing newline ignored). Falls back to `CENTRS_PASSWORD_FILE`; outranks CDB records like `--password`. Conflicts with `--password`.",
+		},
+		{
 			flag: "--timeout",
 			valueName: "<ms|5s>",
 			description: "Operation timeout. REST rejects values above 60s.",
@@ -171,6 +177,12 @@ export const transferCommand: CliCommandMetadata = {
 			flag: "--cdb-password",
 			valueName: "<password>",
 			description: "Decrypt an encrypted WinBox CDB file.",
+		},
+		{
+			flag: "--cdb-password-file",
+			valueName: "<path>",
+			description:
+				"Read the CDB password from a file (one trailing newline ignored), e.g. a container secret under /run/secrets. Read on each CDB load; falls back to `CENTRS_CDB_PASSWORD_FILE`. Conflicts with `--cdb-password`.",
 		},
 		{
 			flag: "--match",
@@ -410,6 +422,14 @@ export function parseTransferCliArgs(
 					transferCommand.options,
 				);
 				break;
+			case "--password-file":
+				flags.passwordFile = expectValue(
+					args,
+					++index,
+					arg,
+					transferCommand.options,
+				);
+				break;
 			case "--ssh-key":
 				flags.sshKey = expectValue(args, ++index, arg, transferCommand.options);
 				break;
@@ -466,6 +486,14 @@ export function parseTransferCliArgs(
 				break;
 			case "--cdb-password":
 				flags.cdbPassword = expectValue(
+					args,
+					++index,
+					arg,
+					transferCommand.options,
+				);
+				break;
+			case "--cdb-password-file":
+				flags.cdbPasswordFile = expectValue(
 					args,
 					++index,
 					arg,
