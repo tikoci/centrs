@@ -117,7 +117,7 @@ type Waiter = {
  * right-trimmed. This collapses the console's CR-based prompt redraws and
  * space-padding into the single line a user would see.
  */
-export function emulateScreen(text: string): string[] {
+export function emulateScreen(text: string, trim = true): string[] {
 	const clean = text.replace(ANSI_CSI, "").replace(ANSI_ESC2, "");
 	const lines: string[][] = [[]];
 	let row = 0;
@@ -138,11 +138,10 @@ export function emulateScreen(text: string): string[] {
 			col += 1;
 		}
 	}
-	return lines.map((line) =>
-		Array.from(line, (c) => c ?? " ")
-			.join("")
-			.replace(/\s+$/, ""),
-	);
+	return lines.map((line) => {
+		const row = Array.from(line, (c) => c ?? " ").join("");
+		return trim ? row.replace(/\s+$/, "") : row;
+	});
 }
 
 /**
@@ -187,10 +186,18 @@ const ECHO_END = "\r\n\r";
 type PromptMark = { at: number; fresh: boolean };
 
 /**
+ * A drawn prompt, once colors are stripped: `[user@host] > `, a menu prompt
+ * such as `[user@host] /ip/address> `, or a `{... ` continuation.
+ */
+const DRAWN_PROMPT_RE =
+	/^(?:\[[^\]\r\n]*@[^\]\r\n]*\][^>\r\n]*>|[{(["]+\.\.\.)/;
+
+/**
  * The next prompt the console drew. A real one follows a CR and is followed
- * by the prompt itself (`[user@host] …> ` or `{... `), after `ESC[K` when the
- * prompt is fresh; the same bytes printed by a command (`:put "\1B[9999B"`)
- * do not have that shape and stay output.
+ * by a drawn prompt ({@link DRAWN_PROMPT_RE}), after `ESC[K` when the prompt is
+ * fresh. The framing is in-band and has no escaping: printed text keeps its
+ * place unless it reproduces CR + `ESC[9999B` + a whole drawn prompt
+ * (`:put "\1B[9999B"` and `[not-a-prompt` stay output).
  */
 function nextPromptMark(raw: string, from: number): PromptMark | undefined {
 	let at = raw.indexOf(PROMPT_MARK, from);
@@ -198,11 +205,19 @@ function nextPromptMark(raw: string, from: number): PromptMark | undefined {
 		let after = at + PROMPT_MARK.length;
 		const fresh = raw.startsWith(CLEAR_ROW, after);
 		if (fresh) after += CLEAR_ROW.length;
-		const prompt = raw.startsWith("[", after) || raw.startsWith("{...", after);
-		if (at > 0 && raw[at - 1] === "\r" && prompt) return { at, fresh };
+		if (at > 0 && raw[at - 1] === "\r" && isDrawnPrompt(raw, after))
+			return { at, fresh };
 		at = raw.indexOf(PROMPT_MARK, at + 1);
 	}
 	return undefined;
+}
+
+function isDrawnPrompt(raw: string, at: number): boolean {
+	const lineEnd = raw.slice(at).search(/[\r\n]/);
+	const drawn = raw.slice(at, lineEnd === -1 ? undefined : at + lineEnd);
+	return DRAWN_PROMPT_RE.test(
+		drawn.replace(ANSI_CSI, "").replace(ANSI_ESC2, ""),
+	);
 }
 
 function framedOutput(raw: string, cols: number): string[] | undefined {
@@ -220,8 +235,8 @@ function framedOutput(raw: string, cols: number): string[] | undefined {
 				// leftover before the next prompt; a blank line before it is output
 				// (`:put ""`). A reply cut off before its next prompt keeps the old
 				// trailing-prompt trim.
-				const rows = unwrapRows(
-					emulateScreen(segment.slice(echoEnd + ECHO_END.length)),
+				const rows = outputLines(
+					segment.slice(echoEnd + ECHO_END.length),
 					cols,
 				);
 				if (mark === undefined) out.push(...trimTrailingPrompts(rows));
@@ -238,31 +253,39 @@ function framedOutput(raw: string, cols: number): string[] | undefined {
 }
 
 /**
- * Rejoin output lines the console wrapped at the terminal width. It breaks a
- * line after `cols + 1` characters on its first row and `cols` on each later
- * row, and always emits that CRLF, so a full row is followed either by the
- * rest of the line or, when the line ended exactly there, by an empty row
- * (CHR 7.23.1, 7.23.8, 7.24.5 at 512 columns).
+ * The output lines of one segment, with the console's width wraps rejoined.
+ *
+ * The console breaks a printed record after `cols + 1` characters on its first
+ * row and `cols` on each later row, and always emits that CRLF; a line after a
+ * newline inside the printed value (a bare LF) holds `cols`. So a full row is
+ * followed either by the rest of the line or, when the line ended exactly
+ * there, by an empty row. Rows are measured before trailing spaces are trimmed,
+ * since a space can sit in the wrap column (CHR 7.23.1, 7.23.8, 7.24.5 at 512
+ * columns). The last row is the leftover before the next prompt.
  */
-function unwrapRows(rows: string[], cols: number): string[] {
-	const out: string[] = [];
+function outputLines(text: string, cols: number): string[] {
+	const parts = text.split(/(\r?\n)/);
+	const lines: string[] = [];
+	let capacity = cols + 1;
 	let continuing = false;
-	for (const row of rows) {
+	for (let i = 0; i < parts.length; i += 2) {
+		const row = emulateScreen(parts[i] ?? "", false)[0] ?? "";
+		const brk = parts[i + 1];
 		if (continuing) {
-			const line = out.pop() as string;
-			if (row === "") {
-				out.push(line);
-				continuing = false;
+			continuing = false;
+			if (row.length === 0) {
+				capacity = brk === "\n" ? cols : cols + 1;
+				if (brk === undefined) lines.push("");
 				continue;
 			}
-			out.push(line + row);
-			continuing = row.length >= cols;
-			continue;
-		}
-		out.push(row);
-		continuing = row.length >= cols + 1;
+			lines[lines.length - 1] += row;
+		} else lines.push(row);
+		if (row.length >= capacity) {
+			continuing = true;
+			capacity = cols;
+		} else capacity = brk === "\n" ? cols : cols + 1;
 	}
-	return out;
+	return lines.map((line) => line.replace(/\s+$/, ""));
 }
 
 /** The pre-#575 rule: skip as many screen columns as the command is long. */

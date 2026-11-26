@@ -108,10 +108,11 @@ publish `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
   console's own framing instead of the command text: each line's echo ends
   with CRLF + CR, each new prompt starts with `ESC[9999B`, and a TAB
   completion list is a redraw without `ESC[K`. A prompt marker counts only
-  after a CR and before a drawn prompt, so printed text that looks like a
-  command, a prompt, a `{...` continuation or even `ESC[9999B` stays output.
-  Output lines longer than the 512-column console come back whole instead of
-  split at the width. Grounded on CHR 7.23.1, 7.23.8 and 7.24.5 console
+  after a CR and before a whole drawn prompt (`[user@host] …>` or `{...`), so
+  printed text that looks like a command, a prompt, a continuation or
+  `ESC[9999B` stays output; only output that reproduces CR + `ESC[9999B` + a
+  drawn prompt is read as one. Output lines longer than the 512-column console
+  come back whole instead of split at the width. Grounded on CHR 7.23.1, 7.23.8 and 7.24.5 console
   captures (`test/fixtures/mac-telnet-console-echo.json`).
 - `discover`'s refresh request gets a reply again. The 9-zero-byte refresh
   ended with a trailing byte, and RouterOS drops a datagram whose TLVs do not

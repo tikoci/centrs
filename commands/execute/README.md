@@ -116,9 +116,10 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
   answers the device's terminal-size probe with a deliberately tall/wide screen,
   so captured columns are neither paginated nor wrapped *at the negotiated
   width*. The console still breaks one output line longer than that: after 513
-  characters on its first row and 512 on each later row, always with a CRLF.
-  The reader rejoins those rows, so a long line comes back whole (CHR 7.23.1,
-  7.23.8, 7.24.5). **SSH execute** runs *without* a pseudo-tty (`src/protocols/ssh.ts`),
+  characters on the first row of each printed value and 512 on each later row
+  (and after a newline inside the value), always with a CRLF. The reader
+  rejoins those rows, so a long line comes back whole (CHR 7.23.1, 7.23.8,
+  7.24.5). **SSH execute** runs *without* a pseudo-tty (`src/protocols/ssh.ts`),
   so no width is negotiated at all. **REST/native-api** are not consoles, so a
   terminal width never applies (they return structured records, or a string
   `ret` for script-mode). There is therefore no per-call `--width` knob today —
