@@ -554,7 +554,7 @@ describe("extractCommandOutput — console echo captures (#575 review)", () => {
 	}
 });
 
-describe("extractCommandOutput — zero-width controls and backspace (#575 review)", () => {
+describe("extractCommandOutput — control characters and screen edits (#575 review)", () => {
 	// A real CHR 7.24.5 reply for `:put "plain"`, with its output row replaced.
 	const ascii = echoCaptures.captures.find((c) => c.label === "ascii");
 	if (!ascii) throw new Error("fixture has no `ascii` capture");
@@ -565,6 +565,11 @@ describe("extractCommandOutput — zero-width controls and backspace (#575 revie
 		["BEL takes no column before a BS", "a\u0007\bX", "X\u0007"],
 		["BEL between characters is kept", "a\u0007b", "a\u0007b"],
 		["DEL takes no column before a CR", "ab\u007f\rX", "Xb\u007f"],
+		["a trailing TAB is kept", "a\t", "a\t"],
+		["a trailing VT is kept", "a\u000b", "a\u000b"],
+		["padding spaces are trimmed", "a   ", "a"],
+		["BS after a TAB lands inside its span", "\t\bX", "\tX"],
+		["a TAB overwritten by CR leaves spaces", "\tab\rX", `X${" ".repeat(7)}ab`],
 	];
 	for (const [label, row, expected] of cases) {
 		test(label, () => {

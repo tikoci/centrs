@@ -306,7 +306,9 @@ function outputLines(text: string, cols: number): string[] {
 			}
 		}
 	}
-	return lines.map((line) => line.replace(/\s+$/, ""));
+	// Only the console's padding spaces are trimmed: a trailing TAB, VT or FF is
+	// the command's output.
+	return lines.map((line) => line.replace(/ +$/, ""));
 }
 
 /**
@@ -321,6 +323,14 @@ function rowText(raw: string): string {
 	// `outputLines` counts them) are kept at the column they were printed in,
 	// without taking a cell, so a later BS or CR lands where the console's did.
 	const zeroWidth: string[] = [];
+	// A TAB keeps its byte in its own cell and owns the cells up to the next
+	// multiple of 8, as `outputLines` counts it. Those cells print nothing while
+	// the TAB is still on screen, and a space once it has been overwritten.
+	const tabOwner: (number | undefined)[] = [];
+	const put = (at: number, ch: string, owner?: number) => {
+		cells[at] = ch;
+		tabOwner[at] = owner;
+	};
 	let col = 0;
 	for (const ch of clean) {
 		const code = ch.charCodeAt(0);
@@ -329,15 +339,23 @@ function rowText(raw: string): string {
 		else if (code === 0x1b) continue;
 		else if (code === 0x7f || (code < 0x20 && code !== 0x01 && code !== 0x09))
 			zeroWidth[col] = (zeroWidth[col] ?? "") + ch;
-		else {
-			cells[col] = ch;
+		else if (code === 0x09) {
+			const stop = (Math.floor(col / 8) + 1) * 8;
+			put(col, ch);
+			for (let k = col + 1; k < stop; k++) put(k, "", col);
+			col = stop;
+		} else {
+			put(col, ch);
 			col += 1;
 		}
 	}
 	let row = "";
 	for (let i = 0; i < Math.max(cells.length, zeroWidth.length); i++) {
 		row += zeroWidth[i] ?? "";
-		if (i < cells.length) row += cells[i] ?? " ";
+		if (i >= cells.length) continue;
+		const owner = tabOwner[i];
+		if (owner === undefined) row += cells[i] ?? " ";
+		else if (cells[owner] !== "\t" || tabOwner[owner] !== undefined) row += " ";
 	}
 	return row;
 }
