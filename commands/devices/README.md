@@ -578,8 +578,8 @@ warning still applies to them. Without the snapshot, a forgotten password cannot
 be recovered.
 
 `init` and `encrypt` act on the CDB file, not on records: they accept only
-`--cdb-file`, `--cdb-password`, `--format`/`--json`, plus `--encrypt` (`init`)
-or `--no-backup` (`encrypt`). Any other flag is `input/invalid-command`
+`--cdb-file`, `--cdb-password`, `--cdb-password-file`, `--format`/`--json`,
+plus `--encrypt` (`init`) or `--no-backup` (`encrypt`). Any other flag is `input/invalid-command`
 instead of being silently ignored. `devices init --help` and
 `devices encrypt --help` show only those accepted flags; the same metadata
 generates their sections in [`docs/CLI.md`](../../docs/CLI.md).

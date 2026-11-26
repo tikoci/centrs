@@ -220,6 +220,20 @@ describe("CDB key from a file", () => {
 		expect(JSON.stringify(open.warnings)).not.toContain(KEY);
 	});
 
+	test("a blanked image-wide key file (empty value) is unset: no warning", async () => {
+		// app-t3code blanks `CENTRS_CDB_PASSWORD_FILE=` on Docker without the
+		// secret mounted; an open CDB must then load quietly.
+		const dir = await sandbox();
+		const cdb = await loadCdb({
+			env: { HOME: dir, CENTRS_CDB_PASSWORD_FILE: "" },
+		});
+		expect(cdb.encrypted).toBe(false);
+		expect(cdb.settings.cdbPassword.provided).toBe(false);
+		expect(
+			cdb.warnings.filter((entry) => entry.code === "cdb/password-not-needed"),
+		).toEqual([]);
+	});
+
 	test("an encrypted CDB with a missing key file is cdb/password-unavailable", async () => {
 		const { dir, cdbFile } = await encryptedCdb();
 		const error = await caught(() =>
