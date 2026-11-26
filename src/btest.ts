@@ -15,7 +15,11 @@
  */
 
 import { createServer } from "node:net";
-import type { CentrsEnvelope, EnvelopeMeta } from "./core/envelope.ts";
+import type {
+	CentrsEnvelope,
+	CommonSettingsMeta,
+	EnvelopeMeta,
+} from "./core/envelope.ts";
 import {
 	asCentrsError,
 	CentrsError,
@@ -38,10 +42,12 @@ import {
 	runBtestClientSession,
 } from "./protocols/btest-session.ts";
 import {
+	type ResolvedAuth,
 	redactTargetInput,
 	resolveAuth,
 	resolveCdb,
 	resolveTarget,
+	toCoreSource,
 } from "./resolver/index.ts";
 import {
 	chooseSecret,
@@ -247,6 +253,7 @@ export async function btestClient(
 		context?: Record<string, unknown>;
 	}[] = [];
 
+	let auth: ResolvedAuth | undefined;
 	try {
 		validateClientOptions(request);
 
@@ -291,7 +298,7 @@ export async function btestClient(
 			"rest-api",
 			cdbResolution,
 		);
-		const auth = resolveAuth(
+		auth = resolveAuth(
 			{
 				username: request.username,
 				password: request.password,
@@ -403,10 +410,10 @@ export async function btestClient(
 			data,
 			warnings: warnings.map((w) => ({ ...w })),
 			tips: [],
-			meta: clientMeta(target.host, controlPort, operation, auth.username),
+			meta: clientMeta(target.host, controlPort, operation, auth),
 		};
 	} catch (error) {
-		return buildClientErrorEnvelope(request, operation, error);
+		return buildClientErrorEnvelope(request, operation, error, auth);
 	}
 }
 
@@ -414,17 +421,35 @@ function clientMeta(
 	host: string,
 	port: number,
 	operation: BtestClientOperationMeta,
-	user?: string,
+	auth: ResolvedAuth,
 ): EnvelopeMeta<BtestClientOperationMeta> {
 	return {
 		target: {
 			host,
 			port,
-			...(user !== undefined ? { user } : {}),
+			...(auth.username !== undefined ? { user: auth.username } : {}),
 		},
 		via: "btest",
-		settings: {},
+		settings: authSettings(auth),
 		operation,
+	};
+}
+
+/**
+ * Where the credential came from (`meta.settings.username` / `.password`),
+ * never its value; a password file reports `{ kind: "file", key }` (#672).
+ * Nothing when no credential was resolved (an open server, or a failure
+ * before resolution).
+ */
+function authSettings(auth: ResolvedAuth | undefined): CommonSettingsMeta {
+	if (auth === undefined) return {};
+	return {
+		...(auth.usernameSource
+			? { username: toCoreSource(auth.usernameSource) }
+			: {}),
+		...(auth.passwordSource
+			? { password: toCoreSource(auth.passwordSource) }
+			: {}),
 	};
 }
 
@@ -432,6 +457,7 @@ function buildClientErrorEnvelope(
 	request: BtestClientRequest,
 	operation: BtestClientOperationMeta,
 	error: unknown,
+	auth: ResolvedAuth | undefined,
 ): BtestClientEnvelope {
 	const centrsError = asCentrsError(error, {
 		code: "routeros/btest-protocol",
@@ -453,7 +479,7 @@ function buildClientErrorEnvelope(
 				port: operation.controlPort,
 			},
 			via: "btest",
-			settings: {},
+			settings: authSettings(auth),
 			operation,
 		},
 	};
@@ -606,7 +632,7 @@ export async function btestServer(
 			);
 		}
 	} catch (error) {
-		return buildServerErrorEnvelope(operation, error);
+		return buildServerErrorEnvelope(operation, error, auth);
 	}
 
 	const sessions: BtestSessionRecord[] = [];
@@ -717,7 +743,11 @@ export async function btestServer(
 			});
 		});
 	} catch (error) {
-		return buildServerErrorEnvelope(operation, listenError(error, bind, port));
+		return buildServerErrorEnvelope(
+			operation,
+			listenError(error, bind, port),
+			auth,
+		);
 	}
 
 	await new Promise<void>((resolve) => {
@@ -756,7 +786,12 @@ export async function btestServer(
 		},
 		warnings: warnings.map((w) => ({ ...w })),
 		tips: [],
-		meta: { target: {}, via: "btest", settings: {}, operation },
+		meta: {
+			target: {},
+			via: "btest",
+			settings: authSettings(auth),
+			operation,
+		},
 	};
 }
 
@@ -789,6 +824,7 @@ function listenError(error: unknown, bind: string, port: number): CentrsError {
 function buildServerErrorEnvelope(
 	operation: BtestServerOperationMeta,
 	error: unknown,
+	auth: ResolvedAuth | undefined,
 ): BtestServerEnvelope {
 	const centrsError = asCentrsError(error, {
 		code: "routeros/btest-protocol",
@@ -801,7 +837,12 @@ function buildServerErrorEnvelope(
 		error: serializeCentrsError(centrsError),
 		warnings: [],
 		tips: [],
-		meta: { target: {}, via: "btest", settings: {}, operation },
+		meta: {
+			target: {},
+			via: "btest",
+			settings: authSettings(auth),
+			operation,
+		},
 	};
 }
 

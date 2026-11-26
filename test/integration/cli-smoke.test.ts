@@ -475,19 +475,32 @@ describe("CLI smoke (real subprocess, no network)", () => {
 				for (const key of ["format", "insecure", "validate", "max-results"]) {
 					expect(settingKind(res.stdout, key)).toBe("default");
 				}
-				// A value the launching shell exports is still the process environment.
-				const exported = await runIn(cwd, ["explain", "/ip/route"], {
-					CENTRS_FORMAT: "json",
-				});
-				expect(exported.exitCode).toBe(0);
-				const explained = JSON.parse(exported.stdout) as {
-					meta: { settings: { format?: { kind: string } } };
-				};
-				expect(explained.meta.settings.format?.kind).toBe("env");
 			} finally {
 				await rm(cwd, { recursive: true, force: true });
 			}
 		});
+
+		// Only Linux can tell a shell export from a `.env` value
+		// (`/proc/self/environ`). Elsewhere a key a `.env` names is dropped even
+		// when exported, by design (commands/settings/README.md).
+		test.skipIf(process.platform !== "linux")(
+			"Linux: a shell export of a key the .env also names is kept",
+			async () => {
+				const cwd = await workspace({ ".env": "CENTRS_FORMAT=yaml\n" });
+				try {
+					const exported = await runIn(cwd, ["explain", "/ip/route"], {
+						CENTRS_FORMAT: "json",
+					});
+					expect(exported.exitCode).toBe(0);
+					const explained = JSON.parse(exported.stdout) as {
+						meta: { settings: { format?: { kind: string } } };
+					};
+					expect(explained.meta.settings.format?.kind).toBe("env");
+				} finally {
+					await rm(cwd, { recursive: true, force: true });
+				}
+			},
+		);
 
 		test("a .env cannot move the user-global centrs.env (XDG_CONFIG_HOME)", async () => {
 			const cwd = await workspace({

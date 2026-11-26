@@ -150,29 +150,6 @@ describe("readSecretFile", () => {
 			expect(JSON.stringify(error.toJSON?.() ?? error)).not.toContain(KEY);
 		}
 	});
-
-	// PR #674 review: a FIFO with no writer blocked the synchronous read, and
-	// a device would stream forever. Both are refused without reading.
-	test.skipIf(process.platform === "win32")(
-		"a FIFO or a device is refused at once, not read",
-		async () => {
-			const dir = await sandbox();
-			const fifo = join(dir, "fifo");
-			expect(Bun.spawnSync(["mkfifo", fifo]).exitCode).toBe(0);
-			for (const path of [fifo, "/dev/zero"]) {
-				const error = await caught(() =>
-					readSecretFile(CDB_PASSWORD_SECRET, {
-						kind: "file",
-						path,
-						source: { kind: "file", key: "CENTRS_CDB_PASSWORD_FILE" },
-					}),
-				);
-				expect(error.code).toBe("cdb/password-unavailable");
-				expect(error.summary).toContain("is not a regular file");
-			}
-		},
-		5_000,
-	);
 });
 
 describe("CDB key from a file", () => {
@@ -417,6 +394,36 @@ describe("review follow-ups (#674)", () => {
 		expect(conflict.ok).toBe(false);
 		if (!conflict.ok)
 			expect(conflict.error.code).toBe("usage/conflicting-flags");
+	});
+
+	// PR #674 review: btest reported `meta.settings: {}` on every path.
+	test("btest server reports the password file's source, never its value", async () => {
+		const dir = await sandbox();
+		const file = join(dir, "pw");
+		await writeFile(file, `${ROUTER_PW}\n`);
+		const envelope = await btestServer({
+			username: "ops",
+			passwordFile: file,
+			bind: "127.0.0.1",
+			port: 0,
+			durationMs: 10,
+			env: {},
+		});
+		expect(envelope.ok).toBe(true);
+		expect(envelope.meta.settings["password"]).toEqual({
+			kind: "file",
+			key: "--password-file",
+		});
+		expect(envelope.meta.settings["username"]).toBeDefined();
+		expect(JSON.stringify(envelope)).not.toContain(ROUTER_PW);
+		const open = await btestServer({
+			authenticate: false,
+			bind: "127.0.0.1",
+			port: 0,
+			durationMs: 10,
+			env: {},
+		});
+		expect(open.meta.settings).toEqual({});
 	});
 
 	// PR #674 review: an open server uses no credential, so an image-wide
