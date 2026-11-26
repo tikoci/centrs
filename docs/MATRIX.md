@@ -371,9 +371,19 @@ that keeps growing is being used as an issue.
   kept was written into the constitution as if it existed, and moved here
   (#659). Until it exists, error pages ask for the command, the `--json`
   envelope and `centrs --version`.
-- **Ready when:** now. #605's `isError` fix landed; its `structuredContent`,
-  `outputSchema` and result-size budget are the next MCP slice.
-- **Absorbed:** #95, #129, #148, #360, #528, #593, #606.
+  A tool-list contract would connect a client in-process (the SDK's
+  `InMemoryTransport`, as `mcp-server-result.test.ts` does) and snapshot each
+  tool's name and annotations, so a write tool marked `readOnlyHint` fails a
+  test (tikoci.github.io#38 review).
+  MCP results (#605): `isError` is set on a failed envelope (#642). Still
+  text-only: return the envelope as `structuredContent`, keep the JSON `text`
+  block as its mirror, and declare an `outputSchema` that pins the envelope
+  frame and leaves `data` loose per tool. No MCP call has a default size
+  bound; a default budget plus a `maxResults` argument on retrieve and execute
+  would keep overflow the typed `input/max-results-exceeded`, never silent
+  truncation. MCP as a whole needs more design before this slice is picked.
+- **Ready when:** now.
+- **Absorbed:** #95, #129, #148, #360, #528, #593, #605, #606.
 
 ### Transfer methods
 
@@ -396,6 +406,10 @@ that keeps growing is being used as an issue.
   is designed for the nightly. Docs-only CI, cross-platform unit, the nightly
   sweep and the main-health gate landed (#631) and are described in
   `.github/instructions/ci-test-tiers-and-release-versioning.instructions.md`.
+  The house `tikoci-release` draft (tikoci.github.io#37) moves npm publishing
+  to trusted publishing in a GitHub Environment limited to `main`. Today a
+  release dispatched from a branch receives `NPM_TOKEN`, and the main-only
+  check lives in `scripts/release-plan.ts`, which a branch can edit.
 - **Ready when:** now; the current track schedules it as step 1.
 - **Absorbed:** #97, #142.
 
@@ -411,8 +425,7 @@ that keeps growing is being used as an issue.
   written page, and `error-pages.test.ts` fails on a scaffold stub. A tip
   carries a `detailsUrl` only when its page is published (`tip/no-devices`,
   `tip/credentials-missing`); `pages-site.test.ts` assembles the site to
-  prove it. The older error pages still need a re-pass against the page
-  contract (#659 phase 4).
+  prove it.
   TIKOCI-wide instruction files are collected in `tikoci.github.io` and
   vendored here, each recording its source and revision.
 - **Ready when:** now.
@@ -470,11 +483,17 @@ done or declined. A nit that needs more explanation is an issue.
 - `execute --via ssh` sends a multi-line script as one prompt (CR line breaks,
   #576). An opt-in line-by-line mode (one prompt per line, as the console
   would run typed lines) could come later if a caller needs it.
-- The MAC-Telnet L2 integration files hang now and then on macOS, a different
-  one per full run, and pass on a rerun (#659). They passed with no hang on
-  Linux (2026-11-12).
 - `.github/instructions/`: trim Copilot-era verbosity when the TIKOCI-wide
   files are collected in `tikoci.github.io`.
+- Error fields: `docs/CONSTITUTION.md` → Error model specifies `message` and
+  `fix`, but `serializeCentrsError` emits `summary`, `message`, `remediation`,
+  `detailsUrl` and `details_url`; reconcile the spec and the code.
+- `src/mcp/server.ts`: the server instructions describe the envelope as
+  `{ ok, data?|error, warnings, meta }` and leave out `tips`.
+- Error pages: re-pass the 99 pages written before #659 against the page
+  contract (#659 phase 4); every page since follows it.
+- `docs/errors/routeros/unknown-path.md` does not say that 0.1.x also used the
+  code for a missing item, before #659 split out `routeros/no-such-item`.
 - `test/integration/api-stream-command.test.ts` fails intermittently in the
   unit tier: its fake server sends "Invalid RouterOS API length descriptor
   0xfb" (1 of 7 local runs, 2026-11-05).
