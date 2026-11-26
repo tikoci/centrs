@@ -293,6 +293,25 @@ function outputLines(text: string, cols: number): string[] {
 	return lines.map((line) => line.replace(/ +$/, ""));
 }
 
+/**
+ * The index of the last character of the escape sequence that starts at
+ * `plain[at]` (CSI sequences are already removed): ESC, any intermediates
+ * (0x20–0x2F), then a final character (0x30–0x7E). A bare ESC followed by
+ * anything else is dropped alone, so a TAB, control or Unicode character
+ * after it stays output.
+ */
+function escapeEnd(plain: string, at: number): number {
+	let k = at + 1;
+	while (
+		k < plain.length &&
+		plain.charCodeAt(k) >= 0x20 &&
+		plain.charCodeAt(k) <= 0x2f
+	)
+		k++;
+	const final = plain.charCodeAt(k);
+	return final >= 0x30 && final <= 0x7e ? k : at;
+}
+
 /** The console's position in the printed value, as `outputLines` describes. */
 type ConsolePosition = { position: number; nextWrap: number; cols: number };
 
@@ -327,9 +346,13 @@ function screenRow(raw: string, at: ConsolePosition): string {
 			at.position = 0;
 			at.nextWrap = at.cols + 1;
 			rowStart = 0;
-		} else if (code === 0x1b) j++;
-		else if (code === 0x08) at.position = Math.max(0, at.position - 1);
-		else if (code === 0x09 && at.position < at.nextWrap - 2) {
+		} else if (code === 0x1b) j = escapeEnd(plain, j);
+		else if (code === 0x08) {
+			// BS takes one position back; on screen it stops at the row's first
+			// column, so the row's start follows it down.
+			at.position = Math.max(0, at.position - 1);
+			rowStart = Math.min(rowStart, at.position);
+		} else if (code === 0x09 && at.position < at.nextWrap - 2) {
 			const from = cell();
 			at.position = (Math.floor(at.position / 8) + 1) * 8;
 			const stop = cell();

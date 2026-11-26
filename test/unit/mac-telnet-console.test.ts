@@ -573,6 +573,18 @@ describe("extractCommandOutput — control characters and screen edits (#575 rev
 		// cspell:ignore ABCDEFGHZ
 		["a TAB after CR moves past text", "ABCDEFGH\r\tZ", "ABCDEFGHZ"],
 		["a TAB after CR fills only blank cells", "ABC\r\tZ", "ABC\tZ"],
+		["BS at the start of a row after LF", "abc\n\bXY", "abc\nXY"],
+		[
+			"a bare ESC before a TAB drops only the ESC",
+			"before\u001b\tZ",
+			"before\tZ",
+		],
+		[
+			"a bare ESC before a surrogate pair",
+			"before\u001b\u{1d11e}after",
+			"before\u{1d11e}after",
+		],
+		["a two-character escape is dropped whole", "a\u001byb", "ab"],
 	];
 	for (const [label, row, expected] of cases) {
 		test(label, () => {
@@ -581,6 +593,12 @@ describe("extractCommandOutput — control characters and screen edits (#575 rev
 			);
 		});
 	}
+	test("BS at the start of a wrapped row (16 columns)", () => {
+		const row = `${"x".repeat(17)}\r\n\bYZ`;
+		expect(extractCommandOutput(withOutput(row), ascii.command, 16)).toBe(
+			`${"x".repeat(17)}YZ`,
+		);
+	});
 	test("a TAB at the wrap edge takes no column (16 columns)", () => {
 		const row = `${"x".repeat(16)}\t\bY`;
 		expect(extractCommandOutput(withOutput(row), ascii.command, 16)).toBe(
