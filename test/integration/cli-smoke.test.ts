@@ -423,6 +423,46 @@ describe("CLI smoke (real subprocess, no network)", () => {
 		});
 	});
 
+	test("a working-directory .env never sets CENTRS_* (#666)", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "centrs-dotenv-smoke-"));
+		try {
+			await Bun.write(
+				join(cwd, ".env"),
+				"CENTRS_FORMAT=json\nCENTRS_INSECURE=1\nCENTRS_PASSWORD_FILE=/nonexistent/id_ed25519\n",
+			);
+			const res = await runCliProcess({
+				args: ["settings", "print", "--json"],
+				cwd,
+				env: { HOME: cwd, XDG_CONFIG_HOME: cwd },
+			});
+			expect(res.exitCode).toBe(0);
+			expect(res.stderrText).toContain("warning [settings/dotenv-ignored]");
+			expect(res.stderrText).toContain("CENTRS_PASSWORD_FILE");
+			const envelope = JSON.parse(res.stdoutText) as {
+				data: Record<string, { source: { kind: string } }>;
+			};
+			expect(envelope.data["format"]?.source.kind).toBe("default");
+			expect(envelope.data["insecure"]?.source.kind).toBe("default");
+
+			// A value the shell exports is still the process environment. Only
+			// Linux can tell it apart (`/proc/self/environ`); elsewhere a key the
+			// `.env` names is dropped either way.
+			if (process.platform !== "linux") return;
+			const exported = await runCliProcess({
+				args: ["explain", "/ip/route"],
+				cwd,
+				env: { HOME: cwd, XDG_CONFIG_HOME: cwd, CENTRS_FORMAT: "json" },
+			});
+			expect(exported.exitCode).toBe(0);
+			const explained = JSON.parse(exported.stdoutText) as {
+				meta: { settings: { format?: { kind: string } } };
+			};
+			expect(explained.meta.settings.format?.kind).toBe("env");
+		} finally {
+			await rm(cwd, { recursive: true, force: true });
+		}
+	});
+
 	test("explain says out loud when a piped script was NOT the input", async () => {
 		// The positional wins (the arguments asked for it), but the result carries
 		// `usage/stdin-ignored` so the dropped pipe is never silent. Proving the

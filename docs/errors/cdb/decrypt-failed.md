@@ -20,8 +20,7 @@ A missing password is a different code:
 
 - Use the password the CDB was saved with: the WinBox address-book password,
   or the one given to `centrs devices init --encrypt` or `devices encrypt`.
-- Check that `CENTRS_CDB_PASSWORD` is not set to an old value, in the shell
-  or in a `.env` file centrs loads.
+- Check that `CENTRS_CDB_PASSWORD` is not set to an old value in the shell.
 - There is no way to recover a forgotten password. `devices encrypt` keeps a
   plaintext snapshot unless `--no-backup` was passed.
 

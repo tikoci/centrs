@@ -676,6 +676,7 @@ export {
 	type SelectionMember,
 	type SelectionResolveInput,
 	type SelectionWhereClause,
+	stripBunDotenvKeys,
 	type TargetResolveInput,
 	type TargetSelection,
 	toCoreSource,

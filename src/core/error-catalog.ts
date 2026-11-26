@@ -556,6 +556,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 			"`settings set` accepted a syntactically valid value with a real, non-obvious consequence (e.g. a global --insecure default, or a transfer-via value gated elsewhere).",
 	},
 	{
+		code: "settings/dotenv-ignored",
+		summary:
+			"CENTRS_* keys that Bun loaded from the working directory's .env were ignored (warning, on stderr).",
+	},
+	{
 		code: "settings/invalid-boolean",
 		summary: "A boolean-like setting received a non-boolean value.",
 	},

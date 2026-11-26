@@ -16,6 +16,10 @@ import { runVersionCli } from "./cli/version.ts";
 import { asCentrsError, formatCentrsErrorText } from "./errors.ts";
 import { describeCentrs, implementedSurfaces } from "./index.ts";
 import { protocolPlans } from "./protocols/index.ts";
+import {
+	dotenvGuardWarning,
+	stripBunDotenvKeys,
+} from "./resolver/dotenv-guard.ts";
 
 /** Every CLI command's metadata, in help/docs order. `scripts/gen-cli-docs.ts` renders `docs/CLI.md` from this. */
 export const cliCommands: ReadonlyArray<CliCommandMetadata> = [
@@ -178,5 +182,9 @@ export async function runCli(
 }
 
 if (import.meta.main) {
+	// #666: a cloned repo's `.env` must not reach centrs's settings through
+	// Bun's auto-load. Strip before any command reads `process.env`.
+	const dotenv = stripBunDotenvKeys();
+	if (dotenv.ignored.length > 0) console.error(dotenvGuardWarning(dotenv));
 	process.exitCode = await runCli();
 }

@@ -225,6 +225,19 @@ canonical `CENTRS_FORMAT=` line. It is **user-global only** — the single XDG
 path above; there is no project-local config file discovered from the working
 directory.
 
+**A working-directory `.env` is not read** (#666). Bun loads `.env`,
+`.env.local` and `.env.<mode>` from the working directory into `process.env`
+for any script it runs, so the CLI and `centrs mcp` entries remove every
+`CENTRS_*` key those files supplied before resolving a setting, and print
+`warning [settings/dotenv-ignored]` on stderr naming the keys (never their
+values). A cloned repo therefore cannot turn on `CENTRS_INSECURE` or point
+`CENTRS_CDB_FILE` or a `*_FILE` key somewhere. On Linux, a key the shell also
+exported with the same value is kept (`/proc/self/environ` holds the
+exec-time environment); elsewhere a key the file names is dropped even then.
+The shebang stays `env bun` (no `env -S bun --no-env-file`): BusyBox `env` (Alpine,
+`oven/bun:alpine`) has no `-S`. A library caller passes its own `env`; the
+guard is exported as `stripBunDotenvKeys` for one that wants it.
+
 **The `config` precedence layer** — `src/resolver/config-file.ts` resolves
 `${XDG_CONFIG_HOME:-~/.config}/tikoci/centrs.env` (injectable `env` map,
 mirroring `defaultCdbPath`) and `loadEnvFileDefaults()` parses it into a flat
