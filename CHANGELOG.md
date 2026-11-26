@@ -200,6 +200,9 @@ publish `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
   one per test (#612). `CENTRS_CHR_REUSE=0` restores private boots.
 - Bump `@tikoci/quickchr` to `^0.5.4`: its snapshot operations get their own
   monitor timeouts (quickchr#80).
+- The CMR integration lab defaults to RouterOS 7.26beta5 and finishes a
+  half-paired client (7.26beta3+) before testing; `execute --cmr` examples
+  record the beta3/beta4 behavior splits (#527).
 - A new `components/` tree holds specs for parts of centrs that span commands,
   starting with `components/cmr/`. The matrix's side tables merge into one
   Components table, and its parked themes gain CMR across surfaces,

@@ -111,7 +111,9 @@ stores:
 So `centrs retrieve edge1 /ip/address` works with no flags: `edge1` is looked
 up in the CDB, its credentials and address come along for the ride. A target
 that *isn't* in the CDB still works, but then `--username` / `--password` (or
-`CENTRS_USERNAME` / `CENTRS_PASSWORD`) become mandatory.
+`CENTRS_USERNAME` / `CENTRS_PASSWORD`) become mandatory. `--password-file` /
+`CENTRS_PASSWORD_FILE` reads the password from a file instead, such as a
+container's `/run/secrets/<name>`.
 
 ### Overloading the comment: per-device settings as `key=value`
 
@@ -151,7 +153,13 @@ never breaks anything.
 Settings resolve lowest-to-highest: **built-in defaults → user config file
 (`centrs.env`) → comment-kv → `CENTRS_*` env → CLI flag / API arg.** Every
 result envelope reports which source won each setting under `meta.settings`,
-so you can always see *why* a given port or transport was chosen.
+so you can always see *why* a given port or transport was chosen. A `.env`
+file in the working directory is not one of these sources: the CLI and
+`centrs mcp` ignore it and warn `settings/dotenv-ignored` when it names
+`CENTRS_*` keys. On Linux an exported variable survives; on macOS and Windows a
+key the `.env` names is dropped even if the shell exported it, so an exported
+`CENTRS_PASSWORD_FILE` named there too can leave a command with no password.
+Remove the key from the `.env`, or pass it as a flag (`--password-file`).
 
 ### Groups, discovery, and the MCP allowlist all ride on the CDB
 
