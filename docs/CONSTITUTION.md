@@ -279,8 +279,9 @@ Lowest to highest priority:
 `meta.settings` reports the winning source for each resolved setting.
 
 A working directory's `.env` is not a tier. Bun auto-loads it into
-`process.env`, so the CLI and MCP entries strip the `CENTRS_*` keys it supplied
-before resolving anything (#666; mechanics in `commands/settings/README.md`).
+`process.env`, so when it did, the CLI and MCP entries re-launch under
+`bun --no-env-file` with the launch environment before resolving anything
+(#666; mechanics in `commands/settings/README.md`).
 
 **Secrets come as a value or a file** (#672). The CDB key
 (`--cdb-password` / `CENTRS_CDB_PASSWORD`) and the target password

@@ -5,9 +5,12 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { btestServer } from "../../src/btest.ts";
+import { parseExplainCliArgs } from "../../src/cli/explain.ts";
+import { discover } from "../../src/discover.ts";
 import { CentrsError } from "../../src/errors.ts";
 import {
 	addDevice,
@@ -15,6 +18,7 @@ import {
 	listDevices,
 	loadCdb,
 	resolveAuth,
+	resolveCdb,
 	retrieveEnvelope,
 } from "../../src/index.ts";
 import { resolveMcpConfig } from "../../src/mcp/config.ts";
@@ -26,6 +30,7 @@ import {
 	readSecretFile,
 	TARGET_PASSWORD_SECRET,
 } from "../../src/resolver/secret-source.ts";
+import { settingsPrint } from "../../src/settings.ts";
 import { closedPort } from "./closed-port.ts";
 import { HERMETIC_ENV } from "./hermetic-env.ts";
 
@@ -318,5 +323,94 @@ describe("centrs mcp", () => {
 				},
 			}),
 		).toThrow(expect.objectContaining({ code: "usage/conflicting-flags" }));
+	});
+});
+
+describe("review follow-ups (#674)", () => {
+	test("btest server: a missing file or a conflict is an error envelope", async () => {
+		const dir = await sandbox();
+		const missing = await btestServer({
+			username: "u",
+			passwordFile: join(dir, "nope"),
+			env: {},
+		});
+		expect(missing.ok).toBe(false);
+		if (!missing.ok) {
+			expect(missing.error.code).toBe("auth/password-unavailable");
+		}
+		const conflict = await btestServer({
+			username: "u",
+			password: "p",
+			passwordFile: join(dir, "nope"),
+			env: {},
+		});
+		expect(conflict.ok).toBe(false);
+		if (!conflict.ok)
+			expect(conflict.error.code).toBe("usage/conflicting-flags");
+	});
+
+	test("discover --save: a key-source conflict is an envelope, before listening", async () => {
+		let listened = false;
+		const envelope = await discover({
+			save: true,
+			cdbPassword: "v",
+			cdbPasswordFile: "/run/secrets/k",
+			env: {},
+			listen: async () => {
+				listened = true;
+				throw new Error("must not listen");
+			},
+		});
+		expect(listened).toBe(false);
+		expect(envelope.ok).toBe(false);
+		if (!envelope.ok)
+			expect(envelope.error.code).toBe("usage/conflicting-flags");
+	});
+
+	test("an env key file pins the lookup only when the CDB exists", async () => {
+		const home = await sandbox();
+		const keyFile = join(home, "cdb_key");
+		await writeFile(keyFile, KEY);
+		const env = { HOME: home, CENTRS_CDB_PASSWORD_FILE: keyFile };
+		const input = { targetInput: "router.example.net" };
+		// No CDB: literal host, nothing created (an image-wide default is safe).
+		expect(await resolveCdb(input, env)).toBeUndefined();
+		const cdbFile = join(home, ".config", "tikoci", "winbox.cdb");
+		expect(await Bun.file(cdbFile).exists()).toBe(false);
+		// Encrypted CDB present: a name it lacks is a miss, as with CENTRS_CDB_PASSWORD.
+		await mkdir(join(home, ".config", "tikoci"), { recursive: true });
+		await initCdb({ cdbFile, encrypt: true, cdbPasswordFile: keyFile });
+		const error = await caught(() => resolveCdb(input, env));
+		expect(error.code).toBe("cdb/not-found-target");
+	});
+
+	test("offline explain treats both file flags as live-only", () => {
+		expect(
+			parseExplainCliArgs(["/ip/route", "--password-file", "/x"]),
+		).toMatchObject({ connectionFlag: "--password-file" });
+		expect(
+			parseExplainCliArgs(["/ip/route", "--cdb-password-file", "/x"]),
+		).toMatchObject({ connectionFlag: "--cdb-password-file" });
+	});
+
+	test("settings print and a plain devices init say a key file was not needed", async () => {
+		const dir = await sandbox();
+		const cdbFile = join(dir, "winbox.cdb");
+		const missing = join(dir, "not-mounted");
+		const init = await initCdb({ cdbFile, cdbPasswordFile: missing });
+		expect(init.warnings).toEqual([
+			expect.objectContaining({
+				code: "cdb/password-not-needed",
+				context: expect.objectContaining({ exists: false }),
+			}),
+		]);
+		const printed = await settingsPrint({
+			cdbFile,
+			cdbPasswordFile: missing,
+			env: { XDG_CONFIG_HOME: dir, HOME: dir },
+		});
+		expect(printed.warnings.map((warning) => warning.code)).toContain(
+			"cdb/password-not-needed",
+		);
 	});
 });

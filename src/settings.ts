@@ -683,6 +683,7 @@ async function probeDefaultDevice(
 		SettingsPrintArgs,
 		"cdbFile" | "cdbPassword" | "cdbPasswordFile" | "env"
 	>,
+	warnings: Warning[],
 ): Promise<SettingsDefaultDeviceSummary> {
 	const settings = resolveDevicesSettings({
 		cdbFile: args.cdbFile,
@@ -699,6 +700,10 @@ async function probeDefaultDevice(
 		cdbPasswordFile: args.cdbPasswordFile,
 		env: args.env,
 	});
+	// An unneeded or missing key file on an open CDB (#672) is said here too.
+	for (const warning of cdb.warnings) {
+		if (warning.code === "cdb/password-not-needed") warnings.push(warning);
+	}
 	const entry = cdb.entries.find(
 		(candidate) => candidate.target === DEFAULT_RECORD_TARGET,
 	);
@@ -747,7 +752,7 @@ export async function settingsPrint(
 	if (args.all) {
 		data.unrecognized = collectUnrecognized(lines);
 	}
-	data.defaultDevice = await probeDefaultDevice(args);
+	data.defaultDevice = await probeDefaultDevice(args, warnings);
 
 	if (args.skipEnvFile) {
 		warnings.push({

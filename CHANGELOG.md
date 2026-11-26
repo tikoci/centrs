@@ -35,12 +35,14 @@ publish `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
 
 ### Changed
 
-- **A working-directory `.env` no longer sets `CENTRS_*`** (#666). Bun
-  auto-loads `.env`, `.env.local` and `.env.<mode>` into `process.env`; the
-  CLI and `centrs mcp` entries now remove the `CENTRS_*` keys those files
-  supplied and print `settings/dotenv-ignored` on stderr. On Linux a key the
-  shell exported with the same value is kept; elsewhere it is dropped too.
-  `.env.example` is gone.
+- **A working-directory `.env` no longer reaches centrs** (#666). Bun
+  auto-loads `.env`, `.env.local` and `.env.<mode>` into `process.env` and
+  reads its own startup settings from them; when it did, the CLI and
+  `centrs mcp` entries now re-launch once under `bun --no-env-file` with the
+  launch environment, and print `settings/dotenv-ignored` on stderr naming
+  the `CENTRS_*` keys ignored. On Linux the launch environment is exact;
+  elsewhere a key a `.env` file names is dropped even if the shell exported
+  it, except `PATH`, `HOME` and the like. `.env.example` is gone.
 
 - **Error codes:** RouterOS's `no such …` answers now split by meaning
   (#659, CHR 7.25.1 and 7.24.6). A missing item in a menu that exists

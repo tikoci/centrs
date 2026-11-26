@@ -228,16 +228,21 @@ directory.
 
 **A working-directory `.env` is not read** (#666). Bun loads `.env`,
 `.env.local` and `.env.<mode>` from the working directory into `process.env`
-for any script it runs, so the CLI and `centrs mcp` entries remove every
-`CENTRS_*` key those files supplied before resolving a setting, and print
-`warning [settings/dotenv-ignored]` on stderr naming the keys (never their
-values). A cloned repo therefore cannot turn on `CENTRS_INSECURE` or point
-`CENTRS_CDB_FILE` or a `*_FILE` key somewhere. On Linux, a key the shell also
-exported with the same value is kept (`/proc/self/environ` holds the
-exec-time environment); elsewhere a key the file names is dropped even then.
-The shebang stays `env bun` (no `env -S bun --no-env-file`): BusyBox `env` (Alpine,
-`oven/bun:alpine`) has no `-S`. A library caller passes its own `env`; the
-guard is exported as `stripBunDotenvKeys` for one that wants it.
+for any script it runs, and reads some of its own settings from them at
+startup (`BUN_CONFIG_VERBOSE_FETCH` would print a REST Basic credential).
+So when Bun loaded one, the CLI and `centrs mcp` entries re-launch once
+under `bun --no-env-file` with the environment centrs was started with, and
+print `warning [settings/dotenv-ignored]` on stderr naming the `CENTRS_*`
+keys ignored (never their values). A cloned repo therefore cannot turn on
+`CENTRS_INSECURE`, point `CENTRS_CDB_FILE`, a `*_FILE` key or
+`XDG_CONFIG_HOME` somewhere, or switch on Bun's fetch logging. On Linux the
+child gets exactly the exec-time environment (`/proc/self/environ`), and the
+re-launch happens only when Bun changed it. Elsewhere, every key a Bun `.env`
+file names is dropped except the variables the OS always sets (`PATH`,
+`HOME`, …); a shell export of a dropped key is lost too, which fails safe.
+The shebang stays `env bun` (no `env -S bun --no-env-file`): BusyBox `env`
+(Alpine, `oven/bun:alpine`) has no `-S`. A library caller passes its own
+`env`.
 
 **The `config` precedence layer** — `src/resolver/config-file.ts` resolves
 `${XDG_CONFIG_HOME:-~/.config}/tikoci/centrs.env` (injectable `env` map,

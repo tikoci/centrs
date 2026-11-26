@@ -18,7 +18,12 @@
  */
 
 import { createSocket } from "node:dgram";
-import type { CentrsEnvelope, EnvelopeMeta, Tip } from "./core/envelope.ts";
+import type {
+	CentrsEnvelope,
+	EnvelopeMeta,
+	SettingSource,
+	Tip,
+} from "./core/envelope.ts";
 import { buildTip } from "./core/envelope.ts";
 import {
 	MNDP_BROADCAST_ADDRESS,
@@ -664,19 +669,28 @@ function discoverMeta(
 	operation: DiscoverOperationMeta,
 	options: DiscoverOptions,
 ): EnvelopeMeta<DiscoverOperationMeta> {
-	const settings = resolveDevicesSettings({
-		cdbFile: options.cdbFile,
-		cdbPassword: options.cdbPassword,
-		cdbPasswordFile: options.cdbPasswordFile,
-		env: options.env ?? {},
-	});
+	// Error envelopes call this too, so it must not throw: an unresolvable CDB
+	// source (a value/file conflict, #672) leaves the CDB settings out, and the
+	// error itself says why.
+	let cdbSettings: Record<string, SettingSource> = {};
+	try {
+		const settings = resolveDevicesSettings({
+			cdbFile: options.cdbFile,
+			cdbPassword: options.cdbPassword,
+			cdbPasswordFile: options.cdbPasswordFile,
+			env: options.env ?? {},
+		});
+		cdbSettings = {
+			cdbFile: settings.cdbFile.source,
+			cdbPassword: settings.cdbPassword.source,
+		};
+	} catch {}
 	return {
 		target: {},
 		via: "mndp",
 		settings: {
 			timeoutMs: { kind: options.timeoutMs !== undefined ? "cli" : "default" },
-			cdbFile: settings.cdbFile.source,
-			cdbPassword: settings.cdbPassword.source,
+			...cdbSettings,
 		},
 		operation,
 	};
@@ -697,6 +711,16 @@ export async function discover(
 
 	let result: ListenMndpResult;
 	try {
+		// A `--save` run checks its CDB key sources before listening, so a
+		// value/file conflict fails fast instead of after the listen window.
+		if (options.save) {
+			resolveDevicesSettings({
+				cdbFile: options.cdbFile,
+				cdbPassword: options.cdbPassword,
+				cdbPasswordFile: options.cdbPasswordFile,
+				env: options.env ?? {},
+			});
+		}
 		result = await listen({
 			timeoutMs,
 			port: options.port,

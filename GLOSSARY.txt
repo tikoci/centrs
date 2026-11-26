@@ -861,3 +861,9 @@ pids
 EOPNOTSUPP # operating-system error: the requested operation is not supported
 ENOSYS # operating-system error: the requested function is not implemented
 NTFS # Windows filesystem supporting the hard links used by the CDB lock
+# Dotenv guard (#666): environment variables the OS always sets, kept on re-launch
+LOGNAME
+LOCALAPPDATA # Windows per-user local application data directory
+SYSTEMROOT # Windows system directory variable
+WINDIR # Windows directory variable
+PATHEXT # Windows executable extensions variable

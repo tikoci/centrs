@@ -1,8 +1,10 @@
 # `settings/dotenv-ignored`
 
 A warning, printed on stderr before the command runs: Bun loaded `CENTRS_*`
-keys from a `.env` file in the working directory, and centrs removed them.
-The command then ran as if they were unset.
+keys from a `.env` file in the working directory, so centrs re-ran itself
+under `bun --no-env-file` with the environment it was started with. The
+command then ran as if those keys, and anything else the file set, were
+unset.
 
 centrs reads settings from flags, the process environment, `centrs.env` and
 the CDB. A repository's `.env` is none of those, and a cloned repo must not be
@@ -14,9 +16,9 @@ warning names the keys and files, never the values.
 
 - Running `centrs`, or an agent host starting `centrs mcp`, inside a project
   whose `.env`, `.env.local` or `.env.development` sets `CENTRS_*` *(code)*.
-- On macOS or Windows, a key the shell exported that the same `.env` also
+- On macOS or Windows, a key the shell exported that a `.env` file also
   names. Only Linux can tell the two apart, so elsewhere it is dropped too
-  *(code)*.
+  *(code)*. `PATH`, `HOME` and other variables the OS always sets are kept.
 
 ## Fix
 

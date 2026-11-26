@@ -561,17 +561,6 @@ export async function btestServer(
 	const authenticate = request.authenticate ?? true;
 	const maxSessions = request.maxSessions ?? DEFAULT_MAX_SESSIONS;
 	const allocateFrom = request.allocateUdpPortsFrom ?? BTEST_UDP_PORT_START;
-	// Resolve the single accepted credential through the same path as the client
-	// (flags first, then CENTRS_USERNAME / CENTRS_PASSWORD). No CDB here — the
-	// server has no target device.
-	const auth = resolveAuth(
-		{
-			username: request.username,
-			password: request.password,
-			passwordFile: request.passwordFile,
-		},
-		request.env ?? Bun.env,
-	);
 	const operation: BtestServerOperationMeta = {
 		command: "btest",
 		mode: "server",
@@ -579,7 +568,21 @@ export async function btestServer(
 		port,
 	};
 
+	let auth: ReturnType<typeof resolveAuth>;
 	try {
+		// Resolve the single accepted credential through the same path as the
+		// client (flags first, then CENTRS_USERNAME / CENTRS_PASSWORD and the
+		// file forms). No CDB here — the server has no target device. Inside the
+		// envelope boundary: a missing password file or a value/file conflict is
+		// an error envelope, not a rejected call (#672).
+		auth = resolveAuth(
+			{
+				username: request.username,
+				password: request.password,
+				passwordFile: request.passwordFile,
+			},
+			request.env ?? Bun.env,
+		);
 		validateServerOptions(request);
 		// authenticate=true (the default) without a credential would bind a server
 		// that rejects every client — fail fast instead.

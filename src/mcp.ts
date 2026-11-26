@@ -29,11 +29,7 @@ export async function runMcp(
 }
 
 if (import.meta.main) {
-	// #666, as in `src/cli.ts`: no `CENTRS_*` from the working directory's `.env`.
-	const { dotenvGuardWarning, stripBunDotenvKeys } = await import(
-		"./resolver/dotenv-guard.ts"
-	);
-	const dotenv = stripBunDotenvKeys();
-	if (dotenv.ignored.length > 0) console.error(dotenvGuardWarning(dotenv));
-	process.exitCode = await runMcp();
+	// #666, as in `src/cli.ts`: never run with the working directory's `.env`.
+	const { runWithoutDotenv } = await import("./resolver/dotenv-guard.ts");
+	process.exitCode = await runWithoutDotenv(() => runMcp());
 }

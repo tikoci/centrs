@@ -58,10 +58,6 @@ export {
 	type SettingsFileContents,
 } from "./config-file.ts";
 export {
-	type DotenvGuardResult,
-	stripBunDotenvKeys,
-} from "./dotenv-guard.ts";
-export {
 	type AltitudeType,
 	type BboxPredicate,
 	canonicalizeGeoKey,

@@ -84,7 +84,7 @@ export interface DevicesSettings {
 		provided: boolean;
 		/**
 		 * The file the password comes from (#672). `value` stays `""` until a
-		 * load that needs the key reads it ({@link readCdbPasswordFile}).
+		 * load that needs the key reads it (`readCdbPasswordFile`).
 		 */
 		file?: string;
 	};
@@ -441,7 +441,11 @@ export async function initCdb(
 			encrypted: options.encrypt === true,
 			recordCount: 0,
 		},
-		warnings: [],
+		// A key given to a plain `init` is unused, as on an open-CDB load.
+		warnings:
+			!options.encrypt && settings.cdbPassword.provided
+				? [cdbPasswordNotNeeded(settings)]
+				: [],
 		tips: [],
 		meta: devicesMeta("init", settings),
 	};

@@ -52,6 +52,9 @@ describe("centrs mcp keyed from a password file (stdio)", () => {
 		const cdbFile = join(dir, "winbox.cdb");
 		const keyFile = join(dir, "cdb_key");
 		await writeFile(keyFile, `${KEY}\n`);
+		// A repo `.env` in the server's cwd: the entry re-launches under
+		// `--no-env-file` (#666), so this also proves stdio survives that.
+		await writeFile(join(dir, ".env"), "CENTRS_INSECURE=1\n");
 		await initCdb({ cdbFile, encrypt: true, cdbPasswordFile: keyFile });
 		await addDevice({
 			cdb: await loadCdb({ cdbFile, cdbPasswordFile: keyFile }),

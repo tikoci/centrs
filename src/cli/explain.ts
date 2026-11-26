@@ -577,11 +577,13 @@ const LIVE_CONNECTION_FLAGS = new Set([
 	"--user",
 	"-u",
 	"--password",
+	"--password-file",
 	"-p",
 	"--timeout",
 	"--insecure",
 	"--cdb-file",
 	"--cdb-password",
+	"--cdb-password-file",
 	"--resolve",
 ]);
 

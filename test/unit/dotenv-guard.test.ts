@@ -1,6 +1,8 @@
 /**
- * #666: `CENTRS_*` keys that Bun auto-loads from the working directory's
- * `.env` files are stripped before centrs resolves any setting.
+ * #666: a working directory's `.env` never reaches centrs. When Bun loaded
+ * one, the entry re-launches under `bun --no-env-file` with the environment
+ * it was started with (`planDotenvRelaunch`). Subprocess coverage, including
+ * Bun's own startup settings, is in `test/integration/cli-smoke.test.ts`.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -8,10 +10,9 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-	bunDotenvFileNames,
 	dotenvGuardWarning,
 	dotenvKeyNames,
-	stripBunDotenvKeys,
+	planDotenvRelaunch,
 } from "../../src/resolver/dotenv-guard.ts";
 
 let dir: string;
@@ -24,121 +25,120 @@ afterEach(async () => {
 	await rm(dir, { recursive: true, force: true });
 });
 
-describe("bunDotenvFileNames (Bun 1.4.4, measured)", () => {
-	test("development is the default mode and loads .env.local", () => {
-		expect(bunDotenvFileNames(undefined)).toEqual([
-			".env",
-			".env.development",
-			".env.development.local",
-			".env.local",
-		]);
-		expect(bunDotenvFileNames("staging")).toEqual(
-			bunDotenvFileNames(undefined),
-		);
-	});
-
-	test("production and test modes; test skips .env.local", () => {
-		expect(bunDotenvFileNames("production")).toContain(".env.production");
-		expect(bunDotenvFileNames("production")).toContain(".env.local");
-		expect(bunDotenvFileNames("test")).toEqual([
-			".env",
-			".env.test",
-			".env.test.local",
-		]);
-	});
-});
-
 describe("dotenvKeyNames", () => {
-	test("reads names only: export prefix, spaces, comments", () => {
+	test("reads names only: export, spaces, colon form, CR-only lines", () => {
 		const keys = dotenvKeyNames(
-			'# CENTRS_COMMENTED=1\nexport CENTRS_A=1\n  CENTRS_B = "x y"\r\nnot a line\nCENTRS_C=$HOME\n',
+			'# CENTRS_COMMENTED=1\nexport CENTRS_A=1\n  CENTRS_B = "x y"\r\nCENTRS_C: colon\rCENTRS_D=cr\rnot a line\n',
 		);
-		expect([...keys].sort()).toEqual(["CENTRS_A", "CENTRS_B", "CENTRS_C"]);
+		expect([...keys].sort()).toEqual([
+			"CENTRS_A",
+			"CENTRS_B",
+			"CENTRS_C",
+			"CENTRS_D",
+		]);
 	});
 });
 
-describe("stripBunDotenvKeys", () => {
-	test("a .env CENTRS_INSECURE and CENTRS_PASSWORD_FILE have no effect", async () => {
+describe("planDotenvRelaunch with the exec-time environment (Linux)", () => {
+	test("any key Bun added or changed is dropped; the child gets the launch env", () => {
+		const plan = planDotenvRelaunch({
+			env: {
+				PATH: "/bin",
+				CENTRS_INSECURE: "1",
+				XDG_CONFIG_HOME: "/repo/cfg",
+				BUN_CONFIG_VERBOSE_FETCH: "curl",
+				NODE_ENV: "test",
+			},
+			execArgv: [],
+			initialEnviron: new Map([["PATH", "/bin"]]),
+		});
+		expect(plan?.env).toEqual({ PATH: "/bin" });
+		expect(plan?.dropped).toEqual([
+			"BUN_CONFIG_VERBOSE_FETCH",
+			"CENTRS_INSECURE",
+			"NODE_ENV",
+			"XDG_CONFIG_HOME",
+		]);
+	});
+
+	test("an unchanged environment runs in place", () => {
+		expect(
+			planDotenvRelaunch({
+				env: { CENTRS_INSECURE: "0" },
+				execArgv: [],
+				initialEnviron: new Map([["CENTRS_INSECURE", "0"]]),
+			}),
+		).toBeUndefined();
+	});
+
+	test("an already --no-env-file process never re-launches", () => {
+		expect(
+			planDotenvRelaunch({
+				env: { CENTRS_INSECURE: "1" },
+				execArgv: ["--no-env-file"],
+				initialEnviron: new Map(),
+			}),
+		).toBeUndefined();
+	});
+});
+
+describe("planDotenvRelaunch without it (macOS, Windows)", () => {
+	test("keys any Bun .env file names are dropped, whatever NODE_ENV says now", async () => {
+		await writeFile(join(dir, ".env"), "NODE_ENV=test\nPATH=/evil\n");
 		await writeFile(
-			join(dir, ".env"),
-			"CENTRS_INSECURE=1\nCENTRS_PASSWORD_FILE=/home/u/.ssh/id_ed25519\nOTHER=1\n",
+			join(dir, ".env.development"),
+			"CENTRS_FORMAT=json\nXDG_CONFIG_HOME=/repo\n",
 		);
-		const env: Record<string, string | undefined> = {
-			CENTRS_INSECURE: "1",
-			CENTRS_PASSWORD_FILE: "/home/u/.ssh/id_ed25519",
-			OTHER: "1",
-		};
-		const result = stripBunDotenvKeys({
-			env,
+		await writeFile(
+			join(dir, ".env.local"),
+			"BUN_CONFIG_VERBOSE_FETCH: curl\r",
+		);
+		const plan = planDotenvRelaunch({
+			env: {
+				PATH: "/usr/bin",
+				NODE_ENV: "test",
+				CENTRS_FORMAT: "json",
+				XDG_CONFIG_HOME: "/repo",
+				BUN_CONFIG_VERBOSE_FETCH: "curl",
+				CENTRS_VIA: "ssh",
+			},
 			cwd: dir,
-			initialEnviron: new Map(),
-		});
-		expect(result).toEqual({
-			ignored: ["CENTRS_INSECURE", "CENTRS_PASSWORD_FILE"],
-			files: [".env"],
-		});
-		expect(env).toEqual({ OTHER: "1" });
-	});
-
-	test("a key the process started with is kept (exec-time environ known)", async () => {
-		await writeFile(join(dir, ".env"), "CENTRS_INSECURE=1\n");
-		await writeFile(join(dir, ".env.local"), "CENTRS_VIA=ssh\n");
-		const env: Record<string, string | undefined> = {
-			CENTRS_INSECURE: "0",
-			CENTRS_VIA: "ssh",
-		};
-		const result = stripBunDotenvKeys({
-			env,
-			cwd: dir,
-			initialEnviron: new Map([["CENTRS_INSECURE", "0"]]),
-		});
-		expect(result.ignored).toEqual(["CENTRS_VIA"]);
-		expect(result.files).toEqual([".env.local"]);
-		expect(env).toEqual({ CENTRS_INSECURE: "0" });
-	});
-
-	test("without the exec-time environ, any named key is dropped (fail safe)", async () => {
-		await writeFile(join(dir, ".env"), "CENTRS_INSECURE=1\n");
-		const env: Record<string, string | undefined> = { CENTRS_INSECURE: "0" };
-		const result = stripBunDotenvKeys({
-			env,
-			cwd: dir,
+			execArgv: [],
 			initialEnviron: null,
 		});
-		expect(result.ignored).toEqual(["CENTRS_INSECURE"]);
-		expect(env["CENTRS_INSECURE"]).toBeUndefined();
+		expect(plan?.dropped).toEqual([
+			"BUN_CONFIG_VERBOSE_FETCH",
+			"CENTRS_FORMAT",
+			"NODE_ENV",
+			"XDG_CONFIG_HOME",
+		]);
+		// PATH keeps the shell's value, which already beat the file's.
+		expect(plan?.env).toEqual({ PATH: "/usr/bin", CENTRS_VIA: "ssh" });
 	});
 
-	test("NODE_ENV=test does not consult .env.local", async () => {
-		await writeFile(join(dir, ".env.local"), "CENTRS_VIA=ssh\n");
-		const env: Record<string, string | undefined> = {
-			NODE_ENV: "test",
-			CENTRS_VIA: "ssh",
-		};
-		const result = stripBunDotenvKeys({
-			env,
-			cwd: dir,
-			initialEnviron: new Map(),
-		});
-		expect(result.ignored).toEqual([]);
-		expect(env["CENTRS_VIA"]).toBe("ssh");
-	});
-
-	test("no .env files: nothing changes", () => {
-		const env: Record<string, string | undefined> = { CENTRS_INSECURE: "1" };
+	test("no .env files: run in place", () => {
 		expect(
-			stripBunDotenvKeys({ env, cwd: dir, initialEnviron: new Map() }),
-		).toEqual({ ignored: [], files: [] });
-		expect(env["CENTRS_INSECURE"]).toBe("1");
+			planDotenvRelaunch({
+				env: { CENTRS_INSECURE: "1" },
+				cwd: dir,
+				execArgv: [],
+				initialEnviron: null,
+			}),
+		).toBeUndefined();
 	});
+});
 
-	test("the warning names keys and files, never values", () => {
+describe("dotenvGuardWarning", () => {
+	test("names CENTRS_* keys only, never values; silent otherwise", () => {
 		const line = dotenvGuardWarning({
-			ignored: ["CENTRS_CDB_PASSWORD"],
-			files: [".env"],
+			env: {},
+			dropped: ["CENTRS_CDB_PASSWORD_FILE", "DATABASE_URL"],
 		});
 		expect(line).toStartWith("warning [settings/dotenv-ignored]: ");
-		expect(line).toContain("CENTRS_CDB_PASSWORD");
-		expect(line).toContain(".env");
+		expect(line).toContain("CENTRS_CDB_PASSWORD_FILE");
+		expect(line).not.toContain("DATABASE_URL");
+		expect(
+			dotenvGuardWarning({ env: {}, dropped: ["DATABASE_URL"] }),
+		).toBeUndefined();
 	});
 });
