@@ -164,8 +164,12 @@ export function emulateScreen(text: string): string[] {
  * A reply without that framing falls back to the screen: the first line is the
  * echo, or, with `command`, as many screen columns as the command is long.
  */
-export function extractCommandOutput(raw: string, command?: string): string {
-	const framed = framedOutput(raw);
+export function extractCommandOutput(
+	raw: string,
+	command?: string,
+	cols = 512,
+): string {
+	const framed = framedOutput(raw, cols);
 	if (framed !== undefined) return framed.join("\n");
 	const lines = emulateScreen(raw);
 	const body =
@@ -176,35 +180,87 @@ export function extractCommandOutput(raw: string, command?: string): string {
 /** `ESC[9999B` (cursor to the last row) starts every prompt the console draws. */
 const PROMPT_MARK = `${ESC}[9999B`;
 /** After a line has run, the prompt is drawn on a cleared row. */
-const FRESH_PROMPT = `${PROMPT_MARK}${ESC}[K`;
+const CLEAR_ROW = `${ESC}[K`;
 /** An echo ends with CRLF + CR; a wrap inside it is a bare CRLF. */
 const ECHO_END = "\r\n\r";
 
-function framedOutput(raw: string): string[] | undefined {
+type PromptMark = { at: number; fresh: boolean };
+
+/**
+ * The next prompt the console drew. A real one follows a CR and is followed
+ * by the prompt itself (`[user@host] …> ` or `{... `), after `ESC[K` when the
+ * prompt is fresh; the same bytes printed by a command (`:put "\1B[9999B"`)
+ * do not have that shape and stay output.
+ */
+function nextPromptMark(raw: string, from: number): PromptMark | undefined {
+	let at = raw.indexOf(PROMPT_MARK, from);
+	while (at !== -1) {
+		let after = at + PROMPT_MARK.length;
+		const fresh = raw.startsWith(CLEAR_ROW, after);
+		if (fresh) after += CLEAR_ROW.length;
+		const prompt = raw.startsWith("[", after) || raw.startsWith("{...", after);
+		if (at > 0 && raw[at - 1] === "\r" && prompt) return { at, fresh };
+		at = raw.indexOf(PROMPT_MARK, at + 1);
+	}
+	return undefined;
+}
+
+function framedOutput(raw: string, cols: number): string[] | undefined {
 	if (!raw.includes(ECHO_END)) return undefined;
 	const out: string[] = [];
 	let from = 0;
 	while (from < raw.length) {
-		const mark = raw.indexOf(PROMPT_MARK, from);
-		const segment = raw.slice(from, mark === -1 ? raw.length : mark);
-		const completionList = mark !== -1 && !raw.startsWith(FRESH_PROMPT, mark);
-		if (!completionList) {
+		const mark = nextPromptMark(raw, from);
+		const segment = raw.slice(from, mark?.at ?? raw.length);
+		// A redraw without `ESC[K` follows a TAB completion list: same input.
+		if (mark === undefined || mark.fresh) {
 			const echoEnd = segment.indexOf(ECHO_END);
 			if (echoEnd !== -1) {
 				// Every output line ends with CRLF, so the last row is the
 				// leftover before the next prompt; a blank line before it is output
 				// (`:put ""`). A reply cut off before its next prompt keeps the old
 				// trailing-prompt trim.
-				const rows = emulateScreen(segment.slice(echoEnd + ECHO_END.length));
-				if (mark === -1) out.push(...trimTrailingPrompts(rows));
+				const rows = unwrapRows(
+					emulateScreen(segment.slice(echoEnd + ECHO_END.length)),
+					cols,
+				);
+				if (mark === undefined) out.push(...trimTrailingPrompts(rows));
 				else {
 					if (rows[rows.length - 1] === "") rows.pop();
 					out.push(...rows);
 				}
 			}
 		}
-		if (mark === -1) break;
-		from = mark + PROMPT_MARK.length;
+		if (mark === undefined) break;
+		from = mark.at + PROMPT_MARK.length;
+	}
+	return out;
+}
+
+/**
+ * Rejoin output lines the console wrapped at the terminal width. It breaks a
+ * line after `cols + 1` characters on its first row and `cols` on each later
+ * row, and always emits that CRLF, so a full row is followed either by the
+ * rest of the line or, when the line ended exactly there, by an empty row
+ * (CHR 7.23.1, 7.23.8, 7.24.5 at 512 columns).
+ */
+function unwrapRows(rows: string[], cols: number): string[] {
+	const out: string[] = [];
+	let continuing = false;
+	for (const row of rows) {
+		if (continuing) {
+			const line = out.pop() as string;
+			if (row === "") {
+				out.push(line);
+				continuing = false;
+				continue;
+			}
+			out.push(line + row);
+			continuing = row.length >= cols;
+			continue;
+		}
+		out.push(row);
+		continuing = row.length >= cols + 1;
 	}
 	return out;
 }
@@ -371,7 +427,10 @@ export class MacTelnetConsole {
 			`running over mac-telnet: ${cli}`,
 		);
 		const raw = this.buffer;
-		return { output: extractCommandOutput(raw, cli), raw };
+		return {
+			output: extractCommandOutput(raw, cli, this.options.cols),
+			raw,
+		};
 	}
 
 	/**
