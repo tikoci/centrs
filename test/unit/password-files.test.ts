@@ -379,7 +379,8 @@ describe("centrs mcp", () => {
 				await handleRetrieve({ ...args, timeout: "2s" }, config),
 			);
 			expect(text).toContain("auth/password-unavailable");
-			expect(text).toContain(missing);
+			// As it appears inside JSON (Windows backslashes are escaped).
+			expect(text).toContain(JSON.stringify(missing).slice(1, -1));
 		}
 	});
 
