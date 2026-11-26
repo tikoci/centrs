@@ -186,6 +186,15 @@ maintainer adds it here.
 3. **[Devices and onboarding](#devices-and-onboarding).** Port discovery
    moves from `check` into `devices`, so an agent can add a device without
    reading `/ip/service` and storing ports by hand.
+4. **Password files (#672)**, for an app-t3code release: the CDB key and the
+   target password read from a file (`--cdb-password-file` /
+   `CENTRS_CDB_PASSWORD_FILE`, `--password-file` / `CENTRS_PASSWORD_FILE`),
+   as a container's `/run/secrets` provides. It goes ahead of
+   [Auth and secrets](#auth-and-secrets) because only flags and the process
+   environment may name the file. That rule needs #666 first: until then a
+   cloned repo's `.env` reaches the process environment through Bun. A
+   record password keeps `devices add|set --password-stdin < <file>`; #672's
+   `devices --password-file` was dropped.
 
 ## Parked themes
 
@@ -307,7 +316,12 @@ that keeps growing is being used as an issue.
   `centrs.env`, the device property and quickchr provenance, with uneven
   rules and warnings; it needs the same review.
 - **Ready when:** workspace and local state is done, because the workspace
-  trust rule bounds the unlock channel.
+  trust rule bounds the unlock channel. The file form (#672) goes first: only
+  a flag or the process environment may name a `*_FILE` path, never
+  `centrs.env` or a workspace file, so workspace trust does not bound it.
+  Value, file and a later command are one choice per secret (setting two is a
+  usage error), resolved in one place and read on each CDB load. Removing a
+  file after import is the host's job, not centrs's.
 - **Absorbed:** #420, #542, #603.
 
 ### Batch reads and sessions
