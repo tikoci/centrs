@@ -19,15 +19,21 @@ MCP results and resources always redact them. `--password-stdin` on
 `devices add`/`set` keeps record passwords out of process arguments.
 See the [devices contract](commands/devices/README.md#record-password-in-output).
 
-Since 0.2.0, `--password-file` / `CENTRS_PASSWORD_FILE` and
-`--cdb-password-file` / `CENTRS_CDB_PASSWORD_FILE` read the target password
-and the CDB key from a file, such as a container's `/run/secrets/<name>`, so
-neither has to sit in process arguments or the environment (#672). Only flags
-and the process environment may name such a file: `settings set` refuses the
-keys and the `centrs.env` loader drops them. `meta.settings` reports the file
-source, never its contents. A working-directory `.env` no longer reaches
-centrs: Bun auto-loads it, so the CLI and `centrs mcp` re-launch without it and
-warn `settings/dotenv-ignored` (#666).
+In the 0.2.0 previews (`0.2.0-next.N`), `--password-file` /
+`CENTRS_PASSWORD_FILE` and `--cdb-password-file` / `CENTRS_CDB_PASSWORD_FILE`
+(library: `passwordFile`, `cdbPasswordFile`) read the target password and the
+CDB key from a file, such as a container's `/run/secrets/<name>`, so neither
+has to sit in process arguments or the environment (#672). A flag, a library
+argument or the process environment may name such a file; a stored
+configuration may not: `settings set` refuses the keys and the `centrs.env`
+loader drops them, so a shared or cloned config cannot point centrs at another
+file. `meta.settings` reports the file source, never its contents.
+
+Bun auto-loads a working-directory `.env` into `process.env`. The CLI and
+`centrs mcp` entries re-launch without it and warn `settings/dotenv-ignored`
+when it names `CENTRS_*` keys (#666). A library caller is not re-launched:
+run its Bun process with `--no-env-file` (or from a directory without a
+`.env`) to keep such a file out of centrs's settings.
 
 CDB encryption is explicit: `devices init --encrypt` creates an encrypted
 registry, and `devices encrypt` converts an existing open CDB. Conversion
