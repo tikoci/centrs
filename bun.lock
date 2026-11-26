@@ -10,7 +10,6 @@
       },
       "devDependencies": {
         "@biomejs/biome": "2.6.8",
-        "@secretlint/secretlint-rule-preset-recommend": "^13.0.7",
         "@types/bun": "1.4.4",
         "cloc": "^2.6.0-cloc",
         "cspell": "^10.3.6",
@@ -226,8 +225,6 @@
     "@secretlint/profiler": ["@secretlint/profiler@14.0.1", "", {}, "sha512-BW+5m2f4dk2/lhyRwk9/Sp3Vr/DklC0CNxobTrjuodgbUH5iYChmP1sIgA13qgkGhoMPcfyVO2GbwtLQSVWFIw=="],
 
     "@secretlint/resolver": ["@secretlint/resolver@14.0.1", "", {}, "sha512-4dVn4kOFgs0yzoe5CeActSwTu8wKIDdKn9MtxnWHvnY72MR7sU8kYuTiVSGkLVpcvhdVQiHdzD9rx8qSBGZitw=="],
-
-    "@secretlint/secretlint-rule-preset-recommend": ["@secretlint/secretlint-rule-preset-recommend@13.1.0", "", {}, "sha512-dPnplMyjJYpVCJDNTjpUA8c/AfoHbWANJJJWKroK50DGGhAB4Oumzk+XinBMyMMAwgOsjU9CB9lUHXDvObMVCg=="],
 
     "@secretlint/source-creator": ["@secretlint/source-creator@14.0.1", "", { "dependencies": { "@secretlint/types": "14.0.1", "istextorbinary": "^9.5.0" } }, "sha512-90hxGIvpxpTw6/BO/Srh/ilmz6R3rukaFX4LLd98w8orRMv9ckdhl4aW0JU/7NK9G+fUN919h6nVAFND7Slo4w=="],
 

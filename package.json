@@ -13,7 +13,6 @@
 	"license": "MIT",
 	"devDependencies": {
 		"@biomejs/biome": "2.6.8",
-		"@secretlint/secretlint-rule-preset-recommend": "^13.0.7",
 		"@types/bun": "1.4.4",
 		"cloc": "^2.6.0-cloc",
 		"cspell": "^10.3.6",
