@@ -147,7 +147,7 @@ const SYNTAX = { "7.25": "validation/syntax", "7.23.8": "validation/syntax" };
 // does not.
 const EXPECTED: Record<
 	string,
-	{ device: Record<string, string>; offline: "pass" | "fail" }
+	{ device: Record<string, string>; offline: "pass" | "warn" | "fail" }
 > = {
 	"apply-operator": { device: ACCEPTED, offline: "pass" },
 	"apply-operator-declared": { device: ACCEPTED, offline: "pass" },
@@ -186,7 +186,8 @@ const EXPECTED: Record<
 		},
 		offline: "pass",
 	},
-	"control-unknown-command": { device: SYNTAX, offline: "pass" },
+	// #572: the bracketed unknown command warns like its top-level form.
+	"control-unknown-command": { device: SYNTAX, offline: "warn" },
 };
 
 describe("corrected anchors against recorded device :parse (#374)", () => {

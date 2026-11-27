@@ -1611,6 +1611,14 @@ export function explainCommand(
 	// segments and pairing the two by index attaches the wrong span to every statement after
 	// the first block. Each split carries its own document-space span.
 	//
+	// The verb reader warns on a bracket it read (#572). A bracket it never
+	// read — a `[$f]` call or a `[(…)]` expression has no command head — stays
+	// silent: the device accepts those (fixture rows `trailing-selector*`).
+	const bracketReadings = brackets.resolutions.map((r) => ({
+		read: !bracketRefused(r),
+		subcommand: subcommandOf(r),
+	}));
+	const subcommands = bracketReadings.map(({ subcommand }) => subcommand);
 	const readStatements: ExplainStatement[] = verbs.splits.map((split, index) =>
 		statementOf(
 			split,
@@ -1699,6 +1707,9 @@ export function explainCommand(
 			pairs.filter((pair) => pair.valueShaped).map(spacedArgumentDiagnostic),
 		),
 		...statements.flatMap((s) => diagnosticsForStatement(s)),
+		...bracketReadings.flatMap(({ read, subcommand }) =>
+			read ? abstentionDiagnostics(subcommand) : [],
+		),
 	].sort(compareExplainDiagnostics);
 
 	const valueFacts = valuesOf(
@@ -1800,7 +1811,7 @@ export function explainCommand(
 		statements,
 		blocks,
 		containsWrite: renderWriteVerdict(write.verdict),
-		subcommands: brackets.resolutions.map(subcommandOf),
+		subcommands,
 		// `containsWrite` is the fact `structure` itself asserts; the statements
 		// and subcommands beside it carry their own.
 		ev: EV.write,
@@ -2707,23 +2718,27 @@ function enforceGateParity(
 	return out;
 }
 
+/** Q3 refused the bracket: it found no command head to read. */
+function bracketRefused(r: Resolution): boolean {
+	return r.unresolved !== undefined || r.path === null;
+}
+
 /** One `[…]` substitution in the envelope's vocabulary. See {@link ExplainSubcommand}. */
 function subcommandOf(r: Resolution): ExplainSubcommand {
 	// Q3 refused: the bracket is unreadable and Q6's reading of the same text
 	// cannot promote it.
-	const reading =
-		r.unresolved !== undefined || r.path === null
-			? {
-					resolution: "unknown" as const,
-					unresolved: r.unresolved ?? "no reading of this substitution",
-				}
-			: readingOf(
-					resolveVerb(
-						r.inner,
-						r.context,
-						rangeForResolution(r) ?? documentRange(r.inner),
-					),
-				);
+	const reading = bracketRefused(r)
+		? {
+				resolution: "unknown" as const,
+				unresolved: r.unresolved ?? "no reading of this substitution",
+			}
+		: readingOf(
+				resolveVerb(
+					r.inner,
+					r.context,
+					rangeForResolution(r) ?? documentRange(r.inner),
+				),
+			);
 	return {
 		owner: `s${r.owner}`,
 		span: { start: r.span.start, end: r.span.end },
@@ -2765,16 +2780,39 @@ function renderWriteVerdict(verdict: WriteVerdict): boolean | "unknown" {
 	return verdict === "unknown" ? "unknown" : verdict === "true";
 }
 
+/** Per-statement diagnostics: the abstentions plus the #192 context signal. */
+function diagnosticsForStatement(s: ExplainStatement): ExplainDiagnostic[] {
+	const out = abstentionDiagnostics(s);
+	// The #192 signal: a reading that is CORRECT while the document context was
+	// already lost. Info severity — the statement resolved without consuming the
+	// context, so nothing about it is wrong; a consumer ranking readings or
+	// offering completions is the one that needs to know.
+	if (s.resolution === "resolved" && !s.contextCertain)
+		out.push({
+			code: "explain/canonicalizer/context-lost",
+			severity: "info",
+			message:
+				"resolved without the document's menu context, which an earlier unreadable statement destroyed",
+			span: s.span,
+			ev: s.ev,
+		});
+	return out;
+}
+
 /**
- * Per-statement diagnostics — the abstentions, said out loud.
+ * The abstentions, said out loud — for a statement or a `[…]` subcommand alike.
  *
  * A refusal is a first-class result, not an error: `ambiguous` and `unknown` are
  * the ratified vocabulary for "the input has several valid schema-free readings"
  * and "analysis cannot safely recover one". They are WARNINGS, never errors, so
  * the default `--fail-on error` does not fail a document whose only sin is being
- * unreadable without a schema — which is most of RouterOS scripting.
+ * unreadable without a schema — which is most of RouterOS scripting. The same
+ * refusal inside brackets is the same abstention (#572), so it gets the same
+ * code, spanned on the substitution.
  */
-function diagnosticsForStatement(s: ExplainStatement): ExplainDiagnostic[] {
+function abstentionDiagnostics(
+	s: ExplainStatement | ExplainSubcommand,
+): ExplainDiagnostic[] {
 	const out: ExplainDiagnostic[] = [];
 	if (s.resolution === "ambiguous")
 		out.push({
@@ -2791,19 +2829,6 @@ function diagnosticsForStatement(s: ExplainStatement): ExplainDiagnostic[] {
 			code: "explain/canonicalizer/unresolved-statement",
 			severity: "warning",
 			message: s.unresolved ?? "no safe reading of this statement",
-			span: s.span,
-			ev: s.ev,
-		});
-	// The #192 signal: a reading that is CORRECT while the document context was
-	// already lost. Info severity — the statement resolved without consuming the
-	// context, so nothing about it is wrong; a consumer ranking readings or
-	// offering completions is the one that needs to know.
-	if (s.resolution === "resolved" && !s.contextCertain)
-		out.push({
-			code: "explain/canonicalizer/context-lost",
-			severity: "info",
-			message:
-				"resolved without the document's menu context, which an earlier unreadable statement destroyed",
 			span: s.span,
 			ev: s.ev,
 		});

@@ -307,3 +307,46 @@ test.skipIf(process.env["CENTRS_CHECK_CORPUS"] !== "1")(
 	},
 	120_000,
 );
+
+// #572: a bracketed subcommand the verb reader cannot place gets the warning
+// its top-level form gets, spanned on the substitution, never an error.
+test.each([
+	[
+		":local varID [nosuchcmd where name=x]",
+		"explain/canonicalizer/unresolved-statement",
+		{ start: 13, end: 37 },
+	],
+	[
+		":put [nosuchcmd]",
+		"explain/canonicalizer/unresolved-statement",
+		{ start: 5, end: 16 },
+	],
+	[
+		":put [/ip/address/nosuchverb]",
+		"explain/canonicalizer/ambiguous-statement",
+		{ start: 5, end: 29 },
+	],
+])(
+	"a bracketed abstention warns like its statement: %s",
+	(input, code, span) => {
+		const result = explainCommand(input);
+		expect(result.verdict).toBe("warn");
+		expect(
+			result.diagnostics.map((d) => ({
+				code: d.code,
+				severity: d.severity,
+				span: d.span,
+			})),
+		).toEqual([{ code, severity: "warning", span }]);
+	},
+);
+
+test("a bracket with no command head stays silent (#572)", () => {
+	// `[$f]` and `[(…)]` are a call and an expression, not commands, and the
+	// device accepts them (corrected-anchors rows `trailing-selector*`).
+	for (const input of [":put [$f]", ":put [$f arg=1]", ":put [($a . $b)]"]) {
+		const result = explainCommand(input);
+		expect(result.structure.subcommands[0]?.resolution).toBe("unknown");
+		expect(result.verdict).toBe("pass");
+	}
+});
