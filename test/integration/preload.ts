@@ -31,16 +31,17 @@
 import { afterAll } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { prefetch } from "../../scripts/chr-prefetch.ts";
 import { disposeProcessChrReuse, isChrIntegrationEnabled } from "./chr.ts";
 
 if (isChrIntegrationEnabled()) {
 	// quickchr's own rule (`getDataDir` in its `state.ts`, not exported):
 	// QUICKCHR_DATA_DIR, else the local app-data dir on Windows, else
-	// HOME || USERPROFILE.
+	// HOME || USERPROFILE. Resolved to an absolute path, so a relative HOME
+	// still names one registry for every process, whatever its cwd.
 	if (!process.env["QUICKCHR_DATA_DIR"] && process.platform !== "win32") {
-		process.env["QUICKCHR_DATA_DIR"] = join(
+		process.env["QUICKCHR_DATA_DIR"] = resolve(
 			process.env["HOME"] || process.env["USERPROFILE"] || "",
 			".local",
 			"share",
