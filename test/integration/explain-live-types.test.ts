@@ -9,6 +9,7 @@ import {
 	typeProbeScript,
 } from "../../src/explain-live-types.ts";
 import { createProtocolAdapter } from "../../src/protocols/index.ts";
+import { HERMETIC_ENV } from "../unit/hermetic-env.ts";
 import {
 	isChrIntegrationEnabled,
 	recordIntegrationEvidence,
@@ -270,7 +271,7 @@ describeFast("explain live value types (#225)", () => {
 async function recordingBackend(connection: { quickchr: string; via: string }) {
 	const resolved = await resolveApiRequest(
 		{ ...connection, endpoint: "/system/resource", validate: true },
-		{},
+		HERMETIC_ENV,
 	);
 	const adapter = createProtocolAdapter({
 		protocol: resolved.via.value,

@@ -31,6 +31,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { btestClient } from "../../src/btest.ts";
+import { HERMETIC_ENV } from "../unit/hermetic-env.ts";
 import {
 	isChrIntegrationEnabled,
 	recordIntegrationEvidence,
@@ -86,7 +87,7 @@ describeFast(
 						direction: "receive",
 						durationMs: CYCLE_MS,
 						intervalMs: 1000,
-						env: {},
+						env: HERMETIC_ENV,
 						...args,
 					});
 

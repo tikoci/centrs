@@ -5,6 +5,11 @@
 - Collect coverage for trend visibility, not as a percentage gate.
 - Put long-running, RouterOS-backed, or platform-specific tests under `test/integration/` and wire them through QA or lab workflows. "Platform-specific" includes process-level tests that spawn the real `src/cli.ts` through `cli-process.ts` — including the **network-free** CLI smoke tier (`cli-smoke.test.ts`), which is not CHR-gated and so runs in the fast push/PR gate (`bun test`).
 - Keep fixtures under `test/fixtures/` with clear source/provenance notes.
+- Both tiers run with a sandbox HOME (`test/unit/preload.ts`,
+  `test/integration/preload.ts`), but Bun fixes `os.homedir()` at startup. A
+  call that hands centrs its own env map passes `HERMETIC_ENV`
+  (`test/unit/hermetic-env.ts`) or a map with its own `HOME`, never a bare `{}`
+  — that falls back to the developer's real CDB and `centrs.env` (#654).
 
 ## Device-dependent expectations: declare the split, and prove it on long-term
 

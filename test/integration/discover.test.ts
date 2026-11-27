@@ -37,6 +37,7 @@ import {
 import { loadCdb, showDevice } from "../../src/devices.ts";
 import { discover } from "../../src/discover.ts";
 import { parseCommentKv } from "../../src/resolver/comment-kv.ts";
+import { HERMETIC_ENV } from "../unit/hermetic-env.ts";
 import {
 	isChrIntegrationEnabled,
 	MNDP_DISCOVER_INTERVAL_SINCE,
@@ -172,7 +173,7 @@ describeFast("discover over MNDP against CHR (socket-connect L2)", () => {
 				sendRefresh: false,
 				save: true,
 				cdbFile: cdbPath,
-				env: {},
+				env: HERMETIC_ENV,
 				signal: controller.signal,
 				onBound: (port) => bridge.setUdpTarget(port, "127.0.0.1"),
 			});
@@ -300,7 +301,7 @@ describeFast("discover over MNDP against CHR (socket-connect L2)", () => {
 			// --save persisted the neighbor (no IPv4 on ether2 → MAC target).
 			expect(envelope.meta.operation?.saved?.added ?? 0).toBeGreaterThan(0);
 			expect(envelope.meta.operation?.saved?.group).toBe("discovered");
-			const cdb = await loadCdb({ cdbFile: cdbPath, env: {} });
+			const cdb = await loadCdb({ cdbFile: cdbPath, env: HERMETIC_ENV });
 			const shown = showDevice({ cdb, target: match.mac ?? "" });
 			expect(shown.ok).toBe(true);
 			if (!shown.ok) return;

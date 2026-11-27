@@ -12,6 +12,7 @@
 import { describe, expect, test } from "bun:test";
 import { apiEnvelope } from "../../src/api.ts";
 import { executeEnvelope } from "../../src/execute.ts";
+import { HERMETIC_ENV } from "../unit/hermetic-env.ts";
 import {
 	isChrIntegrationEnabled,
 	readEnv,
@@ -85,7 +86,7 @@ describeFast("no such item vs unknown path against CHR (R4, #659)", () => {
 					yes: true,
 					stdinIsTty: false,
 				},
-				{},
+				HERMETIC_ENV,
 			);
 			expect(added.ok).toBe(true);
 			for (const via of ["rest-api", "native-api"] as const) {
@@ -98,7 +99,7 @@ describeFast("no such item vs unknown path against CHR (R4, #659)", () => {
 				for (const { command, validate, code } of cases) {
 					const envelope = await executeEnvelope(
 						{ ...base, command, validate, yes: true, stdinIsTty: false },
-						{},
+						HERMETIC_ENV,
 					);
 					expect(
 						envelope.ok ? "ok" : envelope.error.code,
@@ -126,7 +127,7 @@ describeFast("no such item vs unknown path against CHR (R4, #659)", () => {
 						yes: true,
 						stdinIsTty: false,
 					},
-					{},
+					HERMETIC_ENV,
 				);
 				expect(
 					parsed.ok ? "ok" : parsed.error.code,

@@ -8,6 +8,7 @@ import {
 } from "../../src/explain-live.ts";
 import type { ExplainLiveFacets } from "../../src/explain-live-facets.ts";
 import { createProtocolAdapter } from "../../src/protocols/index.ts";
+import { HERMETIC_ENV } from "../unit/hermetic-env.ts";
 import {
 	isChrIntegrationEnabled,
 	recordIntegrationEvidence,
@@ -331,7 +332,7 @@ describeFast("explain live describe and completion (#492)", () => {
 				const truncated = await explainLiveEnvelope(
 					{ ...connection, input: "/ip", schema: true },
 					{},
-					{},
+					HERMETIC_ENV,
 				);
 				expect(truncated.ok).toBe(true);
 				expect(truncated.tips.map((tip) => tip.code)).toContain(
@@ -340,7 +341,7 @@ describeFast("explain live describe and completion (#492)", () => {
 				const badCursor = await explainLiveEnvelope(
 					{ ...connection, input: "/ip", complete: true, cursor: 4 },
 					{},
-					{},
+					HERMETIC_ENV,
 				);
 				expect(badCursor.ok).toBe(false);
 				if (!badCursor.ok)
@@ -398,7 +399,7 @@ describeFast("explain live describe and completion (#492)", () => {
 async function recordingBackend(connection: { quickchr: string; via: string }) {
 	const resolved = await resolveApiRequest(
 		{ ...connection, endpoint: "/system/resource", validate: true },
-		{},
+		HERMETIC_ENV,
 	);
 	const adapter = createProtocolAdapter({
 		protocol: resolved.via.value,
