@@ -1429,6 +1429,12 @@ function scanInterpolations(
 ): void {
 	const { text, start: lo, end: hi } = range;
 	for (let i = lo; i < hi - 1; i++) {
+		// `\$[` is literal text: the escape spends the `$` (CHR, the execute
+		// canonicalizer contract), so skip the escaped character whatever it is.
+		if (text[i] === "\\") {
+			i++;
+			continue;
+		}
 		if (text[i] !== "$" || text[i + 1] !== "[") continue;
 		const scanned = scanStringInterpolation(text, i + 1, hi);
 		const end = scanned.end;

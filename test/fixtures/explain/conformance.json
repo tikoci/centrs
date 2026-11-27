@@ -32,8 +32,8 @@
 		}
 	},
 	"offline": {
-		"pass": 607,
-		"warn": 78,
+		"pass": 604,
+		"warn": 81,
 		"fail": 190
 	},
 	"device": {
@@ -138,7 +138,7 @@
 		"wiresage-conformance/parameters-and-flags/r11.rsc": "pass; device embedded-diagnostic",
 		"wiresage-conformance/parameters-and-flags/r12.rsc": "pass; device embedded-diagnostic",
 		"wiresage-conformance/parameters-and-flags/r2.rsc": "pass; device embedded-diagnostic",
-		"wiresage-conformance/parameters-and-flags/r20.rsc": "pass; device embedded-diagnostic",
+		"wiresage-conformance/parameters-and-flags/r20.rsc": "warn; device embedded-diagnostic",
 		"wiresage-conformance/parameters-and-flags/r22.rsc": "pass; device embedded-diagnostic",
 		"wiresage-conformance/parameters-and-flags/r23.rsc": "pass; device embedded-diagnostic",
 		"wiresage-conformance/parameters-and-flags/r3.rsc": "pass; device embedded-diagnostic",

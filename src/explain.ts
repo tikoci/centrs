@@ -1611,11 +1611,12 @@ export function explainCommand(
 	// segments and pairing the two by index attaches the wrong span to every statement after
 	// the first block. Each split carries its own document-space span.
 	//
-	// The verb reader warns on a bracket it read (#572). A bracket it never
-	// read — a `[$f]` call or a `[(…)]` expression has no command head — stays
-	// silent: the device accepts those (fixture rows `trailing-selector*`).
+	// A bracketed command that cannot be placed warns like its statement form
+	// (#572). A bracket with no command in it — a `[$f]` call, a `[(…)]`
+	// expression, a pasted prompt — stays silent: the device accepts those
+	// (fixture rows `trailing-selector*`).
 	const bracketReadings = brackets.resolutions.map((r) => ({
-		read: !bracketRefused(r),
+		read: !bracketHasNoCommand(r),
 		subcommand: subcommandOf(r),
 	}));
 	const subcommands = bracketReadings.map(({ subcommand }) => subcommand);
@@ -2718,9 +2719,17 @@ function enforceGateParity(
 	return out;
 }
 
-/** Q3 refused the bracket: it found no command head to read. */
+/** Q3 refused the bracket, so the verb reader never sees it. */
 function bracketRefused(r: Resolution): boolean {
 	return r.unresolved !== undefined || r.path === null;
+}
+
+/**
+ * Q3 found no command head: a `[$f]` call, a `[(…)]` expression or a pasted
+ * prompt. A variable path segment or a lost context still has one.
+ */
+function bracketHasNoCommand(r: Resolution): boolean {
+	return r.path === null && r.tokens.length === 0;
 }
 
 /** One `[…]` substitution in the envelope's vocabulary. See {@link ExplainSubcommand}. */

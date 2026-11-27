@@ -101,13 +101,17 @@ publish `0.2.0-next.<run_number>` to `@next`; `@latest` stays on 0.1.10.
 - `explain` warns on an unknown or ambiguous command inside `[ … ]` (#572),
   the same `explain/canonicalizer/unresolved-statement` or
   `ambiguous-statement` warning its top-level form already got, spanned on
-  the substitution: `:put [/ip/address/nosuchverb]` was `pass`. It stays a
-  warning, never an error. A bracket with no command head, such as `[$f]` or
-  `[($a . $b)]`, stays silent, as before. On the pinned 948-script corpus,
-  14 scripts move from `pass` to `warn`: 3 that every recorded RouterOS
-  version rejects, and 11 it accepts, which the offline reader cannot place
-  at the top level either (colon-less builtins like `[typeof $b]`, bare
-  no-argument commands like `[/terminal/inkey]`).
+  the substitution: `:put [/ip/address/nosuchverb]` and
+  `:put [/ip/$menu/x]` were `pass`. It stays a warning, never an error. A
+  bracket with no command in it, such as `[$f]` or `[($a . $b)]`, stays
+  silent, as before, and an escaped `\$[…]` inside a string is now read as
+  text rather than as a substitution. On the pinned 948-script corpus, 14
+  scripts move from `pass` to `warn`: 3 that every recorded RouterOS version
+  rejects, and 11 it accepts, which the offline reader cannot place at the
+  top level either (colon-less builtins like `[typeof $b]`, bare no-argument
+  commands like `[/terminal/inkey]`). In the 875-case conformance set, 3 move:
+  `parameters-and-flags/r20` (rejected), `colon-prefix/p3` and `p12`
+  (accepted, colon-less builtins).
 - `execute --via mac-telnet` returns the command's output without its echo
   (#575). The reader skipped as many screen columns as the command was long,
   but the console's echo differs from the bytes sent: it drops a trailing

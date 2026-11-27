@@ -495,6 +495,10 @@ done or declined. A nit that needs more explanation is an issue.
 - `explain` offline: `/system/script/run staticUrl` reads as `ambiguous`
   "bare path, nothing follows", so a positional operand after `run` is taken
   for a path segment (seen in the #572 corpus census).
+- `explain` offline: inside a non-ASCII statement (or one behind a BOM),
+  bracket spans widen to the whole statement (`pathresolve.ts` `Loc`
+  fallback), so two `[…]` warnings there are identical; mapping them through
+  `coordinates.runs` as #523 did for blocks would keep each bracket distinct.
 - `.github/instructions/`: trim Copilot-era verbosity when the TIKOCI-wide
   files are collected in `tikoci.github.io`.
 - Error fields: `docs/CONSTITUTION.md` → Error model specifies `message` and
