@@ -487,6 +487,18 @@ done or declined. A nit that needs more explanation is an issue.
   columns, and a wide table prints `Columns: -- (terminal too narrow)` instead
   of its rows. Logging in as `user+<cols>w` (honored by non-interactive SSH
   since 7.22; measured on CHR 7.23.8 and 7.24.5 for #676) keeps the columns.
+- `explain` offline: colon-less builtins (`typeof $b`, `[pick $s 0 3]`) read
+  as `bare-word head is not a known verb` and warn, at the top level and in
+  brackets since #572, though RouterOS accepts them; 9 of the 11
+  device-accepted scripts that #572 moved to `warn` are this shape or
+  `[/terminal/inkey]`.
+- `explain` offline: `/system/script/run staticUrl` reads as `ambiguous`
+  "bare path, nothing follows", so a positional operand after `run` is taken
+  for a path segment (seen in the #572 corpus census).
+- `explain` offline: inside a non-ASCII statement (or one behind a BOM),
+  bracket spans widen to the whole statement (`pathresolve.ts` `Loc`
+  fallback), so two `[…]` warnings there are identical; mapping them through
+  `coordinates.runs` as #523 did for blocks would keep each bracket distinct.
 - `.github/instructions/`: trim Copilot-era verbosity when the TIKOCI-wide
   files are collected in `tikoci.github.io`.
 - Error fields: `docs/CONSTITUTION.md` → Error model specifies `message` and

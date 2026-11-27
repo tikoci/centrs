@@ -307,3 +307,73 @@ test.skipIf(process.env["CENTRS_CHECK_CORPUS"] !== "1")(
 	},
 	120_000,
 );
+
+// #572: a bracketed subcommand the verb reader cannot place gets the warning
+// its top-level form gets, spanned on the substitution, never an error.
+test.each([
+	[
+		":local varID [nosuchcmd where name=x]",
+		"explain/canonicalizer/unresolved-statement",
+		{ start: 13, end: 37 },
+	],
+	[
+		":put [nosuchcmd]",
+		"explain/canonicalizer/unresolved-statement",
+		{ start: 5, end: 16 },
+	],
+	[
+		":put [/ip/address/nosuchverb]",
+		"explain/canonicalizer/ambiguous-statement",
+		{ start: 5, end: 29 },
+	],
+	[
+		":put [/ip/$menu/nosuchcmd]",
+		"explain/canonicalizer/unresolved-statement",
+		{ start: 5, end: 26 },
+	],
+	[
+		':put "$[nosuchcmd]"',
+		"explain/canonicalizer/unresolved-statement",
+		{ start: 6, end: 18 },
+	],
+])(
+	"a bracketed abstention warns like its statement: %s",
+	(input, code, span) => {
+		const result = explainCommand(input);
+		expect(result.verdict).toBe("warn");
+		expect(
+			result.diagnostics.map((d) => ({
+				code: d.code,
+				severity: d.severity,
+				span: d.span,
+			})),
+		).toEqual([{ code, severity: "warning", span }]);
+	},
+);
+
+test("a bracket under a variable path warns on itself and its child (#572)", () => {
+	// Q3 refuses the outer bracket (variable path segment) and so loses the
+	// inner one's menu context; both are commands, so both abstain out loud.
+	const result = explainCommand(":put [/interface/$type/get [nosuchcmd]]");
+	expect(result.verdict).toBe("warn");
+	expect(result.diagnostics.map((d) => [d.code, d.span])).toEqual([
+		["explain/canonicalizer/unresolved-statement", { start: 5, end: 39 }],
+		["explain/canonicalizer/unresolved-statement", { start: 27, end: 38 }],
+	]);
+});
+
+test("an escaped `\\$[` in a string is text, not a substitution (#572)", () => {
+	const result = explainCommand(':put "\\$[nosuchcmd]"');
+	expect(result.structure.subcommands).toEqual([]);
+	expect(result.verdict).toBe("pass");
+});
+
+test("a bracket with no command head stays silent (#572)", () => {
+	// `[$f]` and `[(…)]` are a call and an expression, not commands, and the
+	// device accepts them (corrected-anchors rows `trailing-selector*`).
+	for (const input of [":put [$f]", ":put [$f arg=1]", ":put [($a . $b)]"]) {
+		const result = explainCommand(input);
+		expect(result.structure.subcommands[0]?.resolution).toBe("unknown");
+		expect(result.verdict).toBe("pass");
+	}
+});

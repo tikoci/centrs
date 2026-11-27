@@ -869,3 +869,4 @@ COMSPEC # Windows command interpreter variable
 Wbem # Windows Management Instrumentation directory in the default Windows PATH
 NONBLOCK # O_NONBLOCK open flag: a password file never blocks on a FIFO
 mkfifo # POSIX command that makes a named pipe (FIFO), used in tests
+inkey # RouterOS `/terminal/inkey`, which reads one key press
