@@ -17,7 +17,8 @@
  *
  * And it gives the tier a hermetic HOME (#654), the integration twin of
  * `test/unit/preload.ts`: an encrypted CDB or a `centrs.env` in the
- * developer's real `~/.config/tikoci` must not reach a test. quickchr keeps its
+ * developer's real `~/.config/tikoci`, or one exported as `CENTRS_CDB_FILE`,
+ * must not reach a test. quickchr keeps its
  * image cache and machine state under HOME, so its data dir is pinned to the
  * real path first; otherwise every run would download a fresh image into the
  * sandbox, and its sockets would outgrow the 108-byte Unix path limit.
@@ -29,17 +30,18 @@
 
 import { afterAll } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { prefetch } from "../../scripts/chr-prefetch.ts";
 import { disposeProcessChrReuse, isChrIntegrationEnabled } from "./chr.ts";
 
 if (isChrIntegrationEnabled()) {
 	// quickchr's own rule (`getDataDir` in its `state.ts`, not exported):
-	// QUICKCHR_DATA_DIR, else the local app-data dir on Windows, else HOME.
+	// QUICKCHR_DATA_DIR, else the local app-data dir on Windows, else
+	// HOME || USERPROFILE.
 	if (!process.env["QUICKCHR_DATA_DIR"] && process.platform !== "win32") {
 		process.env["QUICKCHR_DATA_DIR"] = join(
-			process.env["HOME"] || homedir(),
+			process.env["HOME"] || process.env["USERPROFILE"] || "",
 			".local",
 			"share",
 			"quickchr",
@@ -48,6 +50,14 @@ if (isChrIntegrationEnabled()) {
 	const sandbox = mkdtempSync(join(tmpdir(), "centrs-int-home-"));
 	process.env["HOME"] = sandbox;
 	process.env["XDG_CONFIG_HOME"] = join(sandbox, ".config");
+	// A shell-exported CDB choice would reach the developer's CDB past the
+	// sandbox. Tests that need a CDB pass `--cdb-file` / `cdbFile` themselves.
+	for (const key of [
+		"CENTRS_CDB_FILE",
+		"CENTRS_CDB_PASSWORD",
+		"CENTRS_CDB_PASSWORD_FILE",
+	])
+		delete process.env[key];
 
 	try {
 		console.error(await prefetch());
